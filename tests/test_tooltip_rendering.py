@@ -128,6 +128,48 @@ def test_modify_attribute_uses_action_value_before_target_attribute():
     assert module.render_tooltip("修改 {ability.Damage}", abilities, {}, {"DamageAmount": 100}) == "修改 9"
 
 
+def test_legendary_quest_uses_diamond_reward_tier():
+    module = load_gamedata_module()
+    reward = {"Tiers": {
+        "Diamond": {"Attributes": {"Custom_0": 20}},
+        "Legendary": {"Attributes": {"Custom_0": 99}},
+    }}
+    assert module._get_quest_reward_attributes(reward, "Legendary") == {"Custom_0": 20}
+
+
+def test_runtime_reference_values_use_default_without_runtime_targets():
+    module = load_gamedata_module()
+    for value_type in (
+        "TReferenceValueCardAttributeAggregate",
+        "TReferenceValueCardAttributeUnscaled",
+        "TReferenceValuePlayerAttribute",
+        "TReferenceValuePlayerAttributeUnscaled",
+    ):
+        value = {
+            "$type": value_type,
+            "AttributeType": "Custom_0",
+            "DefaultValue": 7,
+        }
+        assert module._resolve_value_object(value, {"Custom_0": 99}) == (7, "")
+        assert module._resolve_raw_value_object(value, {"Custom_0": 99}) == (7, "")
+
+
+def test_tier_tooltips_respect_tooltip_ids():
+    module = load_gamedata_module()
+    item = {
+        "Tiers": {
+            "Gold": {"TooltipIds": [0, 1], "Attributes": {}},
+            "Diamond": {"TooltipIds": [0], "Attributes": {}},
+        },
+        "Localization": {"Tooltips": [
+            {"Content": {"Text": "always"}},
+            {"Content": {"Text": "gold only"}},
+        ]},
+    }
+    assert module.get_tier_tooltips(item, "Gold") == ["always", "gold only"]
+    assert module.get_tier_tooltips(item, "Diamond") == ["always"]
+
+
 def test_cooldown_modifier_formats_milliseconds_as_seconds():
     module = load_gamedata_module()
     abilities = {"Trail": {"Action": {

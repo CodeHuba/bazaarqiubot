@@ -67,6 +67,13 @@ MS_ATTRS = {
     "CooldownMax", "FlatCooldownReduction",
 }
 
+RUNTIME_REFERENCE_VALUE_TYPES = {
+    "TReferenceValueCardAttributeAggregate",
+    "TReferenceValueCardAttributeUnscaled",
+    "TReferenceValuePlayerAttribute",
+    "TReferenceValuePlayerAttributeUnscaled",
+}
+
 
 def ms_to_s(ms: float) -> str:
     """毫秒转秒，整数时去掉小数点"""
@@ -109,8 +116,10 @@ def _resolve_value_object(value: dict, tier_attrs: dict) -> tuple[Any, str]:
     vtype = value.get("$type", "")
     if vtype == "TFixedValue":
         return value.get("Value"), ""
+    if vtype in RUNTIME_REFERENCE_VALUE_TYPES:
+        return value.get("DefaultValue", 0.0), ""
     ref_attr = value.get("AttributeType", "")
-    if "ReferenceValue" in vtype or vtype.endswith("Attribute"):
+    if vtype == "TReferenceValueCardAttribute":
         raw = tier_attrs.get(ref_attr, value.get("DefaultValue", 0.0))
         attr_key = ref_attr
         modifier = value.get("Modifier")
@@ -152,7 +161,9 @@ def _resolve_raw_value_object(value: dict, tier_attrs: dict) -> tuple[Any, str]:
     vtype = value.get("$type", "")
     if vtype == "TFixedValue":
         return value.get("Value"), ""
-    if "ReferenceValue" in vtype or vtype.endswith("Attribute"):
+    if vtype in RUNTIME_REFERENCE_VALUE_TYPES:
+        return value.get("DefaultValue", 0.0), ""
+    if vtype == "TReferenceValueCardAttribute":
         ref_attr = value.get("AttributeType", "")
         return tier_attrs.get(ref_attr, value.get("DefaultValue", 0.0)), ref_attr
     return None, ""
@@ -331,7 +342,8 @@ def render_tooltip(
         elif prefix == "aura":
             aura = auras.get(ab_id)
             if aura is None:
-                return None
+                # 原生组件不存在时不会把 token 原样写回文本。
+                return ""
             action = aura.get("Action", {})
             if sub == "targets":
                 # 原版 TooltipComponentAura.Resolve() 对 Targets 明确返回 null，
@@ -351,10 +363,10 @@ def render_tooltip(
                             value, _ = _resolve_value_object(mv, tier_attrs)
                             if value is not None:
                                 return fmt_val(value)
-                return None
+                return ""
             v, ak = extract_value(action, tier_attrs)
             if v is None:
-                return None
+                return ""
             return fmt_val(v, ak)
 
         return None
@@ -385,6 +397,19 @@ def render_tooltip(
         return r if r is not None else m.group(0)
 
     return re.sub(r"\{([^}]+)\}", replace_ph, text)
+
+
+def _get_quest_reward_attributes(reward: dict, tier_name: str) -> dict:
+    """按游戏 TooltipContextExtensions 选择任务奖励属性。
+
+    游戏中传奇卡实际使用钻石等级的任务奖励属性。
+    """
+    reward_tiers = reward.get("Tiers") or {}
+    lookup_tier = "Diamond" if tier_name == "Legendary" else tier_name
+    tier = reward_tiers.get(lookup_tier)
+    if isinstance(tier, dict):
+        return tier.get("Attributes") or {}
+    return reward.get("Attributes") or {}
 
 
 def get_quest_tooltips(item_data: dict, tier_name: str, db_path: "str | Path" = "") -> list[dict]:
@@ -483,12 +508,8 @@ def get_quest_tooltips(item_data: dict, tier_name: str, db_path: "str | Path" = 
                     txt_zh = (_trans.get_zh_by_hash(key) if key else None) or _trans.get_tooltip_zh(txt) or txt
                     rew_abs = {**abilities, **(reward.get("Abilities") or {})}
                     rew_auras = {**auras, **(reward.get("Auras") or {})}
-                    rew_tiers = reward.get("Tiers") or {}
                     rew_attrs = {**tier_attrs}
-                    if tier_name in rew_tiers:
-                        rew_attrs.update(rew_tiers[tier_name].get("Attributes") or {})
-                    elif reward.get("Attributes"):
-                        rew_attrs.update(reward["Attributes"])
+                    rew_attrs.update(_get_quest_reward_attributes(reward, tier_name))
                     reward_tips.append(render_tooltip(txt_zh, rew_abs, rew_auras, rew_attrs))
 
             result.append({
@@ -517,8 +538,18 @@ def get_tier_tooltips(item_data: dict, tier_name: str) -> list[str]:
     if multicast and multicast > 1:
         tooltips.append(f"Multicast {int(multicast)}")
 
-    # 主 tooltips（按 TooltipCondition 过滤，不展示隐藏条件的）
-    for t in item_data.get("Localization", {}).get("Tooltips", []):
+    # 主 tooltips：严格按当前品质的 TooltipIds 选择，并过滤状态条件。
+    all_tooltips = item_data.get("Localization", {}).get("Tooltips", [])
+    tier_data = (item_data.get("Tiers") or {}).get(tier_name) or {}
+    tooltip_ids = tier_data.get("TooltipIds")
+    if tooltip_ids is None:
+        selected_tooltips = all_tooltips
+    else:
+        selected_tooltips = [
+            all_tooltips[i] for i in tooltip_ids
+            if isinstance(i, int) and 0 <= i < len(all_tooltips)
+        ]
+    for t in selected_tooltips:
         tip_cond = t.get("TooltipCondition")
         if tip_cond and tip_cond not in (None, "None"):
             continue  # Chilled/Heated/Enraged 等状态条件 tooltip 跳过
