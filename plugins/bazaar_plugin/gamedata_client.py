@@ -60,9 +60,12 @@ ACTION_TARGETS_MAP = {
     "TActionCardFlyingToggle":      "FlyingTargets",
 }
 
-# 这些属性单位是毫秒，需要转秒显示
-MS_ATTRS = {"SlowAmount", "FreezeAmount", "HasteAmount", "ChargeAmount", "ReloadAmount",
-            "CooldownMax"}
+# GameData 的时间属性统一以毫秒存储；游戏原生 Tooltip 展示时转换为秒。
+# 冷却修改类效果在不同版本的数据中使用过以下属性名。
+MS_ATTRS = {
+    "SlowAmount", "FreezeAmount", "HasteAmount", "ChargeAmount", "ReloadAmount",
+    "CooldownMax", "FlatCooldownReduction",
+}
 
 
 def ms_to_s(ms: float) -> str:
@@ -177,7 +180,11 @@ def extract_value(action: dict, tier_attrs: dict) -> tuple[Any, str]:
         if vtype == "TFixedValue":
             return val.get("Value"), attr_type
         if "ReferenceValue" in vtype or vtype.endswith("Attribute"):
-            return _resolve_value_object(val, tier_attrs)
+            resolved, source_attr = _resolve_value_object(val, tier_attrs)
+            # 原生 Tooltip 根据动作修改的目标属性决定显示单位，而不是根据
+            # 引用值的来源属性决定。例：FlatCooldownReduction 引用 Custom_0，
+            # Custom_0=1000 仍应显示为 1 秒。
+            return resolved, attr_type or source_attr
         # fallback：直接读目标属性值
         if attr_type and attr_type in tier_attrs:
             return tier_attrs[attr_type], attr_type

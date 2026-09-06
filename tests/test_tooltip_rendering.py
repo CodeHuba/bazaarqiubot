@@ -126,3 +126,34 @@ def test_modify_attribute_uses_action_value_before_target_attribute():
     module = load_gamedata_module()
     abilities = {"Damage": {"Action": {"$type": "TActionCardModifyAttribute", "AttributeType": "DamageAmount", "Value": {"$type": "TFixedValue", "Value": 9}}}}
     assert module.render_tooltip("修改 {ability.Damage}", abilities, {}, {"DamageAmount": 100}) == "修改 9"
+
+
+def test_cooldown_modifier_formats_milliseconds_as_seconds():
+    module = load_gamedata_module()
+    abilities = {"Trail": {"Action": {
+        "$type": "TActionCardModifyAttribute",
+        "AttributeType": "CooldownMax",
+        "Value": {"$type": "TFixedValue", "Value": 1000},
+    }}}
+    assert module.render_tooltip(
+        "双方所有物品的冷却时间延长 {ability.Trail} 秒",
+        abilities, {}, {},
+    ) == "双方所有物品的冷却时间延长 1 秒"
+
+
+def test_flat_cooldown_reduction_aura_uses_target_attribute_unit():
+    module = load_gamedata_module()
+    auras = {"Trail": {"Action": {
+        "$type": "TAuraActionCardModifyAttribute",
+        "AttributeType": "FlatCooldownReduction",
+        "Operation": "Subtract",
+        "Value": {
+            "$type": "TReferenceValueCardAttribute",
+            "AttributeType": "Custom_0",
+            "DefaultValue": 0.0,
+        },
+    }}}
+    assert module.render_tooltip(
+        "双方所有物品的冷却时间延长 {aura.Trail} 秒",
+        {}, auras, {"Custom_0": 2000},
+    ) == "双方所有物品的冷却时间延长 2 秒"
