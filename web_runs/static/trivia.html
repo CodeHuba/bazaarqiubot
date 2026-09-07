@@ -1323,8 +1323,9 @@ async function shareTrivia(id) {
     document.getElementById('share-card-question').textContent = t.question;
     document.getElementById('share-card-answer').innerHTML = renderMd(t.answer);
 
-    // 截图
+    // Wait for same-origin answer images before rendering the share canvas.
     const card = document.getElementById('share-card');
+    await waitForImages(card);
     const canvas = await html2canvas(card, {
       backgroundColor: '#090A2A',
       scale: 2,
@@ -1342,6 +1343,19 @@ async function shareTrivia(id) {
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = '📤 分享'; }
   }
+}
+
+async function waitForImages(container) {
+  const images = [...container.querySelectorAll('img')];
+  await Promise.all(images.map((img) => {
+    if (img.complete && img.naturalWidth > 0) {
+      return img.decode ? img.decode().catch(() => {}) : Promise.resolve();
+    }
+    return new Promise((resolve) => {
+      img.addEventListener('load', resolve, { once: true });
+      img.addEventListener('error', resolve, { once: true });
+    });
+  }));
 }
 
 function showShareModal(imgUrl, title) {
