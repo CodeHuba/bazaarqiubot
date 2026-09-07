@@ -76,3 +76,16 @@ def test_card_name_index_is_reused_for_unchanged_database(tmp_path):
     second = gdc.build_card_name_index(path)
 
     assert first is second
+
+
+def test_suggest_cards_returns_close_normalized_name(tmp_path):
+    gdc = load_gamedata_module()
+    path = make_cards_db(tmp_path, [
+        {"Id": "pipe-organ", "Type": "Item", "InternalName": "Pipe Organ"},
+        {"Id": "pipe-wrench", "Type": "Item", "InternalName": "Pipe Wrench"},
+        {"Id": "other", "Type": "Item", "InternalName": "Other"},
+    ])
+
+    suggestions = gdc.suggest_cards("pipe orgn", path, limit=3)
+
+    assert [card["Id"] for card in suggestions] == ["pipe-organ"]

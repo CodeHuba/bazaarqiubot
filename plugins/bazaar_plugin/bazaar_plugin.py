@@ -340,12 +340,12 @@ class BazaarPlugin(NcatBotPlugin):
         show_enchants = '--enchants' in arg or '-e' in arg
         query_arg = re.sub(r'--enchants|-e', '', arg).strip()
 
-        # 中文名转英文名
+        # 官方中文全名只做精确转换；非完整中文名留给候选搜索。
         en_name = query_arg.strip()
         if trans.has_chinese(query_arg):
-            candidates = trans.search_zh(query_arg, limit=3)
-            if candidates:
-                en_name = candidates[0]
+            exact_en = trans.get_en(query_arg)
+            if exact_en:
+                en_name = exact_en
 
         db_path = card_data_paths.get_gamedata_db_path(
             Path(__file__).resolve().parent / "cache" / "GameData.db",
@@ -368,6 +368,35 @@ class BazaarPlugin(NcatBotPlugin):
             if art_url:
                 return f"[CQ:image,file={art_url}]\n" + text
             return text
+
+        # 本地精确匹配失败时，优先返回 GameData.db 的相近候选。
+        if raw is None and db_path:
+            try:
+                if trans.has_chinese(query_arg):
+                    zh_names = trans.search_zh(query_arg, limit=5)
+                    local_candidates = []
+                    for candidate_name in zh_names:
+                        candidate = await loop.run_in_executor(
+                            None, gdc.query_raw_by_name, candidate_name, db_path
+                        )
+                        if candidate is not None:
+                            local_candidates.append(candidate)
+                else:
+                    local_candidates = await loop.run_in_executor(
+                        None, gdc.suggest_cards, query_arg, db_path, 5
+                    )
+            except Exception as e:
+                print(f"[bz db] 本地候选搜索失败: {e}")
+                local_candidates = []
+            if local_candidates:
+                lines = [f"🔍 未精确匹配『{query_arg}』，你是否要查询:"]
+                for card in local_candidates:
+                    title = ((card.get("Localization") or {}).get("Title") or {}).get("Text", "")
+                    title_zh = trans.get_zh(title) or title or card.get("InternalName", "")
+                    card_type = "技能" if card.get("Type") == "Skill" or card.get("$type") == "TCardSkill" else "物品"
+                    lines.append(f"  • {title_zh}（{card_type}）")
+                lines.append("请使用完整名称重试，例如: #bz db 物品名")
+                return "\n".join(lines)
 
         # fallback: bazaardb.gg
         try:

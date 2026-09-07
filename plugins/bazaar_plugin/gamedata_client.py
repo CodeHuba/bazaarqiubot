@@ -2,6 +2,7 @@
 GameData.db 客户端
 从游戏本体 SQLite 数据库读取物品/技能数据，转换为 howbazaar 兼容格式
 """
+import difflib
 import json
 import re
 import sqlite3
@@ -816,6 +817,37 @@ def build_card_name_index(db_path: str | Path) -> dict[str, list[dict]]:
                 index[key].append(card)
     _CARD_NAME_INDEX_CACHE[str(path)] = (signature, index)
     return index
+
+
+def suggest_cards(name: str, db_path: "str | Path", limit: int = 5) -> list[dict]:
+    """从本地名称索引返回相近的物品/技能候选，不进行远程查询。"""
+    query = normalize_card_name(name)
+    if not query or limit <= 0:
+        return []
+
+    scored: list[tuple[float, str, dict]] = []
+    seen_ids: set[str] = set()
+    for alias, cards in build_card_name_index(db_path).items():
+        ratio = difflib.SequenceMatcher(None, query, alias).ratio()
+        contains = query in alias or alias in query
+        if not contains and ratio < 0.6:
+            continue
+        score = ratio + (0.4 if contains else 0.0)
+        for card in cards:
+            if card.get("Type") not in ("Item", "Skill"):
+                continue
+            card_id = str(card.get("Id", ""))
+            if card_id in seen_ids:
+                continue
+            seen_ids.add(card_id)
+            scored.append((score, alias, card))
+
+    scored.sort(key=lambda item: (-item[0], item[1]))
+    if not scored:
+        return []
+    best_score = scored[0][0]
+    close_matches = [item for item in scored if item[0] >= best_score - 0.2]
+    return [card for _, _, card in close_matches[:limit]]
 
 
 def query_raw_by_name(name: str, db_path: "str | Path") -> dict | None:

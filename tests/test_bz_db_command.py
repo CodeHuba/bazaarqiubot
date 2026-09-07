@@ -117,3 +117,60 @@ def test_image_send_failure_retries_text_only(monkeypatch):
         "📦 管风琴\n描述",
     ]
     assert event.replies == ["📦 管风琴\n描述"]
+
+
+def test_db_returns_local_suggestions_before_remote_fallback(monkeypatch, tmp_path):
+    module = load_plugin_module(monkeypatch)
+    plugin = module.BazaarPlugin()
+    plugin._cooldown = defaultdict(float)
+    db_path = tmp_path / "GameData.db"
+    db_path.write_text("unused")
+    monkeypatch.setattr(module.card_data_paths, "get_gamedata_db_path", lambda *args, **kwargs: db_path)
+    gdc_module = importlib.import_module("plugins.bazaar_plugin.gamedata_client")
+    monkeypatch.setattr(gdc_module, "query_raw_by_name", lambda *args: None)
+    monkeypatch.setattr(gdc_module, "suggest_cards", lambda *args: [{
+        "Type": "Item",
+        "InternalName": "Pipe Organ",
+        "Localization": {"Title": {"Text": "Pipe Organ"}},
+    }])
+    remote_called = []
+    monkeypatch.setattr(module.bdb, "query_card_by_name", lambda name: remote_called.append(name))
+
+    result = asyncio.run(plugin._cmd_db("pipe orgn"))
+
+    assert "未精确匹配『pipe orgn』" in result
+    assert "Pipe Organ" in result
+    assert remote_called == []
+
+
+def test_db_partial_chinese_name_returns_candidates(monkeypatch, tmp_path):
+    module = load_plugin_module(monkeypatch)
+    plugin = module.BazaarPlugin()
+    db_path = tmp_path / "GameData.db"
+    db_path.write_text("unused")
+    monkeypatch.setattr(module.card_data_paths, "get_gamedata_db_path", lambda *args, **kwargs: db_path)
+    gdc_module = importlib.import_module("plugins.bazaar_plugin.gamedata_client")
+    queried = []
+
+    def query_raw(name, *_args):
+        queried.append(name)
+        if name == "Pipe Organ":
+            return {
+                "Type": "Item",
+                "InternalName": "Pipe Organ",
+                "Localization": {"Title": {"Text": "Pipe Organ"}},
+            }
+        return None
+
+    monkeypatch.setattr(gdc_module, "query_raw_by_name", query_raw)
+    trans_module = importlib.import_module("plugins.bazaar_plugin.translations")
+    monkeypatch.setattr(trans_module, "has_chinese", lambda value: True)
+    monkeypatch.setattr(trans_module, "get_en", lambda value: None)
+    monkeypatch.setattr(trans_module, "search_zh", lambda value, limit=5: ["Pipe Organ"])
+    monkeypatch.setattr(trans_module, "get_zh", lambda value: "管风琴" if value == "Pipe Organ" else None)
+    monkeypatch.setattr(module.bdb, "query_card_by_name", lambda name: pytest.fail("不应调用远程 fallback"))
+
+    result = asyncio.run(plugin._cmd_db("管风"))
+
+    assert queried == ["管风", "Pipe Organ"]
+    assert "管风琴（物品）" in result
