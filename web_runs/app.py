@@ -58,11 +58,18 @@ def _build_card_search_index():
             if not en_orig or en_orig in seen:
                 continue
             seen.add(en_orig)
-            display = rq.card_display_info(card_id)
-            zh_name = display['name']
+            image_info = rq._card_image_info(card_id)
+            zh_name = image_info.get('name') or rq.get_zh_name(en_orig)
             if not zh_name:
                 continue
-            items.append({'zh': zh_name, 'en': en_orig, 'cardId': card_id, 'img': display['img'], 'size': display['size']})
+            items.append({
+                'zh': zh_name,
+                'en': en_orig,
+                'cardId': card_id,
+                # 启动时禁止逐张联网探测；直接使用本地 card_images.json 缓存。
+                'img': image_info.get('artLarge') or image_info.get('art') or '',
+                'size': rq.size_map.get(card_id) or image_info.get('size') or 'Small',
+            })
         _card_search_index = items
         print(f'[card_search] 索引构建完成，共 {len(items)} 张卡牌', flush=True)
     except Exception as e:
