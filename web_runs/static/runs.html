@@ -1527,10 +1527,9 @@ input[type="file"] {
 .comp-card-chip{padding:3px 9px;border-radius:4px;font-size:12px;font-weight:600;background:rgba(138,77,255,.12);color:var(--text-primary);border:1px solid rgba(138,77,255,.3);white-space:nowrap;}
 .comp-card-chip.has-img{padding:3px 6px;display:flex;align-items:center;gap:4px;}
 .comp-card-chip.is-new{background:rgba(244,56,184,0.25);border-color:rgba(244,56,184,0.8);color:#F438B8;font-weight:700;box-shadow:0 0 6px rgba(244,56,184,0.4);}
-.comp-card-img{object-fit:cover;border-radius:3px;flex-shrink:0;display:block;}
-.comp-card-img.size-Small{width:16px;height:32px;}
-.comp-card-img.size-Medium{width:32px;height:32px;}
-.comp-card-img.size-Large{width:48px;height:32px;}
+.comp-card-img{width:32px;height:32px;object-fit:cover;border-radius:3px;flex-shrink:0;display:block;}
+/* card_images.json 的 @256.webp 是正方形，统一尺寸避免 Small/Large 被旧比例裁切变形。 */
+.comp-card-img.size-Small,.comp-card-img.size-Medium,.comp-card-img.size-Large{width:32px;height:32px;}
 .comp-expand-icon{font-size:13px;color:var(--text-secondary);transition:transform .3s;flex-shrink:0;}
 .comp-group.expanded>.comp-group-header .comp-expand-icon{transform:rotate(180deg);}
 .comp-variants{display:none;padding:14px 20px;border-top:1px solid rgba(138,77,255,.15);}
