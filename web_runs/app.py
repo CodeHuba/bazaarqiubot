@@ -743,6 +743,7 @@ def api_comp_card():
         _name_to_ids = {}
         _zh_to_ids = {}
         for _cid, _info in _cards.items():
+            _info = _info or {}
             _en = _info.get('internalName', '')
             _zh = _info.get('name', '')
             if _en:
