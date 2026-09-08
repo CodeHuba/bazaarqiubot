@@ -82,7 +82,7 @@
     root.className = 'bz-query-progress';
     root.setAttribute('role', 'status');
     root.setAttribute('aria-live', 'polite');
-    root.innerHTML = '<div class="bz-query-progress-track"><div class="bz-query-progress-bar"></div></div><div class="bz-query-progress-copy"></div>';
+    root.innerHTML = '<div class="bz-query-progress-panel"><div class="bz-query-progress-kicker">正在整理战利品</div><div class="bz-query-progress-copy"></div><div class="bz-query-progress-track"><div class="bz-query-progress-bar"></div></div><div class="bz-query-progress-hint">查询完成后会自动展示结果</div></div>';
     document.body.appendChild(root);
     bar = root.querySelector('.bz-query-progress-bar');
     copy = root.querySelector('.bz-query-progress-copy');
@@ -95,8 +95,17 @@
 
   function setMessage() {
     const messages = messagesFor(scene);
-    copy.textContent = messages[messageIndex % messages.length];
+    const next = messages[messageIndex % messages.length];
     messageIndex += 1;
+    if (!copy.textContent) {
+      copy.textContent = next;
+      return;
+    }
+    copy.classList.add('is-swapping');
+    setTimeout(() => {
+      copy.textContent = next;
+      copy.classList.remove('is-swapping');
+    }, 180);
   }
 
   function begin(nextScene) {
