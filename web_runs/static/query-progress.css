@@ -76,12 +76,6 @@
   animation: bz-query-progress-flow 1.3s linear infinite;
   transition: width .35s ease;
 }
-.bz-query-progress-hint {
-  margin-top: 12px;
-  color: var(--text-secondary, #b5b3d7);
-  text-align: center;
-  font-size: 12px;
-}
 @keyframes bz-query-progress-flow {
   from { background-position: 100% 0; }
   to { background-position: -120% 0; }
