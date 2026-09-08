@@ -473,13 +473,12 @@ select option {
   margin-bottom: 3px;
 }
 
-.run-items {
-  font-size: 12px;
-  color: var(--text-secondary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
+.run-items{display:flex;flex-wrap:wrap;gap:5px;align-items:center;min-width:0;}
+.run-card-chip{display:inline-flex;align-items:center;gap:4px;padding:2px 6px;border:1px solid rgba(138,77,255,.25);border-radius:4px;background:rgba(138,77,255,.08);font-size:11px;color:var(--text-primary);white-space:nowrap;}
+.run-card-chip img{object-fit:contain;border-radius:2px;flex-shrink:0;display:block;}
+.run-card-chip img.size-Small{width:12px;height:24px;}
+.run-card-chip img.size-Medium{width:24px;height:24px;}
+.run-card-chip img.size-Large{width:36px;height:24px;}
 
 /* 胜率徽章 */
 .win-badge {
@@ -1730,7 +1729,11 @@ function renderRuns(data, page, params) {
   const heroZh = {Vanessa:'凡妮莎',Dooley:'杜利',Mak:'马克',Pygmalien:'皮格',Stelle:'斯黛拉',Jules:'朱尔斯',Karnok:'卡诺克','The Dragons':'双龙'};
   let items = runs.map(r => {
     const day = r.wins + r.losses;
-    const itemsStr = r.items.slice(0,5).join('、') + (r.items.length>5?` +${r.items.length-5}`:'');
+    const cardList = r.cards || [];
+    const cardsHtml = cardList.length ? cardList.slice(0,8).map(c => {
+      const img = c.img ? `<img class="size-${c.size || 'Small'}" src="${c.img}" alt="${c.name}" loading="lazy" onerror="this.style.display='none'">` : '';
+      return `<span class="run-card-chip">${img}${c.name}</span>`;
+    }).join('') + (cardList.length>8 ? `<span class="run-card-chip">+${cardList.length-8}</span>` : '') : escapeHtml((r.items || []).slice(0,5).join('、'));
     const screenshot = r.screenshot ? `<div style="margin:8px 0 2px"><img src="${r.screenshot}" style="max-width:100%;border-radius:6px;border:1px solid #1f2937" loading="lazy" onerror="this.style.display='none'"></div>` : '';
     const timeStr = r.created_at ? new Date(r.created_at).toLocaleString('zh-CN', {timeZone:'Asia/Shanghai',month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}) : '';
     return `<div class="run-item" style="flex-direction:column;align-items:flex-start">
@@ -1738,7 +1741,7 @@ function renderRuns(data, page, params) {
         <span class="run-hero">${heroZh[r.hero]||r.hero}</span>
         <div class="run-meta">
           <div class="run-title">Day${day} · ${r.username||'匿名'}${timeStr ? ' · <span style="color:var(--text-secondary);font-size:11px">' + timeStr + '</span>' : ''}</div>
-          <div class="run-items">${itemsStr}</div>
+          <div class="run-items">${cardsHtml}</div>
         </div>
         <span class="win-badge">${r.wins}胜${r.losses}负</span>
         <a class="run-link" href="${r.url}" target="_blank">查看 →</a>

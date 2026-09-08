@@ -142,6 +142,21 @@ class RunsQuery:
         info = self.card_mapping.get(card_id)
         return info if isinstance(info, dict) else {}
 
+    def card_display_info(self, card_id: str) -> dict:
+        """返回网页统一使用的卡牌展示信息，图片优先使用 #bz db 同源原图。"""
+        from . import card_image_helper as _cih
+        info = self._safe_mapping_info(card_id)
+        image_info = self._card_image_info(card_id)
+        name_en = info.get('name') or image_info.get('internalName') or card_id
+        name_zh = image_info.get('name') or self.get_zh_name(name_en)
+        return {
+            'cardId': card_id,
+            'name': name_zh if name_zh != name_en else name_en,
+            'name_en': name_en,
+            'img': _cih.get_art_url(card_id=card_id, internal_name=name_en, size='artLarge') or _cih.get_art_url(card_id=card_id, internal_name=name_en, size='art') or '',
+            'size': self.size_map.get(card_id) or image_info.get('size') or 'Small',
+        }
+
     def translate_name(self, name: str) -> str:
         """中文名转英文名，已经是英文则原样返回"""
         if name in self.card_aliases:
@@ -256,14 +271,27 @@ class RunsQuery:
 
             item_names = []
             card_imgs = []
+            card_details = []
+            from . import card_image_helper as _cih
             for it in items:
                 cid = it.get('cardId')
-                if cid and cid in self.card_mapping:
-                    en = self.card_mapping[cid]['name']
-                    zh = self.get_zh_name(en)
-                    item_names.append(zh)
-                    tex = self.tex_map.get(en, '')
-                    card_imgs.append(tex)
+                if not cid:
+                    continue
+                info = self._safe_mapping_info(cid)
+                image_info = self._card_image_info(cid)
+                en = info.get('name') or image_info.get('internalName') or cid
+                zh = image_info.get('name') or self.get_zh_name(en)
+                display_name = zh if zh != en else en
+                item_names.append(display_name)
+                tex = self.tex_map.get(en, '')
+                card_imgs.append(tex)
+                card_details.append({
+                    'cardId': cid,
+                    'name': display_name,
+                    'name_en': en,
+                    'img': _cih.get_art_url(card_id=cid, internal_name=en, size='artLarge') or _cih.get_art_url(card_id=cid, internal_name=en, size='art') or '',
+                    'size': self.size_map.get(cid) or image_info.get('size') or 'Small',
+                })
 
             screenshot_full = ('https://usercontent.bzdb.network' + screenshot) if screenshot else ''
             filtered.append({
@@ -274,6 +302,7 @@ class RunsQuery:
                 'wins': wins or 0,
                 'losses': losses or 0,
                 'items': item_names,
+                'cards': card_details,
                 'card_imgs': card_imgs,
                 'screenshot': screenshot_full,
                 'url': f"https://bazaardb.gg/run/tracker/{run_id}"
@@ -397,19 +426,23 @@ class RunsQuery:
         card_ids_sets = []
         not_found = []
         card_names = []
+        card_details = []
         for card_name in cards:
             ids = self.find_card_ids(card_name)
             if not ids:
                 not_found.append(card_name)
             else:
+                primary_id = ids[0]
+                display = self.card_display_info(primary_id)
                 card_ids_sets.append(set(ids))
-                en_name = self.translate_name(card_name)
-                zh = self.get_zh_name(en_name)
-                card_names.append(zh if zh != en_name else card_name)
+                card_names.append(display['name'])
+                card_details.append(display)
 
         if not card_ids_sets:
-            return {'total': 0, 'ten_win': 0, 'rate': 0.0,
-                    'card_names': card_names, 'not_found': not_found}
+            return {
+                'total': 0, 'ten_win': 0, 'rate': 0.0,
+                'card_names': card_names, 'card_details': card_details, 'not_found': not_found,
+            }
 
         # SQL 层用有索引的字段（hero/rank/days/phase）缩小结果集
         # 再用 card_ids_text 在 Python 层做精确过滤，避免全量 json.loads
@@ -455,6 +488,7 @@ class RunsQuery:
             'ten_win': ten_win,
             'rate': rate,
             'card_names': card_names,
+            'card_details': card_details,
             'not_found': not_found,
         }
 
@@ -533,16 +567,11 @@ class RunsQuery:
             ten_win = win_map.get(cid, 0)
             rate = ten_win / total
             # 获取卡牌名
-            info = self.card_mapping.get(cid, {})
-            en = info.get("name", "")
+            display = self.card_display_info(cid)
+            en = display['name_en']
             if not en:
-                continue  # 跳过不在 mapping 里的卡
-            zh = self.get_zh_name(en)
-            name = zh if zh != en else en
-            from . import card_image_helper as _cih
-            art_url = _cih.get_art_url(card_id=cid, internal_name=en, size='art') or ''
-            card_size = self.size_map.get(cid, 'Small')
-            results.append({"name": name, "total": total, "ten_win": ten_win, "rate": rate, "img": art_url, "size": card_size, "name_en": en})
+                continue
+            results.append({"name": display['name'], "total": total, "ten_win": ten_win, "rate": rate, "img": display['img'], "size": display['size'], "name_en": en, "cardId": cid})
 
         # 计算共现率（含目标卡的局里，搭档出现的比例）
         target_total = sum(1 for items_json, wins in rows
@@ -639,22 +668,22 @@ class RunsQuery:
         for cid, total in card_total.items():
             if total < min_count:
                 continue
-            info = self.card_mapping.get(cid, {})
-            name_en = info.get('name', cid)
-            name_zh = self.get_zh_name(name_en)
+            info = self._safe_mapping_info(cid)
+            image_info = self._card_image_info(cid)
+            name_en = info.get('name') or image_info.get('internalName') or cid
+            name_zh = image_info.get('name') or self.get_zh_name(name_en)
             ten_win = card_wins.get(cid, 0)
             rate = ten_win / total if total > 0 else 0.0
-            art_url = _cih.get_art_url(card_id=cid, internal_name=name_en, size='artLarge') or _cih.get_art_url(card_id=cid, internal_name=name_en, size='art') or ''
-            card_size = self.size_map.get(cid, 'Small')
+            display = self.card_display_info(cid)
             results.append({
                 'cardId': cid,
-                'name_zh': name_zh if name_zh != name_en else name_en,
+                'name_zh': display['name'],
                 'name_en': name_en,
                 'total': total,
                 'ten_win': ten_win,
                 'rate': rate,
-                'img': art_url,
-                'size': card_size,
+                'img': display['img'],
+                'size': display['size'],
             })
 
         # 按指定方式排序

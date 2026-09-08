@@ -50,16 +50,19 @@ def _build_card_search_index():
         seen = set()
         items = []
         for card_id, info in rq.card_mapping.items():
+            if not isinstance(info, dict):
+                continue
             if info.get('type', '') == 'other':
                 continue
             en_orig = info.get('name', '')
             if not en_orig or en_orig in seen:
                 continue
             seen.add(en_orig)
-            zh_name = rq.en_to_zh.get(en_orig, '')
+            display = rq.card_display_info(card_id)
+            zh_name = display['name']
             if not zh_name:
                 continue
-            items.append({'zh': zh_name, 'en': en_orig})
+            items.append({'zh': zh_name, 'en': en_orig, 'cardId': card_id, 'img': display['img'], 'size': display['size']})
         _card_search_index = items
         print(f'[card_search] 索引构建完成，共 {len(items)} 张卡牌', flush=True)
     except Exception as e:
@@ -443,22 +446,24 @@ def api_winrate():
                     card_ids_sets = []
                     not_found = []
                     card_names = []
+                    card_details = []
                     for cn in cards:
                         ids = client.find_card_ids(cn)
                         if not ids:
                             not_found.append(cn)
                         else:
                             card_ids_sets.append(set(ids))
-                            en = client.translate_name(cn)
-                            zh = client.get_zh_name(en)
-                            card_names.append(zh if zh != en else cn)
+                            primary_id = ids[0]
+                            display = client.card_display_info(primary_id)
+                            card_names.append(display['name'])
+                            card_details.append(display)
                     if card_ids_sets:
                         total, ten_win = _winrate_from_cache(card_ids_sets)
                     else:
                         total, ten_win = 0, 0
                     rate = ten_win / total if total > 0 else 0.0
                     r = {'total': total, 'ten_win': ten_win, 'rate': rate,
-                         'card_names': card_names, 'not_found': not_found, 'tag': card}
+                         'card_names': card_names, 'card_details': card_details, 'not_found': not_found, 'tag': card}
                 else:
                     r = client.winrate(cards=cards, hero=hero, days=days, rank_filter=rank_filter)
                     r['tag'] = card

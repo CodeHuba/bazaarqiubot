@@ -1538,7 +1538,15 @@ input[type="file"] {
 }
 .wr-ms-item:hover, .wr-ms-item.active { background: rgba(38,217,242,0.12); }
 .wr-ms-item.selected { opacity: 0.4; pointer-events: none; }
-.wr-ms-img { display: none; }
+.wr-ms-img{width:24px;height:24px;object-fit:contain;border-radius:3px;flex-shrink:0;display:block;}
+.wr-ms-img.size-Small{width:12px;height:24px;}
+.wr-ms-img.size-Medium{width:24px;height:24px;}
+.wr-ms-img.size-Large{width:36px;height:24px;}
+.wr-card-arts{display:flex;align-items:center;justify-content:center;gap:6px;flex-wrap:wrap;margin:4px 0 10px;}
+.wr-card-art{object-fit:contain;border-radius:4px;flex-shrink:0;display:block;}
+.wr-card-art.size-Small{width:16px;height:32px;}
+.wr-card-art.size-Medium{width:32px;height:32px;}
+.wr-card-art.size-Large{width:48px;height:32px;}
 .wr-ms-names { display: flex; flex-direction: column; gap: 2px; flex: 1; }
 .wr-ms-name-zh { font-size: 14px; font-weight: 500; }
 .wr-ms-name-en { font-size: 11px; color: var(--text-secondary); }
@@ -1665,6 +1673,16 @@ input[type="file"] {
 .wr-sc-season { font-size: 12px; color: #6e7681; }
 .wr-sc-filter { font-size: 12px; color: #B5B3D7; margin-bottom: 16px; }
 .wr-sc-title { font-size: 15px; font-weight: 700; color: #F5F4FF; margin-bottom: 14px; }
+
+.wr-sc-card-arts{display:flex;justify-content:center;align-items:center;gap:6px;flex-wrap:wrap;margin:4px 0 10px;}
+.wr-sc-card-art{object-fit:contain;border-radius:4px;display:block;}
+.wr-sc-card-art.size-Small{width:18px;height:36px;}
+.wr-sc-card-art.size-Medium{width:36px;height:36px;}
+.wr-sc-card-art.size-Large{width:54px;height:36px;}
+.wr-sc-row-card-arts{display:flex;align-items:center;gap:4px;flex-shrink:0;}
+.wr-sc-row-card-arts .wr-sc-card-art.size-Small{width:12px;height:24px;}
+.wr-sc-row-card-arts .wr-sc-card-art.size-Medium{width:24px;height:24px;}
+.wr-sc-row-card-arts .wr-sc-card-art.size-Large{width:36px;height:24px;}
 
 /* 单卡大数字 */
 .wr-sc-single { text-align: center; padding: 8px 0 16px; }
@@ -1829,9 +1847,10 @@ function _wrRenderList(items) {
     const sel = selectedZh.has(it.zh) ? ' selected' : '';
     const enPart = (it.en && it.en !== it.zh)
       ? `<span class="wr-ms-name-en">${it.en}</span>` : '';
+      const imagePart = it.img ? `<img class="wr-ms-img size-${it.size || 'Small'}" src="${it.img}" alt="${it.zh}" loading="lazy" onerror="this.style.display='none'">` : '';
     return `<div class="wr-ms-item${sel}" data-idx="${i}"
         onmousedown="event.preventDefault();_wrSelect(_wrItems[${i}])">
-      <div class="wr-ms-names">
+      ${imagePart}<div class="wr-ms-names">
         <span class="wr-ms-name-zh">${it.zh}</span>${enPart}
       </div>
     </div>`;
@@ -2033,6 +2052,7 @@ async function queryWinrate() {
 
 function renderWinrateCompare(results, hero, days, rank) {
   if (!results.length) return;
+  const cardArts = (data) => (data.card_details || []).map(c => c.img ? `<img class="wr-card-art size-${c.size || 'Small'}" src="${c.img}" alt="${c.name}" loading="lazy" onerror="this.style.display='none'">` : '').join('');
 
   const filterDesc = [
     hero ? ('英雄: ' + hero) : '',
@@ -2054,6 +2074,7 @@ function renderWinrateCompare(results, hero, days, rank) {
     document.getElementById('wr-result').innerHTML =
       '<div class="winrate-card">' +
         '<div class="winrate-title">' + name + ' 的10胜率</div>' +
+        '<div class="wr-card-arts">' + cardArts(data) + '</div>' +
         '<div style="font-size:11px;color:var(--text-secondary);margin-bottom:8px">' + filterDesc + '</div>' +
         '<div class="winrate-big" style="color:' + color + '">' + pct + '%</div>' +
         '<div class="winrate-bar-wrap"><div class="winrate-bar" style="width:' + pct + '%;background:' + color + '"></div></div>' +
@@ -2095,6 +2116,7 @@ function renderWinrateCompare(results, hero, days, rank) {
     podiumHtml +=
       '<div class="wr-podium-item ' + cls + '">' +
         '<div class="wr-podium-crown">' + (crowns[rk - 1] || '') + '</div>' +
+        '<div class="wr-card-arts">' + cardArts(d) + '</div>' +
         '<div class="wr-podium-name">' + itemName(item) + '</div>' +
         '<div class="wr-podium-pct" style="color:' + color + '">' + (pct ? pct + '%' : '—') + '</div>' +
         '<div class="wr-podium-sub">' + (pct ? d.ten_win + '/' + d.total + ' 局' : '暂无数据') + '</div>' +
@@ -2111,7 +2133,7 @@ function renderWinrateCompare(results, hero, days, rank) {
       rows +=
         '<div class="wr-rank-row wr-rank-empty">' +
           '<span class="wr-rank-medal" style="font-size:13px;color:var(--text-secondary);min-width:28px;text-align:center">' + rk + '</span>' +
-          '<div class="wr-rank-info"><div class="wr-rank-name">' + itemName(item) + '</div></div>' +
+          '<div class="wr-rank-info"><div class="wr-card-arts" style="justify-content:flex-start;margin:0 0 4px">' + cardArts(d) + '</div><div class="wr-rank-name">' + itemName(item) + '</div></div>' +
           '<span class="wr-rank-nodata">暂无数据</span>' +
         '</div>';
       return;
@@ -2121,7 +2143,7 @@ function renderWinrateCompare(results, hero, days, rank) {
     rows +=
       '<div class="wr-rank-row">' +
         '<span class="wr-rank-medal" style="font-size:13px;color:var(--text-secondary);min-width:28px;text-align:center">' + rk + '</span>' +
-        '<div class="wr-rank-info"><div class="wr-rank-name">' + itemName(item) + '</div></div>' +
+        '<div class="wr-rank-info"><div class="wr-card-arts" style="justify-content:flex-start;margin:0 0 4px">' + cardArts(d) + '</div><div class="wr-rank-name">' + itemName(item) + '</div></div>' +
         '<div class="wr-rank-right">' +
           '<div class="wr-rank-pct" style="color:' + color + '">' + pct + '%</div>' +
           '<div class="wr-rank-sub">' + d.ten_win + '/' + d.total + ' 局</div>' +
@@ -2156,6 +2178,7 @@ async function shareWinrate() {
     document.getElementById('wr-sc-season').textContent = phase ? ('赛季 ' + phase) : '';
     document.getElementById('wr-sc-filter').textContent = '查询条件：' + filterDesc;
 
+    const shareArts = (d, row = false) => (d.card_details || []).map(c => c.img ? `<img class="wr-sc-card-art size-${c.size || 'Small'}" src="${c.img}" alt="${c.name}">` : '').join('');
     let title, bodyHtml;
     if (single) {
       const {data, tag} = results[0];
@@ -2164,6 +2187,7 @@ async function shareWinrate() {
       const pct = data.total > 0 ? (data.rate * 100).toFixed(1) : null;
       const color = pct ? winrateColor(data.rate) : '#6e7681';
       bodyHtml = '<div class="wr-sc-single">' +
+        '<div class="wr-sc-card-arts">' + shareArts(data) + '</div>' +
         '<div class="wr-sc-single-pct" style="color:' + color + '">' + (pct ? pct + '%' : '—') + '</div>' +
         '<div class="wr-sc-single-sub">' + data.ten_win + ' 次10胜 / 共 ' + data.total + ' 局</div>' +
         '</div>';
@@ -2176,6 +2200,7 @@ async function shareWinrate() {
         const color = pct ? winrateColor(d.rate) : '#6e7681';
         return '<div class="wr-sc-row">' +
           '<span class="wr-sc-row-rank">' + (rankEmojis[i] || (i+1)) + '</span>' +
+          '<span class="wr-sc-row-card-arts">' + shareArts(d, true) + '</span>' +
           '<span class="wr-sc-row-name">' + name + '</span>' +
           '<span class="wr-sc-row-pct" style="color:' + color + '">' + (pct ? pct + '%' : '—') + '</span>' +
           '<span class="wr-sc-row-sub">' + (d.total > 0 ? d.ten_win + '/' + d.total + '局' : '暂无') + '</span>' +

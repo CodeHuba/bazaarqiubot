@@ -64,6 +64,11 @@ def _fake_card_images(monkeypatch):
     }
     monkeypatch.setattr(card_image_helper, "_CACHE", {"cards": cards})
     monkeypatch.setattr(card_image_helper, "_url_is_reachable", lambda _: False)
+    monkeypatch.setattr(
+        card_image_helper,
+        "get_art_url",
+        lambda card_id=None, internal_name=None, size="art": f"https://cards.example/{card_id}/{size}.webp",
+    )
 
 
 @pytest.mark.usefixtures("monkeypatch")
@@ -99,3 +104,17 @@ def test_load_ignores_null_mapping_values(tmp_path, monkeypatch):
     query.load()
 
     assert query.card_mapping["target"]["name"] == "target"
+
+
+def test_card_display_info_uses_original_art_and_size(tmp_path, monkeypatch):
+    _fake_card_images(monkeypatch)
+    query = RunsQuery(db_path=str(tmp_path / "missing.db"), mapping_path=str(tmp_path / "missing.json"))
+    query.load()
+    query.card_mapping["target"] = {"name": "target"}
+    query.size_map["target"] = "Large"
+
+    display = query.card_display_info("target")
+
+    assert display["cardId"] == "target"
+    assert display["size"] == "Large"
+    assert display["img"].endswith("/artLarge.webp")
