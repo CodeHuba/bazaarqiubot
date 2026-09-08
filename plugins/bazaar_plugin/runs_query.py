@@ -644,7 +644,7 @@ class RunsQuery:
             name_zh = self.get_zh_name(name_en)
             ten_win = card_wins.get(cid, 0)
             rate = ten_win / total if total > 0 else 0.0
-            art_url = _cih.get_art_url(card_id=cid, internal_name=name_en, size='art') or ''
+            art_url = _cih.get_art_url(card_id=cid, internal_name=name_en, size='artLarge') or _cih.get_art_url(card_id=cid, internal_name=name_en, size='art') or ''
             card_size = self.size_map.get(cid, 'Small')
             results.append({
                 'cardId': cid,
@@ -847,7 +847,7 @@ class RunsQuery:
             image_info = _cih.get_card_image(card_id=cid) or {}
             name_en = info.get('name') or image_info.get('internalName') or cid
             name_zh = image_info.get('name') or self.get_zh_name(name_en)
-            art_url = _cih.get_art_url(card_id=cid, internal_name=name_en, size='art') or ''
+            art_url = _cih.get_art_url(card_id=cid, internal_name=name_en, size='artLarge') or _cih.get_art_url(card_id=cid, internal_name=name_en, size='art') or ''
             card_size = self.size_map.get(cid) or image_info.get('size') or 'Small'
             return {
                 'cardId': cid,
