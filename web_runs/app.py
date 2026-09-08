@@ -735,6 +735,7 @@ def api_comp_card():
         return jsonify({'error': '请指定卡牌名'}), 400
     try:
         query = RunsQuery()
+        query.load()
         # 从 card_images.json 查 cardId（支持中英文、去空格精确匹配）
         import json as _json
         _ci = _json.load(open('/opt/qiubot/plugins/bazaar_plugin/cache/card_images.json', encoding='utf-8'))
@@ -764,6 +765,7 @@ def api_comp_card():
         HEROES = ['Vanessa', 'Dooley', 'Mak', 'Pygmalien', 'Stelle', 'Jules', 'Karnok', 'The Dragons']
         heroes_to_query = [hero] if hero else HEROES
         all_layers = []
+        all_recommendations = []
         total_runs = 0
         for h in heroes_to_query:
             r = query.comp(
@@ -775,18 +777,31 @@ def api_comp_card():
             )
             for layer in r.get('layers', []):
                 layer['hero'] = h
+            for recommendation in r.get('recommendations', []):
+                recommendation['hero'] = h
+                recommendation['hero_zh'] = r.get('hero_zh', h)
             all_layers.extend(r.get('layers', []))
+            all_recommendations.extend(r.get('recommendations', []))
             total_runs += r.get('total_runs', 0)
         # 按 score 排序，取 top10
         all_layers.sort(key=lambda x: -x.get('score', 0))
+        # 统计口径：全职业时所有百分比以当前 phase 内“含查询卡”的 runs 总数为分母。
+        for recommendation in all_recommendations:
+            recommendation['global_appearance_rate'] = recommendation.get('count', 0) / total_runs if total_runs else 0.0
+            recommendation['sample_warning'] = recommendation.get('count', 0) < 10
+        all_recommendations.sort(key=lambda x: -x.get('score', 0))
         result = {
             'card': card_display,
             'card_id': required_card,
             'hero': hero_raw or 'all',
             'layers': all_layers[:10],
+            'recommendations': all_recommendations[:20],
             'total_runs': total_runs,
+            'phase': CURRENT_PHASE,
+            'season': RUNS_SEASON_ID,
+            'scope': '当前赛季、当前 phase；仅统计包含查询卡的 runs',
         }
-        _log_query('comp_card', {'card': card_raw, 'hero': hero_raw}, ip, len(all_layers), True)
+        _log_query('comp_card', {'card': card_raw, 'hero': hero_raw}, ip, len(all_recommendations), True)
         return jsonify(result)
     except Exception as e:
         import traceback; traceback.print_exc()

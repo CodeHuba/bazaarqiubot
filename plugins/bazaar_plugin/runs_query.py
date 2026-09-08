@@ -51,13 +51,38 @@ class RunsQuery:
     def load(self):
         """加载数据库、映射表和翻译"""
         self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
-        with open(self.mapping_path, 'r', encoding='utf-8') as f:
-            self.card_mapping = json.load(f)
+        try:
+            with open(self.mapping_path, 'r', encoding='utf-8') as f:
+                self.card_mapping = json.load(f) or {}
+        except (FileNotFoundError, json.JSONDecodeError):
+            self.card_mapping = {}
         for card_id, info in self.card_mapping.items():
-            name = info['name'].lower()
+            info = info or {}
+            if not info:
+                # 保留 key，但将 null 正规化为字典，后续 card_info 可安全使用。
+                self.card_mapping[card_id] = info
+            name = str(info.get('name') or '').lower()
+            if not name:
+                continue
             if name not in self.name_to_ids:
                 self.name_to_ids[name] = []
             self.name_to_ids[name].append(card_id)
+
+        # 统一使用卡图缓存补全名称映射，避免旧 card_id_mapping.json 缺失或过期导致无法查询。
+        try:
+            from . import card_image_helper as _cih_load
+            for _cid, _info in (_cih_load._load().get('cards', {}) or {}).items():
+                _info = _info or {}
+                _en = _info.get('internalName') or ''
+                if _en:
+                    existing = self.card_mapping.get(_cid)
+                    if not isinstance(existing, dict) or not existing.get('name'):
+                        self.card_mapping[_cid] = {'name': _en, 'type': _info.get('type', '')}
+                    ids = self.name_to_ids.setdefault(_en.lower().replace(' ', ''), [])
+                    if _cid not in ids:
+                        ids.append(_cid)
+        except Exception:
+            pass
 
         # 加载翻译
         trans_path = Path(self.translations_path)
@@ -104,6 +129,18 @@ class RunsQuery:
                 self.hero_aliases = raw.get("heroes", {})
             except Exception:
                 pass
+
+    def _card_image_info(self, card_id: str) -> dict:
+        """从 card_images 缓存读取卡牌信息，映射表缺失时也能稳定返回结果。"""
+        try:
+            from . import card_image_helper as _cih
+            return _cih.get_card_image(card_id=card_id) or {}
+        except Exception:
+            return {}
+
+    def _safe_mapping_info(self, card_id: str) -> dict:
+        info = self.card_mapping.get(card_id)
+        return info if isinstance(info, dict) else {}
 
     def translate_name(self, name: str) -> str:
         """中文名转英文名，已经是英文则原样返回"""
@@ -669,7 +706,7 @@ class RunsQuery:
         TOP_CFG = 3
 
         global _comp_cache, _comp_cache_ttl
-        cache_key = (hero, 'v3', all_phases, CURRENT_PHASE if not all_phases else None, rank_filter, required_card)
+        cache_key = (hero, 'v4-current-phase', CURRENT_PHASE, rank_filter, required_card)
         if cache_key in _comp_cache:
             cached, exp = _comp_cache[cache_key]
             if time.time() < exp:
@@ -678,18 +715,18 @@ class RunsQuery:
         if not self.conn:
             self.load()
 
-        sql = "SELECT items_json, stat_wins, screenshot_url FROM runs WHERE season=? AND LOWER(hero)=LOWER(?)"
-        params = [RUNS_SEASON_ID, hero]
-        if not all_phases:
-            sql += " AND phase=?"
-            params.append(CURRENT_PHASE)
+        # 阵容分析固定使用当前赛季、当前 phase；历史 phase 的平衡环境不具备参考性。
+        sql = "SELECT id, items_json, stat_wins, screenshot_url, created_at FROM runs WHERE season=? AND LOWER(hero)=LOWER(?) AND phase=?"
+        params = [RUNS_SEASON_ID, hero, CURRENT_PHASE]
         if rank_filter == 'legendary':
             sql += " AND player_rank='Legendary'"
         rows = self.conn.execute(sql, params).fetchall()
 
         # 第一步：完全相同卡组去重，累加出场/胜场
-        deck_stats = defaultdict(lambda: {'count': 0, 'wins': 0, 'items': None, 'screenshot': ''})
-        for items_json, stat_wins, screenshot_url in rows:
+        deck_stats = defaultdict(lambda: {
+            'count': 0, 'wins': 0, 'items': None, 'screenshot': '', 'run_id': '', 'created_at': ''
+        })
+        for run_id, items_json, stat_wins, screenshot_url, created_at in rows:
             try:
                 items = _json.loads(items_json) if items_json else []
                 if not items:
@@ -708,16 +745,23 @@ class RunsQuery:
                     s['wins'] += 1
                 if s['items'] is None:
                     s['items'] = items
+                    s['run_id'] = run_id or ''
+                    s['created_at'] = created_at or ''
                 scr = screenshot_url or ''
                 if scr:
                     if is_win or not s['screenshot']:
                         s['screenshot'] = scr
+                        s['run_id'] = run_id or s['run_id']
+                        s['created_at'] = created_at or s['created_at']
             except Exception:
                 continue
 
         total_runs = sum(s['count'] for s in deck_stats.values())
         if total_runs == 0:
-            return {'hero': hero, 'layers': [], 'total_runs': 0}
+            return {
+                'hero': hero, 'layers': [], 'recommendations': [], 'total_runs': 0,
+                'phase': CURRENT_PHASE, 'season': RUNS_SEASON_ID,
+            }
 
         all_decks = list(deck_stats.keys())
 
@@ -742,20 +786,35 @@ class RunsQuery:
                     l1_min_support = fallback_sup
                     break
         except Exception as e:
-            return {'hero': hero, 'layers': [], 'total_runs': total_runs, 'error': str(e)}
+            return {
+                'hero': hero, 'layers': [], 'recommendations': [], 'total_runs': total_runs,
+                'phase': CURRENT_PHASE, 'season': RUNS_SEASON_ID, 'error': str(e),
+            }
 
         if not cands_l1:
-            return {'hero': hero, 'layers': [], 'total_runs': total_runs}
+            return {
+                'hero': hero, 'layers': [], 'recommendations': [], 'total_runs': total_runs,
+                'phase': CURRENT_PHASE, 'season': RUNS_SEASON_ID,
+            }
 
-        # 排除通用卡
+        # 排除通用卡。查询锚点必然出现在全部候选中，不能把它当作通用卡过滤掉。
+        _rc_set = {required_card} if required_card else set()
         card_freq = defaultdict(int)
         for fs in cands_l1:
             for c in fs:
                 card_freq[c] += 1
-        generic = {c for c, cnt in card_freq.items() if cnt / len(cands_l1) > GENERIC_THRESHOLD}
-        cands_l1 = [fs for fs in cands_l1 if not (fs & generic)]
+        # 按卡牌分析时，所有 runs 都含查询锚点；其余高频卡恰恰可能是体系核心，不能按通用卡剔除。
+        # 非锚点阵容榜仍保留原有通用卡过滤规则。
+        if required_card:
+            generic = set()
+        else:
+            generic = {c for c, cnt in card_freq.items() if cnt / len(cands_l1) > GENERIC_THRESHOLD}
+        cands_l1 = [fs for fs in cands_l1 if not ((fs - _rc_set) & generic)]
         if not cands_l1:
-            return {'hero': hero, 'layers': [], 'total_runs': total_runs}
+            return {
+                'hero': hero, 'layers': [], 'recommendations': [], 'total_runs': total_runs,
+                'phase': CURRENT_PHASE, 'season': RUNS_SEASON_ID,
+            }
 
         def jaccard(a, b):
             return len(a & b) / len(a | b) if (a | b) else 0.0
@@ -783,11 +842,13 @@ class RunsQuery:
 
         from . import card_image_helper as _cih
         def card_info(cid, is_core=False, is_new=False):
-            info = self.card_mapping.get(cid, {})
-            name_en = info.get('name', cid)
-            name_zh = self.get_zh_name(name_en)
+            # card_id_mapping.json 可能缺失、过期，甚至存在 null 值；卡图缓存是更可靠的兜底来源。
+            info = self.card_mapping.get(cid) or {}
+            image_info = _cih.get_card_image(card_id=cid) or {}
+            name_en = info.get('name') or image_info.get('internalName') or cid
+            name_zh = image_info.get('name') or self.get_zh_name(name_en)
             art_url = _cih.get_art_url(card_id=cid, internal_name=name_en, size='art') or ''
-            card_size = self.size_map.get(cid, 'Small')
+            card_size = self.size_map.get(cid) or image_info.get('size') or 'Small'
             return {
                 'cardId': cid,
                 'name_zh': name_zh if name_zh != name_en else name_en,
@@ -816,7 +877,10 @@ class RunsQuery:
                     l1_stats.append(st)
 
         if not l1_stats:
-            return {'hero': hero, 'layers': [], 'total_runs': total_runs}
+            return {
+                'hero': hero, 'layers': [], 'recommendations': [], 'total_runs': total_runs,
+                'phase': CURRENT_PHASE, 'season': RUNS_SEASON_ID,
+            }
 
         max_l1 = max(s['appear_rate'] for s in l1_stats)
         for s in l1_stats:
@@ -902,6 +966,8 @@ class RunsQuery:
                     'cards': cards, 'count': m['count'], 'wins': m['wins'],
                     'rate': m['win_rate'], 'appearance_rate': m['appear_rate'],
                     'score': m['score'], 'screenshot': deck_stats[ds]['screenshot'],
+                    'run_id': deck_stats[ds].get('run_id', ''),
+                    'created_at': deck_stats[ds].get('created_at', ''),
                 })
             return configs
 
@@ -993,9 +1059,43 @@ class RunsQuery:
             'Karnok': '兽人/卡诺克', 'The Dragons': '双龙',
         }
 
+        # 将层级挖掘结果同时扁平为“可直接参考的完整阵容”。
+        # L1/L2/L3 保留给体系解释，前台默认消费 recommendations，避免用户逐层展开才看到构筑。
+        recommendations = []
+        seen_configs = set()
+        for l1 in layers:
+            for l2 in l1.get('l2_variants', []):
+                l3_groups = l2.get('l3_variants', [])
+                config_groups = [(l3.get('configs', []), l3.get('core_cards', [])) for l3 in l3_groups]
+                if not config_groups:  # L3 为空时，使用 L2 的兜底配置。
+                    config_groups = [(l2.get('configs', []), l2.get('core_cards', []))]
+                for configs, core_cards in config_groups:
+                    for cfg in configs:
+                        card_ids = tuple(sorted(card.get('cardId', '') for card in cfg.get('cards', [])))
+                        if not card_ids or card_ids in seen_configs:
+                            continue
+                        seen_configs.add(card_ids)
+                        _core_ids = {card.get('cardId') for card in core_cards if card.get('cardId')}
+                        _cfg_cards = cfg.get('cards', [])
+                        recommendations.append({
+                            **cfg,
+                            'hero': hero,
+                            'hero_zh': hero_map.get(hero, hero),
+                            'core_cards': core_cards,
+                            'core_card_ids': sorted(_core_ids),
+                            'variant_cards': [card for card in _cfg_cards if card.get('cardId') not in _core_ids],
+                            'run_url': f"https://bazaardb.gg/run/tracker/{cfg.get('run_id')}" if cfg.get('run_id') else '',
+                            # 分母是“当前 phase、该职业、含查询卡”的全部 runs。
+                            'hero_appearance_rate': cfg.get('count', 0) / total_runs if total_runs else 0.0,
+                        })
+
         result = {
             'hero': hero, 'hero_zh': hero_map.get(hero, hero),
-            'layers': layers, 'total_runs': total_runs,
+            'layers': layers,
+            'recommendations': recommendations,
+            'total_runs': total_runs,
+            'phase': CURRENT_PHASE,
+            'season': RUNS_SEASON_ID,
         }
         _comp_cache[cache_key] = (result, time.time() + _comp_cache_ttl)
         return result

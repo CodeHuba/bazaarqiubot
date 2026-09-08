@@ -1498,6 +1498,28 @@ input[type="file"] {
 .view-toggle{display:flex;gap:0;border:1px solid rgba(138,77,255,.35);border-radius:6px;overflow:hidden;margin-bottom:16px;}
 .view-toggle-btn{flex:1;padding:7px 0;font-size:13px;font-weight:600;cursor:pointer;border:none;background:transparent;color:var(--text-secondary);transition:all .2s;}
 .view-toggle-btn.active{background:rgba(138,77,255,.25);color:var(--text-primary);}
+.comp-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:14px;}
+.comp-summary-card{padding:12px 14px;background:rgba(23,16,71,.7);border:1px solid rgba(38,217,242,.24);border-radius:7px;}
+.comp-summary-label{font-size:11px;color:var(--text-secondary);}
+.comp-summary-value{font-size:18px;font-weight:800;color:var(--neon-cyan);overflow-wrap:anywhere;}
+.comp-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:12px 0;}
+.comp-sort-tabs{display:flex;gap:6px;flex-wrap:wrap;}
+.comp-sort-btn{padding:5px 11px;border:1px solid rgba(138,77,255,.35);border-radius:4px;background:transparent;color:var(--text-secondary);cursor:pointer;font-family:inherit;}
+.comp-sort-btn.active{color:#fff;background:rgba(138,77,255,.28);border-color:var(--neon-violet);}
+.comp-idea-card{background:rgba(23,16,71,.72);border:1px solid rgba(138,77,255,.35);border-radius:8px;padding:16px;margin-bottom:12px;position:relative;}
+.comp-idea-head{display:flex;align-items:flex-start;gap:12px;justify-content:space-between;}
+.comp-idea-title{font-size:14px;font-weight:800;margin-bottom:8px;}
+.comp-metrics{display:flex;gap:12px;text-align:right;flex-shrink:0;}
+.comp-metric strong{display:block;font-size:16px;}
+.comp-metric span{font-size:10px;color:var(--text-secondary);}
+.comp-anchor{border-color:var(--neon-magenta)!important;background:rgba(244,56,184,.22)!important;box-shadow:0 0 8px rgba(244,56,184,.3);}
+.comp-anchor::after{content:'查询卡';font-size:9px;color:var(--neon-magenta);margin-left:3px;}
+.comp-details{margin-top:12px;padding-top:12px;border-top:1px solid rgba(138,77,255,.2);}
+.comp-detail-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;}
+.comp-link-btn{display:inline-flex;padding:4px 10px;border:1px solid rgba(38,217,242,.35);border-radius:4px;color:var(--neon-cyan);text-decoration:none;font-size:11px;background:transparent;cursor:pointer;font-family:inherit;}
+.comp-note{font-size:11px;color:var(--text-secondary);margin-top:6px;}
+.comp-system-toggle{margin-top:16px;border-top:1px solid rgba(138,77,255,.2);padding-top:12px;}
+@media(max-width:700px){.comp-summary{grid-template-columns:repeat(2,minmax(0,1fr));}.comp-idea-head{flex-direction:column}.comp-metrics{text-align:left}.comp-toolbar{align-items:flex-start;flex-direction:column}}
 .comp-group{background:rgba(23,16,71,.7);border:1px solid rgba(138,77,255,.3);border-radius:8px;margin-bottom:14px;overflow:hidden;transition:all .2s;position:relative;}
 .comp-group::before{content:'';position:absolute;top:-1px;right:-1px;width:12px;height:12px;background:var(--neon-violet,#8a4dff);clip-path:polygon(100% 0,0 0,100% 100%);border-radius:0 8px 0 0;}
 .comp-group:hover{border-color:rgba(138,77,255,.55);box-shadow:0 0 16px rgba(138,77,255,.2);}
@@ -2201,6 +2223,14 @@ function setViewMode(mode) {
     btn.classList.toggle('active', (i === 0 && mode === 'comp') || (i === 1 && mode === 'list'));
   });
   document.getElementById('runs-result').style.display = mode === 'list' ? '' : 'none';
+  const cardInput = document.getElementById('runs-cards');
+  if (cardInput) {
+    if (mode === 'comp') {
+      cardInput.placeholder = '阵容分析仅支持一张卡，如：火药桶';
+    } else {
+      cardInput.placeholder = '如：火炮阵列+赛博铁尺';
+    }
+  }
   document.getElementById('comp-result').style.display = mode === 'comp' ? '' : 'none';
 }
 
@@ -2379,10 +2409,48 @@ function renderCompCard(data) {
   }).join('');
 
   document.getElementById('comp-result').innerHTML = `
-    <div style="margin-bottom:10px;font-size:12px;color:var(--text-secondary)">
-      「${data.card}」相关阵容 · 共 ${data.total_runs} 局样本 · 综合评分排序
+    <div class="comp-summary">
+      <div class="comp-summary-card"><div class="comp-summary-label">当前范围</div><div class="comp-summary-value">${data.phase || '当前 phase'}</div></div>
+      <div class="comp-summary-card"><div class="comp-summary-label">命中对局</div><div class="comp-summary-value">${data.total_runs || 0}</div></div>
+      <div class="comp-summary-card"><div class="comp-summary-label">分析卡牌</div><div class="comp-summary-value">${data.card || '—'}</div></div>
+      <div class="comp-summary-card"><div class="comp-summary-label">统计说明</div><div class="comp-summary-value" style="font-size:12px">当前赛季当前 phase</div></div>
     </div>
-    ${html}`;
+    <div class="comp-toolbar">
+      <div class="comp-note">以下为包含「${data.card}」的相似核心阵容思路，完整配置可展开参考。</div>
+      <div class="comp-sort-tabs">
+        <button class="comp-sort-btn active" data-comp-sort="score">综合推荐</button>
+        <button class="comp-sort-btn" data-comp-sort="appearance">出场率</button>
+        <button class="comp-sort-btn" data-comp-sort="rate">胜率</button>
+      </div>
+    </div>
+    <div id="comp-recommendations"></div>
+    <div class="comp-system-toggle"><button class="comp-link-btn" onclick="document.getElementById('comp-system-layers').style.display=document.getElementById('comp-system-layers').style.display==='none'?'block':'none'">展开/收起体系层级分析</button></div>
+    <div id="comp-system-layers" style="display:none;margin-top:12px">${html}</div>`;
+  renderCompRecommendations(data);
+}
+
+function renderCompRecommendations(data) {
+  const el = document.getElementById('comp-recommendations');
+  if (!el) return;
+  const items = (data.recommendations || []).slice();
+  let mode = 'score';
+  const render = () => {
+    const sorted = items.sort((a,b) => mode === 'rate' ? (b.rate-a.rate || b.count-a.count) : mode === 'appearance' ? (b.global_appearance_rate-a.global_appearance_rate || b.count-a.count) : (b.score-a.score || b.count-a.count));
+    el.innerHTML = sorted.length ? sorted.map((cfg, i) => {
+      const anchor = (cfg.cards || []).map(c => c.cardId).includes(data.card_id);
+      const cards = (cfg.cards || []).map(c => {
+        const cls = c.cardId === data.card_id ? 'comp-card-chip has-img comp-anchor' : 'comp-card-chip has-img';
+        const img = c.img ? '<img class="comp-card-img size-' + (c.size || 'Small') + '" src="' + c.img + '" alt="' + c.name_zh + '" loading="lazy" onerror="this.style.display=\'none\'">' : '';
+        return '<span class="' + cls + '">' + img + c.name_zh + '</span>';
+      }).join('');
+      const coreCards = (cfg.core_cards || []).map(c => c.name_zh).join('、');
+      const variantCards = (cfg.variant_cards || []).map(c => c.name_zh).join('、');
+      const runUrl = cfg.run_url || (cfg.run_id ? `https://bazaardb.gg/run/tracker/${cfg.run_id}` : '');
+      return `<div class="comp-idea-card"><div class="comp-idea-head"><div><div class="comp-idea-title">${i+1}. ${cfg.hero_zh || cfg.hero || ''} · 参考阵容</div><div class="comp-rep-cards">${cards}</div></div><div class="comp-metrics"><div class="comp-metric"><strong>${(cfg.global_appearance_rate*100).toFixed(1)}%</strong><span>出场率</span></div><div class="comp-metric"><strong style="color:${rateColorComp(cfg.rate)}">${(cfg.rate*100).toFixed(1)}%</strong><span>胜率</span></div></div></div><div class="comp-details"><div class="comp-note"><b>体系核心：</b>${coreCards || '暂无'}</div>${variantCards ? `<div class="comp-note"><b>该代表构筑的变体：</b>${variantCards}</div>` : ''}<div class="comp-note">${cfg.count} 次样本${cfg.sample_warning ? ' · 样本较少，仅供参考' : ''}</div><div class="comp-detail-actions">${cfg.screenshot ? `<button class="comp-link-btn" onclick="toggleScreenshotComp('recommend-${i}')">📷 查看截图</button><span id="recommend-${i}" style="display:none"><img src="${cfg.screenshot.startsWith('http')?cfg.screenshot:'https://usercontent.bzdb.network'+cfg.screenshot}" style="max-width:100%;margin-top:8px;border-radius:5px" loading="lazy"></span>` : ''}${runUrl ? `<a class="comp-link-btn" href="${runUrl}" target="_blank">查看原始 run →</a>` : ''}</div></div></div>`;
+    }).join('') : '<div class="result-card"><div class="empty">当前 phase 暂无足够样本形成可参考阵容</div></div>';
+  };
+  document.querySelectorAll('[data-comp-sort]').forEach(btn => btn.onclick = () => { mode=btn.dataset.compSort; document.querySelectorAll('[data-comp-sort]').forEach(b=>b.classList.toggle('active',b===btn)); render(); });
+  render();
 }
 
 </script>
