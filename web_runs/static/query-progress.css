@@ -1,0 +1,59 @@
+/* BazaarQiuBot 统一查询进度条 */
+.bz-query-progress {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 10000;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(-8px);
+  transition: opacity .2s ease, transform .2s ease;
+}
+.bz-query-progress.is-active {
+  opacity: 1;
+  transform: translateY(0);
+}
+.bz-query-progress-track {
+  height: 4px;
+  background: rgba(8, 10, 42, .88);
+  box-shadow: 0 1px 12px rgba(38, 217, 242, .25);
+}
+.bz-query-progress-bar {
+  height: 100%;
+  width: 8%;
+  background: linear-gradient(90deg, var(--neon-cyan, #26d9f2), var(--neon-violet, #8a4dff), var(--neon-magenta, #f438b8));
+  background-size: 220% 100%;
+  animation: bz-query-progress-flow 1.3s linear infinite;
+  transition: width .35s ease;
+}
+.bz-query-progress-copy {
+  position: fixed;
+  top: 14px;
+  right: 16px;
+  max-width: min(420px, calc(100vw - 32px));
+  padding: 7px 11px;
+  border: 1px solid rgba(38, 217, 242, .28);
+  border-radius: 7px;
+  background: rgba(9, 10, 42, .94);
+  color: var(--text-secondary, #b5b3d7);
+  font-size: 12px;
+  line-height: 1.45;
+  box-shadow: 0 5px 22px rgba(0, 0, 0, .24), 0 0 16px rgba(38, 217, 242, .1);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.bz-query-progress-copy::before { content: '✦'; color: var(--neon-cyan, #26d9f2); margin-right: 6px; }
+@keyframes bz-query-progress-flow {
+  from { background-position: 100% 0; }
+  to { background-position: -120% 0; }
+}
+/* 页面旧版局部进度条由统一查询进度组件接管，避免出现双进度条。 */
+.runs-progress-wrap,
+.comp-progress-wrap,
+.wr-progress-bar { display: none; }
+
+@media (max-width: 600px) {
+  .bz-query-progress-copy { left: 12px; right: 12px; max-width: none; text-align: center; }
+}
