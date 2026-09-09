@@ -32,6 +32,8 @@ MRMAO_API_BASE = "https://bazaarapi.mrmao.life"
 
 # 当前赛季 ID（comprehensive-info 必传）
 CURRENT_SEASON_ID = 18
+# 玩家 stat/history 接口使用独立赛季号，不能影响 runs 等其他链路。
+PLAYER_STAT_SEASON_ID = 19
 CURRENT_PHASE = "18.1"  # 当前赛季阶段，补丁后手动更新
 RUNS_SEASON_ID = 18
 
@@ -226,7 +228,7 @@ class BazaarDataClient:
         self._player_cache[key] = (now, data)
         return data
 
-    async def get_player_stat(self, username: str, season_id: int = CURRENT_SEASON_ID) -> dict:
+    async def get_player_stat(self, username: str, season_id: int = PLAYER_STAT_SEASON_ID) -> dict:
         """查 mrmao 玩家本赛季统计（comprehensive-info）。同 get_player 复用 10s 缓存。"""
         key = f"stat:{season_id}:{username.strip().lower()}"
         now = time.time()

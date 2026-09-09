@@ -10,6 +10,7 @@
 - bz status / refresh 缓存状态 / 强制刷新
 """
 import asyncio
+import base64
 import os
 import re
 import time
@@ -47,6 +48,16 @@ COOLDOWN_DEFAULT = 3   # 其他指令同 user
 
 # 单条回复最大字符数（兜底）
 MAX_REPLY_LEN = 3500
+
+
+def _image_upload_value(img_path: str | None) -> str | None:
+    """将本地图片转换为 NapCat 可接收的 base64 上传值。"""
+    if not img_path:
+        return None
+    path = Path(img_path)
+    if not path.is_file():
+        return None
+    return "base64://" + base64.b64encode(path.read_bytes()).decode("ascii")
 
 
 class BazaarPlugin(NcatBotPlugin):
@@ -238,12 +249,15 @@ class BazaarPlugin(NcatBotPlugin):
         # 发图片（群聊/私聊分别处理）
         is_private = getattr(event, "message_type", None) == "private"
         try:
+            image_value = _image_upload_value(img_path)
+            if image_value is None:
+                return fmt.format_player_stat(username, data)
             if is_private:
                 user_id = getattr(event, "user_id", 0)
-                await self.api.post_private_msg(user_id=user_id, image=img_path)
+                await self.api.post_private_msg(user_id=user_id, image=image_value)
             else:
                 group_id = getattr(event, "group_id", 0)
-                await self.api.post_group_msg(group_id=group_id, image=img_path)
+                await self.api.post_group_msg(group_id=group_id, image=image_value)
         except Exception as e:
             print(f"[{self.name}] 图片发送失败，fallback 文字: {e}")
             return fmt.format_player_stat(username, data)
@@ -272,12 +286,15 @@ class BazaarPlugin(NcatBotPlugin):
 
         is_private = getattr(event, "message_type", None) == "private"
         try:
+            image_value = _image_upload_value(img_path)
+            if image_value is None:
+                return "[巴扎] 图片文件生成失败"
             if is_private:
                 user_id = getattr(event, "user_id", 0)
-                await self.api.post_private_msg(user_id=user_id, image=img_path)
+                await self.api.post_private_msg(user_id=user_id, image=image_value)
             else:
                 group_id = getattr(event, "group_id", 0)
-                await self.api.post_group_msg(group_id=group_id, image=img_path)
+                await self.api.post_group_msg(group_id=group_id, image=image_value)
         except Exception as e:
             print(f"[{self.name}] history图片发送失败: {e}")
             return f"[巴扎] 图片发送失败: {e}"
