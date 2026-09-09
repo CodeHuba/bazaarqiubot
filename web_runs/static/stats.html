@@ -103,11 +103,30 @@ const API_NAMES = {
   '/api/runs':'阵容查询','/api/winrate':'胜率查询','/api/partner':'最佳搭档',
   '/api/topcard':'职业榜单','/api/feedback':'意见反馈','/api/track/pv':'页面埋点','/api/ingest':'数据采集'
 };
+const FEATURE_NAMES = {
+  runs_query:'阵容查询', winrate_query:'胜率查询', partner_query:'最佳搭档',
+  topcard_query:'职业榜单', comp_query:'阵容分析', comp_card_query:'以卡找阵容',
+  hero_overview:'职业概览', feedback_submit:'提交反馈', feedback_like:'反馈点赞',
+  feedback_comment:'反馈评论', trivia_submit:'提交冷知识', trivia_vote:'冷知识投票',
+  support_page_view:'支持页访问', donation_qr_open:'打开赞赏码', trivia_share:'分享冷知识'
+};
 
 function fmtN(n) {
   if (n >= 10000) return (n/10000).toFixed(1) + 'w';
   if (n >= 1000) return (n/1000).toFixed(1) + 'k';
   return n;
+}
+
+function escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+}
+
+function renderFeatureUsage(features) {
+  if (!features.length) return '<tr><td colspan="7" style="color:#6b7280;text-align:center;padding:20px">暂无功能事件数据</td></tr>';
+  return features.map(f => {
+    const rate = f.uses ? (f.successes / f.uses * 100).toFixed(1) : '0.0';
+    return `<tr><td>${escapeHtml(FEATURE_NAMES[f.feature] || f.feature)}</td><td>${f.uses}</td><td>${f.uv}</td><td>${f.successes}</td><td>${f.empty_results}</td><td>${f.errors}</td><td>${rate}%</td></tr>`;
+  }).join('');
 }
 
 async function loadStats() {
@@ -169,6 +188,16 @@ function renderStats(d) {
     </div>
 
     <div class="section">
+      <div class="section-title">核心功能使用排行（统计周期内）</div>
+      <div class="table-card">
+        <table class="tbl">
+          <thead><tr><th>功能</th><th>使用次数</th><th>独立用户</th><th>成功</th><th>空结果</th><th>错误</th><th>成功率</th></tr></thead>
+          <tbody id="feature-usage-body"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="section">
       <div class="section-title">Feedback 互动</div>
       <div class="fb-action-grid">
         <div class="fb-action-card"><div class="fb-action-icon">✍️</div><div class="fb-action-value">${d.fb_actions?.submit||0}</div><div class="fb-action-label">提交反馈</div></div>
@@ -214,6 +243,11 @@ function renderStats(d) {
       </div>
     </div>
   `;
+
+  // 功能使用排行
+  const featureBody = document.getElementById('feature-usage-body');
+  const features = d.feature_usage || [];
+  featureBody.innerHTML = renderFeatureUsage(features);
 
   // 趋势图
   const daily = d.daily || [];

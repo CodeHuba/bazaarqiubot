@@ -788,7 +788,21 @@ const CONFIG = {
 };
 
 /* ============ 模态框 ============ */
+function trackSupportEvent(feature) {
+  const fp = localStorage.getItem('_bz_fp') || ('fp_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8));
+  localStorage.setItem('_bz_fp', fp);
+  fetch('/api/track/event', {method: 'POST', headers: {'Content-Type': 'application/json', 'X-Fingerprint': fp}, body: JSON.stringify({feature, page: 'support'}), keepalive: true}).catch(() => {});
+}
+
+function trackSupportPV() {
+  const fp = localStorage.getItem('_bz_fp') || ('fp_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8));
+  localStorage.setItem('_bz_fp', fp);
+  fetch('/api/track/pv', {method: 'POST', headers: {'Content-Type': 'application/json', 'X-Fingerprint': fp}, body: JSON.stringify({tab: 'support'}), keepalive: true}).catch(() => {});
+  trackSupportEvent('support_page_view');
+}
+
 function openModal() {
+  trackSupportEvent('donation_qr_open');
   const overlay = document.getElementById('modal-overlay');
   overlay.classList.add('open');
   document.body.style.overflow = 'hidden';
@@ -878,6 +892,7 @@ function toggleExpand() {
 }
 
 /* ============ 初始化 ============ */
+trackSupportPV();
 loadSupporters();
 </script>
 <script src="/static/announcement.js"></script>

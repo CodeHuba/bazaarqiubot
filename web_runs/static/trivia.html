@@ -1109,6 +1109,24 @@ function formatDate(s) {
   return s.slice(0, 10);
 }
 
+function trackEvent(feature) {
+  fetch('/api/track/event', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json', 'X-Fingerprint': getFingerprint()},
+    body: JSON.stringify({feature, page: 'trivia'}),
+    keepalive: true
+  }).catch(() => {});
+}
+
+function trackPV() {
+  fetch('/api/track/pv', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json', 'X-Fingerprint': getFingerprint()},
+    body: JSON.stringify({tab: 'trivia'}),
+    keepalive: true
+  }).catch(() => {});
+}
+
 /* ===== 冷知识列表 ===== */
 let triviaData = [];
 let userVotes = JSON.parse(localStorage.getItem('_trivia_votes') || '{}');
@@ -1293,7 +1311,10 @@ async function submitAsk() {
 }
 
 /* ===== 初始化 ===== */
-window.addEventListener('DOMContentLoaded', loadTrivia);
+window.addEventListener('DOMContentLoaded', () => {
+  trackPV();
+  loadTrivia();
+});
 </script>
 
 <!-- 分享卡片容器（隐藏，截图用） -->
@@ -1338,6 +1359,7 @@ async function shareTrivia(id) {
     const imgUrl = canvas.toDataURL('image/png');
 
     // 显示弹窗
+    trackEvent('trivia_share');
     showShareModal(imgUrl, t.question);
   } catch (e) {
     alert('生成图片失败，请重试');

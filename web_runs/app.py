@@ -13,6 +13,8 @@ from dotenv import load_dotenv
 load_dotenv("/opt/qiubot/.env")
 from functools import wraps
 from flask import Flask, request, jsonify, send_from_directory, send_file, abort, Response
+from werkzeug.middleware.proxy_fix import ProxyFix
+from analytics import FeatureEventWriter, init_analytics_db, overview as feature_overview
 
 sys.path.insert(0, '/opt/qiubot')
 import sys as _sys; _sys.path.insert(0, '/opt/qiubot/web_runs')
@@ -35,6 +37,8 @@ def _mask_ip(ip):
     return f"{p[0]}.{p[1]}.*.*" if len(p) == 4 else ip
 
 app = Flask(__name__, static_folder='static')
+# 线上仅通过 Caddy 单层反代访问；由 Caddy 覆盖 X-Forwarded-For 后再解析真实客户端地址。
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1)
 
 # ── card search 全局索引（启动时预热）──
 _card_search_index = []
@@ -150,6 +154,9 @@ _threading.Thread(target=_build_winrate_cache, daemon=True).start()
 # 在 app.py 开头（imports 后）添加统一埋点中间件和 stats 表
 
 import time
+import hmac
+import ipaddress
+import threading as _analytics_threading
 from flask import g
 
 # 扩展 query_log 表，添加 fingerprint 和 duration
@@ -259,6 +266,105 @@ def _init_stats_tables():
 _init_stats_tables()
 
 STATS_DB = '/opt/qiubot/data/stats.db'
+try:
+    init_analytics_db(STATS_DB)
+    _feature_event_writer = FeatureEventWriter(STATS_DB)
+except Exception as _analytics_init_error:
+    _feature_event_writer = None
+    print(f'[analytics] 初始化失败，主服务继续运行: {_analytics_init_error}', flush=True)
+
+_event_rate_lock = _analytics_threading.Lock()
+_event_rate = {}
+_EVENT_RATE_WINDOW = 10
+_EVENT_RATE_MAX_KEYS = 10000
+
+
+def _event_identity(feature, page):
+    return (getattr(g, 'fingerprint', '') or request.remote_addr or '', feature, page)
+
+
+def _allow_feature_event(feature, page):
+    now = time.time()
+    with _event_rate_lock:
+        stale = [key for key, seen_at in _event_rate.items() if now - seen_at >= _EVENT_RATE_WINDOW]
+        for key in stale:
+            _event_rate.pop(key, None)
+        key = _event_identity(feature, page)
+        if key in _event_rate:
+            return False
+        if len(_event_rate) >= _EVENT_RATE_MAX_KEYS:
+            return False
+        _event_rate[key] = now
+        return True
+
+
+def _masked_client_ip():
+    raw_ip = request.remote_addr or ''
+    try:
+        addr = ipaddress.ip_address(raw_ip)
+        if addr.version == 4:
+            octets = raw_ip.split('.')
+            return f'{octets[0]}.{octets[1]}.*.*'
+        parts = addr.exploded.split(':')
+        return f'{parts[0]}:{parts[1]}:{parts[2]}:*'
+    except ValueError:
+        return '*.*.*.*'
+
+
+def _stats_authorized():
+    auth = request.authorization
+    expected_password = os.getenv('STATS_PASSWORD', '')
+    return bool(auth and expected_password
+                and hmac.compare_digest(auth.password or '', expected_password))
+
+
+def require_stats_auth(view):
+    @wraps(view)
+    def wrapper(*args, **kwargs):
+        if not _stats_authorized():
+            return Response('Unauthorized', 401, {'WWW-Authenticate': 'Basic realm="BazaarQiuBot Admin"'})
+        return view(*args, **kwargs)
+    return wrapper
+
+
+def _track_feature(feature, page, outcome):
+    try:
+        ip = _masked_client_ip()
+        if _feature_event_writer:
+            _feature_event_writer.submit(feature, page, outcome, getattr(g, 'fingerprint', ''), ip)
+    except Exception:
+        pass
+
+
+def _feature_outcome(response):
+    if response.status_code >= 400:
+        return 'error'
+    if request.method != 'GET':
+        return 'success'
+    try:
+        data = response.get_json(silent=True)
+    except Exception:
+        return 'error'
+    if not isinstance(data, dict):
+        return 'error'
+    if request.path in ('/api/runs', '/api/winrate') and data.get('total') == 0:
+        return 'empty'
+    if request.path == '/api/winrate' and not data.get('results'):
+        return 'empty'
+    if request.path == '/api/winrate' and not all(isinstance(row, dict) for row in data['results']):
+        return 'error'
+    if request.path == '/api/winrate' and not any(row.get('total', 0) for row in data['results']):
+        return 'empty'
+    if request.path == '/api/partner' and not data.get('by_winrate'):
+        return 'empty'
+    if request.path in ('/api/comp', '/api/comp/card') and not (data.get('groups') or data.get('recommendations') or data.get('layers')):
+        return 'empty'
+    if request.path == '/api/topcard' and not data.get('top'):
+        return 'empty'
+    if request.path == '/api/hero_overview' and not data.get('heroes'):
+        return 'empty'
+    return 'success'
+
 
 @app.before_request
 def before_request():
@@ -276,12 +382,32 @@ def after_request(response):
                 endpoint=request.path,
                 method=request.method,
                 params=dict(request.args) or dict(request.form) or {},
-                ip=_mask_ip(request.headers.get('X-Forwarded-For', request.remote_addr)),
+                ip=_masked_client_ip(),
                 fingerprint=g.fingerprint,
                 result_count=getattr(g, 'result_count', 0),
                 success=response.status_code < 400,
                 duration_ms=duration_ms
             )
+    _feature_routes = {
+        ('GET', '/api/runs'): ('runs_query', 'runs'),
+        ('GET', '/api/winrate'): ('winrate_query', 'winrate'),
+        ('GET', '/api/partner'): ('partner_query', 'partner'),
+        ('GET', '/api/topcard'): ('topcard_query', 'topcard'),
+        ('GET', '/api/comp'): ('comp_query', 'topcard'),
+        ('GET', '/api/comp/card'): ('comp_card_query', 'runs'),
+        ('GET', '/api/hero_overview'): ('hero_overview', 'topcard'),
+        ('POST', '/api/feedback'): ('feedback_submit', 'feedback'),
+        ('POST', '/api/feedback/<int:fid>/like'): ('feedback_like', 'feedback'),
+        ('POST', '/api/feedback/<int:fid>/comments'): ('feedback_comment', 'feedback'),
+        ('POST', '/api/trivia'): ('trivia_submit', 'trivia'),
+        ('POST', '/api/trivia/<int:tid>/vote'): ('trivia_vote', 'trivia'),
+    }
+    for (method, rule), (feature, page) in _feature_routes.items():
+        if request.method == method and request.url_rule and request.url_rule.rule == rule:
+            outcome = _feature_outcome(response)
+            if _allow_feature_event(feature, page):
+                _track_feature(feature, page, outcome)
+            break
     # 静态资源缓存头
     if request.path.startswith('/static/'):
         ext = request.path.rsplit('.', 1)[-1].lower()
@@ -336,9 +462,27 @@ def api_track_pv():
     data = request.get_json(silent=True) or {}
     tab = data.get('tab', '')
     if tab:
-        _log_page_view(tab, _mask_ip(request.headers.get('X-Forwarded-For', request.remote_addr)), g.fingerprint)
+        _log_page_view(tab, _masked_client_ip(), g.fingerprint)
     return jsonify({'ok': True})
 
+
+
+@app.route('/api/track/event', methods=['POST'])
+def api_track_event():
+    data = request.get_json(silent=True) or {}
+    feature = str(data.get('feature', '')).strip()
+    page = str(data.get('page', '')).strip()
+    allowed_events = {
+        ('support_page_view', 'support'),
+        ('donation_qr_open', 'support'),
+        ('trivia_share', 'trivia'),
+    }
+    if (feature, page) not in allowed_events:
+        return jsonify({'error': 'invalid event'}), 400
+    if not _allow_feature_event(feature, page):
+        return jsonify({'ok': True, 'deduplicated': True})
+    _track_feature(feature, page, 'success')
+    return jsonify({'ok': True})
 
 
 QUERY_STATS_DB = '/opt/qiubot/data/query_stats.db'
@@ -967,11 +1111,14 @@ def api_comments_post(fid):
 
 
 @app.route('/api/stats/overview', methods=['GET'])
-@app.route('/api/stats/overview', methods=['GET'])
+@require_stats_auth
 def api_stats_overview():
     """数据看板总览"""
     import sqlite3 as _sl
-    days = int(request.args.get('days', 7))
+    try:
+        days = max(1, min(int(request.args.get('days', 7)), 90))
+    except (TypeError, ValueError):
+        days = 7
     try:
         conn = _sl.connect(STATS_DB)
         # cutoff 按北京时间自然日计算（UTC+8），避免滚动窗口导致跨天数据不一致
@@ -1027,6 +1174,10 @@ def api_stats_overview():
         ).fetchall()]
         old_conn.close()
 
+        try:
+            feature_stats = feature_overview(STATS_DB, days)
+        except Exception:
+            feature_stats = {'feature_total': 0, 'feature_usage': [], 'feature_daily': []}
         return jsonify({
             'period_days': days,
             'total_calls': total_calls,
@@ -1036,6 +1187,7 @@ def api_stats_overview():
             'daily': daily,
             'fb_actions': fb_actions,
             'hot_cards': hot_cards,
+            **feature_stats,
         })
     except Exception as e:
         import traceback
@@ -1464,17 +1616,9 @@ def admin_delete_announcement(aid):
 
 # ===== Admin Stats =====
 
-@app.route('/admin/stats')# ===== Admin Stats =====
-
 @app.route('/admin/stats')
+@require_stats_auth
 def stats_dashboard():
-    auth = request.authorization
-    if not auth or auth.password != os.getenv('STATS_PASSWORD', ''):
-        return Response(
-            'Unauthorized',
-            401,
-            {'WWW-Authenticate': 'Basic realm="BazaarQiuBot Admin"'}
-        )
     return send_from_directory('static', 'stats.html')
 
 
