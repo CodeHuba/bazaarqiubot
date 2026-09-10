@@ -1485,8 +1485,8 @@ input[type="file"] {
 .hero-tab.active{color:var(--neon-violet);background:rgba(138,77,255,.15);border-color:rgba(138,77,255,.4);border-bottom-color:transparent;}
 
 /* === 二级内容 tab === */
-.content-tabs{display:flex;gap:10px;margin-bottom:20px;}
-.content-tab{padding:8px 22px;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600;color:var(--text-secondary);border:1px solid rgba(38,217,242,.25);background:transparent;transition:all .2s;font-family:inherit;}
+.content-tabs{display:flex;gap:10px;margin-bottom:20px;align-items:center;}
+.content-tab{padding:8px 22px;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600;color:var(--text-secondary);border:1px solid rgba(38,217,242,.25);background:transparent;transition:all .2s;font-family:inherit;text-decoration:none;}
 .content-tab:hover{color:var(--neon-cyan);background:rgba(38,217,242,.08);}
 .content-tab.active{color:var(--text-primary);background:linear-gradient(135deg,rgba(38,217,242,.15),rgba(244,56,184,.1));border-color:var(--neon-cyan);box-shadow:0 0 12px rgba(38,217,242,.3);}
 
@@ -1687,7 +1687,7 @@ input[type="range"]::-moz-range-thumb{width:18px;height:18px;background:var(--ne
 .tier-section{margin:0 0 16px;border:1px solid color-mix(in srgb,var(--tier-color) 38%,transparent);border-radius:9px;overflow:hidden;background:rgba(23,16,71,.55)}
 .tier-section header{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:color-mix(in srgb,var(--tier-color) 12%,transparent);border-left:4px solid var(--tier-color);color:var(--text-secondary);font-size:12px}.tier-section header strong{font-size:20px;color:var(--tier-color);letter-spacing:.08em}
 .tier-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(152px,1fr));gap:9px;padding:12px}.tier-card{display:flex;min-height:138px;flex-direction:column;align-items:center;justify-content:center;gap:3px;padding:8px;border:1px solid color-mix(in srgb,var(--tier-color) 36%,transparent);border-radius:7px;background:rgba(9,10,42,.55);color:var(--text-primary);font:inherit;cursor:pointer;transition:.2s}.tier-card:hover{transform:translateY(-2px);border-color:var(--tier-color);box-shadow:0 5px 16px color-mix(in srgb,var(--tier-color) 22%,transparent)}.tier-card-img{object-fit:contain;max-width:64px;height:48px}.tier-card-img.size-Small{width:26px}.tier-card-img.size-Medium{width:48px}.tier-card-img.size-Large{width:64px}.tier-card-name{font-size:13px;font-weight:700}.tier-card-stats{font-size:10px;color:var(--text-secondary);white-space:nowrap}.tier-card-count{font-size:10px;color:var(--tier-color)}.tier-insufficient{margin:20px 0;padding:12px;border:1px dashed rgba(181,179,215,.35);border-radius:8px;color:var(--text-secondary)}.tier-insufficient summary{cursor:pointer;font-weight:700}.tier-empty{color:var(--text-secondary);font-size:12px;padding:9px}
-.tier-modal{position:fixed;inset:0;z-index:1000;display:flex;align-items:center;justify-content:center;padding:20px;background:rgba(0,0,0,.7)}.tier-modal-box{position:relative;width:min(440px,100%);max-height:90vh;overflow:auto;padding:24px;border:1px solid var(--neon-cyan);border-radius:10px;background:var(--bg-surface);text-align:center;box-shadow:var(--glow-cyan)}.tier-modal-box>img{max-width:160px;max-height:120px;object-fit:contain}.tier-modal-box p{text-align:left;color:var(--text-secondary);font-size:13px;margin:9px 0}.tier-modal-close{position:absolute;right:10px;top:8px;border:0;background:transparent;color:var(--text-primary);font-size:28px;cursor:pointer}.tier-modal-badge{display:inline-block;padding:3px 12px;border-radius:999px;background:rgba(244,56,184,.18);color:var(--neon-magenta);font-weight:800}.tier-share-card{position:fixed;left:-10000px;top:0;width:760px;padding:28px;background:#090A2A;color:#F5F4FF}.tier-share-card h2{margin:0}.tier-share-card p,.tier-share-card small{color:#B5B3D7}.tier-share-card h3{margin:16px 0 8px}.tier-share-item{display:inline-block;margin:3px;padding:6px 9px;border:1px solid #3c356c;border-radius:5px;font-size:13px}
+.tier-modal{position:fixed;inset:0;z-index:1000;display:flex;align-items:center;justify-content:center;padding:20px;background:rgba(0,0,0,.7)}.tier-modal-box{position:relative;width:min(440px,100%);max-height:90vh;overflow:auto;padding:24px;border:1px solid var(--neon-cyan);border-radius:10px;background:var(--bg-surface);text-align:center;box-shadow:var(--glow-cyan)}.tier-modal-box>img{max-width:160px;max-height:120px;object-fit:contain}.tier-modal-box p{text-align:left;color:var(--text-secondary);font-size:13px;margin:9px 0}.tier-modal-close{position:absolute;right:10px;top:8px;border:0;background:transparent;color:var(--text-primary);font-size:28px;cursor:pointer}.tier-modal-badge{display:inline-block;padding:3px 12px;border-radius:999px;background:rgba(244,56,184,.18);color:var(--neon-magenta);font-weight:800}.tier-share-tab-btn{display:none;margin-left:auto;padding:5px 10px;border:1px solid rgba(38,217,242,.3);border-radius:5px;background:transparent;color:var(--neon-cyan);font:600 11px inherit;cursor:pointer;white-space:nowrap}.tier-share-tab-btn.is-visible{display:inline-flex}.tier-share-tab-btn:hover{background:rgba(38,217,242,.12);border-color:var(--neon-cyan)}.tier-share-card{position:fixed;left:-10000px;top:0;width:760px;padding:30px;background:#090A2A;color:#F5F4FF}.tier-share-card h2{margin:0;font-size:26px}.tier-share-card p{margin:7px 0 20px;color:#B5B3D7}.tier-share-tier{margin:14px 0;border:1px solid #34315c;border-left:4px solid var(--share-tier-color);border-radius:8px;padding:10px 12px}.tier-share-tier h3{margin:0 0 9px;color:var(--share-tier-color);font-size:19px}.tier-share-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:8px}.tier-share-item{min-height:92px;padding:5px 3px;border:1px solid #3c356c;border-radius:6px;background:#12113a;text-align:center}.tier-share-item img{display:block;width:100%;height:58px;object-fit:contain;margin-bottom:4px}.tier-share-item span{display:block;color:#D9D7F2;font-size:10px;line-height:1.45;white-space:nowrap}.tier-share-watermark{margin-top:18px;padding-top:10px;border-top:1px solid rgba(181,179,215,.22);display:flex;justify-content:space-between;align-items:center;color:#817da6;font-size:11px}.tier-share-watermark strong{color:#26D9F2;letter-spacing:.08em;font-size:13px}.tier-share-download{display:inline-flex;align-items:center;justify-content:center;margin-top:12px;padding:7px 14px;border:1px solid var(--border-bright);border-radius:6px;background:rgba(38,217,242,.12);color:var(--neon-cyan);font:600 13px inherit;text-decoration:none}.tier-share-download:hover{text-decoration:none;background:rgba(38,217,242,.2)}
 @media(max-width:768px){.tier-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;padding:8px}.tier-card{min-height:126px}.tier-section header{padding:9px}.tier-section header strong{font-size:18px}}
 
 </style>
@@ -1761,6 +1761,7 @@ input[type="range"]::-moz-range-thumb{width:18px;height:18px;background:var(--ne
     <button class="content-tab active" id="tab-topcard" onclick="switchContent('topcard')">⚔️ 卡牌榜</button>
     <button class="content-tab" id="tab-comp" onclick="switchContent('comp')">🏆 阵容榜</button>
     <button class="content-tab" id="tab-tier" onclick="switchContent('tier')">📋 卡牌 T 表</button>
+    <button class="tier-share-tab-btn" id="tier-share-button" onclick="shareTierTable()" aria-label="分享当前卡牌 T 表">↗ 分享</button>
   </div>
 
   <!-- 卡牌榜 -->
@@ -1799,7 +1800,6 @@ input[type="range"]::-moz-range-thumb{width:18px;height:18px;background:var(--ne
     <div class="topcard-controls">
       <div class="form-group"><label>时间范围</label><select id="tier-days" onchange="loadTierTable()"><option value="">全赛段</option><option value="7">近 7 天</option><option value="3">近 3 天</option><option value="1">近 1 天</option></select></div>
       <div class="form-group"><label>段位</label><select id="tier-rank" onchange="loadTierTable()"><option value="all" selected>全部段位</option><option value="legendary">传奇</option></select></div>
-      <button class="content-tab" onclick="shareTierTable()">📤 分享</button>
     </div>
     <div id="tier-result"><div class="loading">加载中...</div></div>
   </div>
@@ -1890,6 +1890,7 @@ function switchContent(type){
   document.getElementById('tab-topcard').classList.toggle('active',type==='topcard');
   document.getElementById('tab-comp').classList.toggle('active',type==='comp');
   document.getElementById('tab-tier').classList.toggle('active',type==='tier');
+  document.getElementById('tier-share-button').classList.toggle('is-visible',type==='tier');
   document.getElementById('panel-topcard').style.display=type==='topcard'?'block':'none';
   document.getElementById('panel-comp').style.display=type==='comp'?'block':'none';
   document.getElementById('panel-tier').style.display=type==='tier'?'block':'none';
@@ -2154,7 +2155,15 @@ async function shareTierTable(){
   if(!_lastTierData){return;}
   if(typeof html2canvas==='undefined'){alert('分享组件加载失败，请刷新页面后重试。');return;}
   const data=_lastTierData, node=document.createElement('div'); node.className='tier-share-card';
-  node.innerHTML=`<h2>📋 ${tierEscape(data.hero)} 卡牌 T 表</h2><p>当前赛季 ${tierEscape(data.phase)} · ${data.rank_filter==='legendary'?'传奇':'全部段位'} · ${data.days?`近 ${data.days} 天`:'全赛段'}</p>${(data.tiers||[]).map(group=>`<h3 style="color:${TIER_META[group.name][0]}">${tierEscape(group.name)}</h3><div>${group.cards.map(card=>`<span class="tier-share-item">${tierEscape(card.name)} ${(card.appearance_rate*100).toFixed(1)}% / ${(card.win_rate*100).toFixed(1)}%</span>`).join('')}</div>`).join('')}<small>出场率 70% + 10 胜率 30% · BazaarQiuBot</small>`;
+  const shareGroups=(data.tiers||[]).map(group=>{
+    const color=TIER_META[group.name]?.[0]||'#B5B3D7';
+    const cards=group.cards.map(card=>{
+      const image=tierSafeUrl(card.img);
+      return `<div class="tier-share-item">${image?`<img src="${tierEscape(image)}" crossorigin="anonymous" alt="">`:'<div style="height:58px"></div>'}<span>使用率 ${(card.appearance_rate*100).toFixed(1)}%</span><span>10胜率 ${(card.win_rate*100).toFixed(1)}%</span></div>`;
+    }).join('');
+    return `<section class="tier-share-tier" style="--share-tier-color:${color}"><h3>${tierEscape(group.name)}</h3><div class="tier-share-grid">${cards}</div></section>`;
+  }).join('');
+  node.innerHTML=`<h2>📋 ${tierEscape(data.hero)} 卡牌 T 表</h2><p>当前赛季 ${tierEscape(data.phase)} · ${data.rank_filter==='legendary'?'传奇':'全部段位'} · ${data.days?`近 ${data.days} 天`:'全赛段'}</p>${shareGroups}<footer class="tier-share-watermark"><span>出场率 70% + 10 胜率 30% · ${new Date().toLocaleDateString('zh-CN')}</span><strong>BazaarQiuBot</strong></footer>`;
   document.body.appendChild(node);
   try{
     const canvas=await html2canvas(node,{backgroundColor:'#090A2A',scale:2,useCORS:true,logging:false});
