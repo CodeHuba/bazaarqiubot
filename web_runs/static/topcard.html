@@ -2150,6 +2150,16 @@ function openTierDetail(card,tier){
   modal.innerHTML=`<div class="tier-modal-box"><button class="tier-modal-close" onclick="this.closest('.tier-modal').remove()">×</button>${safeImg?`<img src="${tierEscape(safeImg)}" alt="${safeName}">`:''}<h2>${safeName}</h2><div class="tier-modal-badge">${tierEscape(tier)}</div><p>出场 ${card.appearance_count} 次 · 出场率 ${(card.appearance_rate*100).toFixed(1)}%</p><p>10 胜 ${card.ten_win} 次 · 10 胜率 ${(card.win_rate*100).toFixed(1)}%</p><p>${tierEscape(explain)}</p></div>`;
   modal.onclick=e=>{if(e.target===modal)modal.remove();}; document.body.appendChild(modal);
 }
+function tierShareImageUrl(url){
+  const safe=tierSafeUrl(url);
+  return safe ? `/api/card_art_proxy?url=${encodeURIComponent(safe)}` : '';
+}
+function waitForShareImages(node){
+  return Promise.all([...node.querySelectorAll('img')].map(img=>{
+    if(img.complete) return Promise.resolve();
+    return new Promise(resolve=>{img.addEventListener('load',resolve,{once:true});img.addEventListener('error',resolve,{once:true});});
+  }));
+}
 async function shareTierTable(){
   if(!_lastTierData){await loadTierTable();}
   if(!_lastTierData){return;}
@@ -2158,14 +2168,15 @@ async function shareTierTable(){
   const shareGroups=(data.tiers||[]).map(group=>{
     const color=TIER_META[group.name]?.[0]||'#B5B3D7';
     const cards=group.cards.map(card=>{
-      const image=tierSafeUrl(card.img);
-      return `<div class="tier-share-item">${image?`<img src="${tierEscape(image)}" crossorigin="anonymous" alt="">`:'<div style="height:58px"></div>'}<span>使用率 ${(card.appearance_rate*100).toFixed(1)}%</span><span>10胜率 ${(card.win_rate*100).toFixed(1)}%</span></div>`;
+      const image=tierShareImageUrl(card.img);
+      return `<div class="tier-share-item">${image?`<img src="${tierEscape(image)}" alt="">`:'<div style="height:58px"></div>'}<span>使用率 ${(card.appearance_rate*100).toFixed(1)}%</span><span>10胜率 ${(card.win_rate*100).toFixed(1)}%</span></div>`;
     }).join('');
     return `<section class="tier-share-tier" style="--share-tier-color:${color}"><h3>${tierEscape(group.name)}</h3><div class="tier-share-grid">${cards}</div></section>`;
   }).join('');
   node.innerHTML=`<h2>📋 ${tierEscape(data.hero)} 卡牌 T 表</h2><p>当前赛季 ${tierEscape(data.phase)} · ${data.rank_filter==='legendary'?'传奇':'全部段位'} · ${data.days?`近 ${data.days} 天`:'全赛段'}</p>${shareGroups}<footer class="tier-share-watermark"><span>出场率 70% + 10 胜率 30% · ${new Date().toLocaleDateString('zh-CN')}</span><strong>BazaarQiuBot</strong></footer>`;
   document.body.appendChild(node);
   try{
+    await waitForShareImages(node);
     const canvas=await html2canvas(node,{backgroundColor:'#090A2A',scale:2,useCORS:true,logging:false});
     const url=canvas.toDataURL('image/png'), overlay=document.createElement('div');
     overlay.className='tier-modal'; overlay.innerHTML=`<div class="tier-modal-box"><button class="tier-modal-close" onclick="this.closest('.tier-modal').remove()">×</button><h2>分享图片已生成</h2><p>长按保存，或点击下载。</p><img src="${url}" alt="T表分享图"><a class="content-tab" href="${url}" download="bazaarqiubot-tier-table.png">⬇ 下载图片</a></div>`; document.body.appendChild(overlay);

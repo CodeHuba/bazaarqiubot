@@ -7,6 +7,8 @@ import os
 import time
 import json
 import sqlite3 as _sqlite3
+import urllib.parse
+import urllib.request
 from datetime import datetime
 from collections import defaultdict
 from dotenv import load_dotenv
@@ -754,6 +756,25 @@ def api_suggestions():
         })
     except Exception as e:
         return jsonify({'heroes': [], 'cards': []}), 200
+
+
+@app.route('/api/card_art_proxy')
+def card_art_proxy():
+    """为分享图提供同源 BazaarDB 卡图，避免 CDN 未开放 CORS 导致 html2canvas 丢图。"""
+    raw_url = request.args.get('url', '')
+    parsed = urllib.parse.urlparse(raw_url)
+    if parsed.scheme != 'https' or parsed.netloc != 's.bazaardb.gg' or not parsed.path.startswith('/v1/'):
+        abort(400)
+    try:
+        upstream = urllib.request.Request(raw_url, headers={'User-Agent': 'BazaarQiuBot/1.0'})
+        with urllib.request.urlopen(upstream, timeout=10) as response:
+            content_type = response.headers.get_content_type()
+            if content_type not in ('image/webp', 'image/png', 'image/jpeg'):
+                abort(502)
+            return Response(response.read(), content_type=content_type,
+                            headers={'Cache-Control': 'public, max-age=2678400'})
+    except Exception:
+        abort(502)
 
 
 @app.route('/api/card_img/<path:tex_name>')
