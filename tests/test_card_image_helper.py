@@ -14,6 +14,17 @@ def load_helper() -> ModuleType:
     return cast(ModuleType, module)
 
 
+
+def test_internal_name_lookup_skips_null_card_records():
+    helper = load_helper()
+    expected = {
+        "internalName": "Pipe Organ",
+        "artLarge": "https://s.bazaardb.gg/v1/z18.0/current@400L.webp",
+    }
+    helper._CACHE = {"cards": {"broken": None, "pipe-organ": expected}}
+
+    assert helper.get_card_image(internal_name="Pipe Organ") == expected
+
 def test_stale_cached_art_url_is_not_returned(monkeypatch):
     helper = load_helper()
     helper._CACHE = {

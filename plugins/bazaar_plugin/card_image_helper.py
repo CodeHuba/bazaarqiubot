@@ -64,11 +64,12 @@ def get_card_image(card_id: str = None, internal_name: str = None) -> Optional[d
     cards = _load().get('cards', {})
 
     if card_id and card_id in cards:
-        return cards[card_id]
+        info = cards[card_id]
+        return info if isinstance(info, dict) else None
 
     if internal_name:
         for info in cards.values():
-            if info.get('internalName') == internal_name:
+            if isinstance(info, dict) and info.get('internalName') == internal_name:
                 return info
 
     return None
