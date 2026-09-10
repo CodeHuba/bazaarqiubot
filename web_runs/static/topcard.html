@@ -2176,6 +2176,11 @@ async function preloadShareImages(node, onProgress, concurrency=6, timeoutMs=120
   }
   await Promise.all(Array.from({length:Math.min(concurrency,images.length)},worker));
 }
+function withTimeout(promise, timeoutMs, message){
+  let timer;
+  const timeout=new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error(message)),timeoutMs);});
+  return Promise.race([promise,timeout]).finally(()=>clearTimeout(timer));
+}
 async function shareTierTable(){
   if(!_lastTierData){await loadTierTable();}
   if(!_lastTierData){return;}
@@ -2212,7 +2217,11 @@ async function shareTierTable(){
     if(progressText)progressText.textContent='卡图已就绪，正在渲染';
     if(progressBar)progressBar.style.width='100%';
     await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
-    const canvas=await html2canvas(node,{backgroundColor:'#090A2A',scale:1.5,useCORS:true,logging:false});
+    const canvas=await withTimeout(
+      html2canvas(node,{backgroundColor:'#090A2A',scale:1,useCORS:true,allowTaint:false,imageTimeout:8000,logging:false}),
+      20000,
+      '分享图渲染超时'
+    );
     const url=canvas.toDataURL('image/png'), overlay=document.createElement('div');
     overlay.className='tier-modal'; overlay.innerHTML=`<div class="tier-modal-box"><button class="tier-modal-close" onclick="this.closest('.tier-modal').remove()">×</button><h2>分享图片已生成</h2><p>长按保存，或点击下载。</p><img src="${url}" alt="T表分享图"><a class="content-tab" href="${url}" download="bazaarqiubot-tier-table.png">⬇ 下载图片</a></div>`; document.body.appendChild(overlay);
   }catch(error){console.error('T 表分享图生成失败',error);alert('分享图生成失败，请稍后重试。');}
