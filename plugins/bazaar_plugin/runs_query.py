@@ -731,7 +731,9 @@ class RunsQuery:
         gamedata_hero = {"The Dragons": "Hero8"}.get(hero, hero)
         exclusive_ids = {
             cid for cid, heroes in self.card_heroes.items()
-            if isinstance(heroes, (list, tuple, set)) and {str(hero) for hero in heroes} == {gamedata_hero}
+            if isinstance(heroes, (list, tuple, set))
+            and {str(hero) for hero in heroes} == {gamedata_hero}
+            and str(self._safe_mapping_info(cid).get('type') or '').lower() == 'item'
         }
         appearances = {cid: 0 for cid in exclusive_ids}
         ten_wins = {cid: 0 for cid in exclusive_ids}

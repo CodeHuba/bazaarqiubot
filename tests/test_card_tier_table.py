@@ -41,6 +41,7 @@ def _make_db(path: Path) -> None:
             cards.append({"cardId": "c"})
         if index < 3:
             cards.append({"cardId": "low-sample"})
+        cards.extend([{"cardId": "skill"}, {"cardId": "merchant"}, {"cardId": "event"}])
         # 同一基础卡即使记录重复，一局仍只算一次出场。
         if index == 0:
             cards.append({"cardId": "a"})
@@ -65,12 +66,19 @@ def test_card_tier_table_uses_dynamic_threshold_and_excludes_shared_cards(tmp_pa
     query = RunsQuery(db_path=str(db_path), mapping_path=str(tmp_path / "missing.json"))
     query.load()
     query.card_mapping = {
-        card_id: {"name": card_id}
-        for card_id in ("a", "b", "c", "low-sample", "shared")
+        "a": {"name": "a", "type": "Item"},
+        "b": {"name": "b", "type": "item"},
+        "c": {"name": "c", "type": "ITEM"},
+        "low-sample": {"name": "low-sample", "type": "Item"},
+        "shared": {"name": "shared", "type": "Item"},
+        "skill": {"name": "skill", "type": "Skill"},
+        "merchant": {"name": "merchant", "type": "Merchant"},
+        "event": {"name": "event", "type": "Event"},
     }
     query.card_heroes = {
         "a": ["Vanessa"], "b": ["Vanessa"], "c": ["Vanessa"],
         "low-sample": ["Vanessa"], "shared": ["Vanessa", "Dooley"],
+        "skill": ["Vanessa"], "merchant": ["Vanessa"], "event": ["Vanessa"],
     }
     module._card_tier_cache.clear()
     query.card_display_info = lambda card_id: {
@@ -91,6 +99,7 @@ def test_card_tier_table_uses_dynamic_threshold_and_excludes_shared_cards(tmp_pa
     insufficient_ids = [card["cardId"] for card in result["insufficient"]]
     assert insufficient_ids == ["low-sample"]
     assert "shared" not in rated_ids + insufficient_ids
+    assert not ({"skill", "merchant", "event"} & set(rated_ids + insufficient_ids))
 
 
 def test_card_tier_table_keeps_boundary_ties_in_higher_tier(tmp_path, monkeypatch):
@@ -110,7 +119,7 @@ def test_card_tier_table_keeps_boundary_ties_in_higher_tier(tmp_path, monkeypatc
 
     query = RunsQuery(db_path=str(db_path), mapping_path=str(tmp_path / "missing.json"))
     query.load()
-    query.card_mapping = {card_id: {"name": card_id} for card_id in ("a", "b", "c", "low-sample")}
+    query.card_mapping = {card_id: {"name": card_id, "type": "Item"} for card_id in ("a", "b", "c", "low-sample")}
     query.card_heroes = {card_id: ["Vanessa"] for card_id in query.card_mapping}
     module._card_tier_cache.clear()
     query.card_display_info = lambda card_id: {"cardId": card_id, "name": card_id, "img": "", "size": "Small"}
