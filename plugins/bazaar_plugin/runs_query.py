@@ -737,7 +737,10 @@ class RunsQuery:
         ten_wins = {cid: 0 for cid in exclusive_ids}
         for items_json, wins in rows:
             try:
-                run_ids = {item['cardId'] for item in json.loads(items_json) if item.get('cardId') in exclusive_ids}
+                run_ids = {
+                    item['cardId'] for item in json.loads(items_json)
+                    if isinstance(item, dict) and item.get('cardId') in exclusive_ids
+                }
             except (TypeError, ValueError, KeyError):
                 continue
             for cid in run_ids:

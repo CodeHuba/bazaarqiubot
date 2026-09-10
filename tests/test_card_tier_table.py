@@ -44,6 +44,8 @@ def _make_db(path: Path) -> None:
         # 同一基础卡即使记录重复，一局仍只算一次出场。
         if index == 0:
             cards.append({"cardId": "a"})
+        if index == 1:
+            cards.append(None)
         rows.append((
             f"r{index}", "Vanessa", json.dumps(cards),
             10 if index < 12 else 8,
