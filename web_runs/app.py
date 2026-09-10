@@ -7,6 +7,8 @@ import os
 import time
 import json
 import sqlite3 as _sqlite3
+import hashlib
+import threading
 import urllib.parse
 import urllib.request
 from datetime import datetime
@@ -39,6 +41,7 @@ def _mask_ip(ip):
     return f"{p[0]}.{p[1]}.*.*" if len(p) == 4 else ip
 
 app = Flask(__name__, static_folder='static')
+_card_art_proxy_locks: dict[str, threading.Lock] = {}
 # 线上仅通过 Caddy 单层反代访问；由 Caddy 覆盖 X-Forwarded-For 后再解析真实客户端地址。
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1)
 
@@ -760,21 +763,43 @@ def api_suggestions():
 
 @app.route('/api/card_art_proxy')
 def card_art_proxy():
-    """为分享图提供同源 BazaarDB 卡图，避免 CDN 未开放 CORS 导致 html2canvas 丢图。"""
+    """为分享图提供同源 BazaarDB 卡图：落盘缓存 + 单飞锁，避免并发分享重复拉 CDN。"""
     raw_url = request.args.get('url', '')
     parsed = urllib.parse.urlparse(raw_url)
     if parsed.scheme != 'https' or parsed.netloc != 's.bazaardb.gg' or not parsed.path.startswith('/v1/'):
         abort(400)
-    try:
-        upstream = urllib.request.Request(raw_url, headers={'User-Agent': 'BazaarQiuBot/1.0'})
-        with urllib.request.urlopen(upstream, timeout=10) as response:
-            content_type = response.headers.get_content_type()
-            if content_type not in ('image/webp', 'image/png', 'image/jpeg'):
-                abort(502)
-            return Response(response.read(), content_type=content_type,
+    suffix = os.path.splitext(parsed.path)[1].lower()
+    if suffix not in ('.webp', '.png', '.jpg', '.jpeg'):
+        abort(400)
+    cache_dir = '/opt/qiubot/web_runs/cache/share_card_art'
+    cache_key = hashlib.sha256(raw_url.encode('utf-8')).hexdigest()
+    cache_path = os.path.join(cache_dir, cache_key + suffix)
+    mime_types = {'.webp': 'image/webp', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg'}
+    content_type = mime_types[suffix]
+    if os.path.isfile(cache_path):
+        return send_file(cache_path, mimetype=content_type, max_age=2678400)
+    lock = _card_art_proxy_locks.setdefault(cache_key, threading.Lock())
+    with lock:
+        if os.path.isfile(cache_path):
+            return send_file(cache_path, mimetype=content_type, max_age=2678400)
+        try:
+            upstream = urllib.request.Request(raw_url, headers={'User-Agent': 'BazaarQiuBot/1.0'})
+            with urllib.request.urlopen(upstream, timeout=10) as response:
+                upstream_type = response.headers.get_content_type()
+                if upstream_type != content_type:
+                    abort(502)
+                payload = response.read()
+            os.makedirs(cache_dir, exist_ok=True)
+            temp_path = cache_path + '.tmp'
+            with open(temp_path, 'wb') as file:
+                file.write(payload)
+            os.replace(temp_path, cache_path)
+            return Response(payload, content_type=content_type,
                             headers={'Cache-Control': 'public, max-age=2678400'})
-    except Exception:
-        abort(502)
+        except Exception:
+            abort(502)
+        finally:
+            _card_art_proxy_locks.pop(cache_key, None)
 
 
 @app.route('/api/card_img/<path:tex_name>')
