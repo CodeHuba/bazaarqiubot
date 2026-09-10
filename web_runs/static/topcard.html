@@ -2173,7 +2173,7 @@ async function shareTierTable(){
     }).join('');
     return `<section class="tier-share-tier" style="--share-tier-color:${color}"><h3>${tierEscape(group.name)}</h3><div class="tier-share-grid">${cards}</div></section>`;
   }).join('');
-  node.innerHTML=`<h2>📋 ${tierEscape(data.hero)} 卡牌 T 表</h2><p>当前赛季 ${tierEscape(data.phase)} · ${data.rank_filter==='legendary'?'传奇':'全部段位'} · ${data.days?`近 ${data.days} 天`:'全赛段'}</p>${shareGroups}<footer class="tier-share-watermark"><span>出场率 70% + 10 胜率 30% · ${new Date().toLocaleDateString('zh-CN')}</span><strong>BazaarQiuBot</strong></footer>`;
+  node.innerHTML=`<h2>📋 ${tierEscape(data.hero)} 卡牌 T 表</h2><p>当前赛季 ${tierEscape(data.phase)} · ${data.rank_filter==='legendary'?'传奇':'全部段位'} · ${data.days?`近 ${data.days} 天`:'全赛段'}</p>${shareGroups}<footer class="tier-share-watermark"><span>bazaarqiubot.com · ${new Date().toLocaleDateString('zh-CN')}</span><strong>BazaarQiuBot</strong></footer>`;
   document.body.appendChild(node);
   try{
     await waitForShareImages(node);
