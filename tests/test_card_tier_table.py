@@ -82,7 +82,7 @@ def test_card_tier_table_uses_dynamic_threshold_and_excludes_shared_cards(tmp_pa
         "skill": ["Vanessa"], "merchant": ["Vanessa"], "event": ["Vanessa"],
     }
     module._card_tier_cache.clear()
-    query.card_display_info = lambda card_id: {
+    query.card_display_info = lambda card_id, **_kwargs: {
         "cardId": card_id, "name": f"中文-{card_id}", "name_en": card_id,
         "img": f"https://cards.example/{card_id}.webp", "size": "Small",
     }
@@ -124,7 +124,7 @@ def test_card_tier_table_keeps_boundary_ties_in_higher_tier(tmp_path, monkeypatc
     query.card_mapping = {card_id: {"name": card_id, "type": "Item"} for card_id in ("a", "b", "c", "low-sample")}
     query.card_heroes = {card_id: ["Vanessa"] for card_id in query.card_mapping}
     module._card_tier_cache.clear()
-    query.card_display_info = lambda card_id: {"cardId": card_id, "name": card_id, "img": "", "size": "Small"}
+    query.card_display_info = lambda card_id, **_kwargs: {"cardId": card_id, "name": card_id, "img": "", "size": "Small"}
 
     result = query.card_tier_table("Vanessa")
 

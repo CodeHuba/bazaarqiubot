@@ -143,18 +143,24 @@ class RunsQuery:
         info = self.card_mapping.get(card_id)
         return info if isinstance(info, dict) else {}
 
-    def card_display_info(self, card_id: str) -> dict:
+    def card_display_info(self, card_id: str, validate_image: bool = True) -> dict:
         """返回网页统一使用的卡牌展示信息，图片优先使用 #bz db 同源原图。"""
         from . import card_image_helper as _cih
         info = self._safe_mapping_info(card_id)
         image_info = self._card_image_info(card_id)
         name_en = info.get('name') or image_info.get('internalName') or card_id
         name_zh = image_info.get('name') or self.get_zh_name(name_en)
+        if validate_image:
+            image_url = (_cih.get_art_url(card_id=card_id, internal_name=name_en, size='artLarge')
+                         or _cih.get_art_url(card_id=card_id, internal_name=name_en, size='art') or '')
+        else:
+            # 统计接口不得为每张卡串行探测 CDN；浏览器按原 URL 加载图片即可。
+            image_url = image_info.get('artLarge') or image_info.get('art') or ''
         return {
             'cardId': card_id,
             'name': name_zh if name_zh != name_en else name_en,
             'name_en': name_en,
-            'img': _cih.get_art_url(card_id=card_id, internal_name=name_en, size='artLarge') or _cih.get_art_url(card_id=card_id, internal_name=name_en, size='art') or '',
+            'img': image_url,
             'size': self.size_map.get(card_id) or image_info.get('size') or 'Small',
         }
 
@@ -752,11 +758,14 @@ class RunsQuery:
         positive = sorted(value for value in appearances.values() if value > 0)
         threshold = max(10, positive[max(0, math.ceil(len(positive) * .2) - 1)]) if positive else 10
         cards = []
+        # 零出场卡既不评级也不展示，无需生成展示信息（会触发图片路径处理）。
         for cid in exclusive_ids:
             count = appearances[cid]
-            cards.append({**self.card_display_info(cid), 'appearance_count': count,
+            if count <= 0:
+                continue
+            cards.append({**self.card_display_info(cid, validate_image=False), 'appearance_count': count,
                           'appearance_rate': count / len(rows) if rows else 0.0,
-                          'ten_win': ten_wins[cid], 'win_rate': ten_wins[cid] / count if count else 0.0})
+                          'ten_win': ten_wins[cid], 'win_rate': ten_wins[cid] / count})
         rated = [card for card in cards if card['appearance_count'] >= threshold]
         # 未出现过的物品没有可供用户判断的数据，不在“数据不足”区展示。
         insufficient = [card for card in cards if 0 < card['appearance_count'] < threshold]
