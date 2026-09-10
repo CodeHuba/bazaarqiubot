@@ -1874,14 +1874,16 @@ function rateColor(r){
 
 // 职业切换
 function switchHero(hero, el){
+  const heroChanged=hero!==currentHero;
   currentHero=hero;
   document.querySelectorAll('.hero-tab').forEach(t=>t.classList.remove('active'));
   el.classList.add('active');
-  delete _topcardCache[hero];
-  delete _compCache[hero];
-  if(currentContent==='topcard')loadTopcard();
-  else if(currentContent==='comp')loadComp();
-  else loadTierTable();
+  // 已缓存的该职业数据可立即复用；切换职业只请求当前可见的内容 Tab。
+  if(heroChanged){
+    if(currentContent==='topcard')loadTopcard();
+    else if(currentContent==='comp')loadComp();
+    else loadTierTable();
+  }
 }
 
 // 内容切换

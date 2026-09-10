@@ -681,7 +681,7 @@ class RunsQuery:
             name_zh = image_info.get('name') or self.get_zh_name(name_en)
             ten_win = card_wins.get(cid, 0)
             rate = ten_win / total if total > 0 else 0.0
-            display = self.card_display_info(cid)
+            display = self.card_display_info(cid, validate_image=False)
             results.append({
                 'cardId': cid,
                 'name_zh': display['name'],
