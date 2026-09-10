@@ -4,6 +4,7 @@ BazaarDB Runs 查询模块
 """
 
 import json
+import math
 import sqlite3
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional
@@ -711,6 +712,79 @@ class RunsQuery:
         _topcard_cache[_tc_key] = (_tc_result, _time.time() + _topcard_cache_ttl)
         return _tc_result
 
+    def card_tier_table(self, hero: str, days: int = None, rank_filter: str = "all") -> dict:
+        """按当前赛段、职业专属基础卡计算出场为主的相对 T 表。"""
+        cache_key = (RUNS_SEASON_ID, CURRENT_PHASE, hero, days, rank_filter)
+        cached = _card_tier_cache.get(cache_key)
+        if cached and __import__('time').time() < cached[1]:
+            return cached[0]
+        if not self.conn:
+            self.load()
+        sql = "SELECT items_json, stat_wins FROM runs WHERE season=? AND phase=? AND LOWER(hero)=LOWER(?)"
+        params = [RUNS_SEASON_ID, CURRENT_PHASE, hero]
+        if days:
+            sql += " AND created_at >= ?"
+            params.append((datetime.utcnow() - timedelta(days=days)).isoformat())
+        if rank_filter == "legendary":
+            sql += " AND player_rank='Legendary'"
+        rows = self.conn.execute(sql, params).fetchall()
+        gamedata_hero = {"The Dragons": "Hero8"}.get(hero, hero)
+        exclusive_ids = {
+            cid for cid, heroes in self.card_heroes.items()
+            if isinstance(heroes, (list, tuple, set)) and {str(hero) for hero in heroes} == {gamedata_hero}
+        }
+        appearances = {cid: 0 for cid in exclusive_ids}
+        ten_wins = {cid: 0 for cid in exclusive_ids}
+        for items_json, wins in rows:
+            try:
+                run_ids = {item['cardId'] for item in json.loads(items_json) if item.get('cardId') in exclusive_ids}
+            except (TypeError, ValueError, KeyError):
+                continue
+            for cid in run_ids:
+                appearances[cid] += 1
+                if (wins or 0) >= 10:
+                    ten_wins[cid] += 1
+        positive = sorted(value for value in appearances.values() if value > 0)
+        threshold = max(10, positive[max(0, math.ceil(len(positive) * .2) - 1)]) if positive else 10
+        cards = []
+        for cid in exclusive_ids:
+            count = appearances[cid]
+            cards.append({**self.card_display_info(cid), 'appearance_count': count,
+                          'appearance_rate': count / len(rows) if rows else 0.0,
+                          'ten_win': ten_wins[cid], 'win_rate': ten_wins[cid] / count if count else 0.0})
+        rated = [card for card in cards if card['appearance_count'] >= threshold]
+        insufficient = [card for card in cards if card['appearance_count'] < threshold]
+        self._score_tier_cards(rated)
+        rated.sort(key=lambda c: (-c['score'], -c['appearance_rate'], -c['win_rate'], -c['appearance_count'], c['name']))
+        insufficient.sort(key=lambda c: (-c['appearance_count'], -c['win_rate'], c['name']))
+        specs = [('夯', .10), ('顶级', .20), ('人上人', .30), ('NPC', .25), ('拉完了', .15)]
+        groups = [[] for _ in specs]
+        boundaries = [math.ceil(len(rated) * cumulative) for cumulative in (.10, .30, .60, .85)]
+        group = 0
+        for index, card in enumerate(rated):
+            while group < 4 and index >= boundaries[group] and (index == 0 or card['score'] != rated[index - 1]['score']):
+                group += 1
+            groups[group].append(card)
+        result = {'hero': hero, 'season': RUNS_SEASON_ID, 'phase': CURRENT_PHASE, 'days': days,
+                  'rank_filter': rank_filter, 'total_runs': len(rows), 'sample_threshold': threshold,
+                  'formula': {'appearance_weight': .7, 'winrate_weight': .3}, 'tie_policy': 'higher_tier',
+                  'tiers': [{'name': name, 'target_ratio': ratio, 'cards': group_cards}
+                            for (name, ratio), group_cards in zip(specs, groups)],
+                  'insufficient': insufficient}
+        _card_tier_cache[cache_key] = (result, __import__('time').time() + _card_tier_cache_ttl)
+        return result
+
+    @staticmethod
+    def _score_tier_cards(cards: list) -> None:
+        total = len(cards)
+        for field, target in (('appearance_rate', 'appearance_percentile'), ('win_rate', 'winrate_percentile')):
+            values = sorted(card[field] for card in cards)
+            for card in cards:
+                positions = [index + 1 for index, value in enumerate(values) if value == card[field]]
+                card[target] = sum(positions) / len(positions) / total if positions else 0.0
+        for card in cards:
+            card['score'] = round(card['appearance_percentile'] * .7 + card['winrate_percentile'] * .3, 6)
+
     def comp(self,
              hero: str,
              n: int = 3,
@@ -1213,6 +1287,10 @@ _comp_cache_ttl = 3600  # 1小时
 # topcard 方法内存缓存 {(hero, top_n, days, all_phases): (result, expire_time)}
 _topcard_cache: dict = {}
 _topcard_cache_ttl = 3600  # 1小时
+
+# T 表缓存：ingest 成功时清空当前 phase 的全部组合，首个访问按条件重算。
+_card_tier_cache: dict = {}
+_card_tier_cache_ttl = 3600  # 1小时
 
 _hero_overview_cache: dict = {}
 _hero_overview_cache_ttl = 3600  # 1小时

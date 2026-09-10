@@ -376,7 +376,7 @@ def after_request(response):
     if hasattr(g, 'start_time'):
         duration_ms = int((time.time() - g.start_time) * 1000)
         endpoint = request.endpoint
-        _user_api_paths = ('/api/runs', '/api/winrate', '/api/partner', '/api/heroes', '/api/suggestions', '/api/card_img', '/api/topcard', '/api/feedback')
+        _user_api_paths = ('/api/runs', '/api/winrate', '/api/partner', '/api/heroes', '/api/suggestions', '/api/card_img', '/api/topcard', '/api/card-tier', '/api/feedback')
         if endpoint and endpoint.startswith('api_') and request.path.startswith(_user_api_paths):
             _log_api_call(
                 endpoint=request.path,
@@ -393,6 +393,7 @@ def after_request(response):
         ('GET', '/api/winrate'): ('winrate_query', 'winrate'),
         ('GET', '/api/partner'): ('partner_query', 'partner'),
         ('GET', '/api/topcard'): ('topcard_query', 'topcard'),
+        ('GET', '/api/card-tier'): ('card_tier_query', 'topcard'),
         ('GET', '/api/comp'): ('comp_query', 'topcard'),
         ('GET', '/api/comp/card'): ('comp_card_query', 'runs'),
         ('GET', '/api/hero_overview'): ('hero_overview', 'topcard'),
@@ -792,6 +793,7 @@ def api_ingest():
                     )
                 except Exception:
                     _card_ids_text = ''
+                _before_changes = conn.total_changes
                 conn.execute("""INSERT OR IGNORE INTO runs
                     (id, hero, username, created_at, items_json, skills_json, combats_json,
                      stat_wins, stat_losses, player_rating, player_rating_after,
@@ -809,7 +811,7 @@ def api_ingest():
                      __import__('json').dumps(run, ensure_ascii=False),
                      __import__('datetime').datetime.now().isoformat(), RUNS_SEASON_ID, CURRENT_PHASE,
                      _card_ids_text))
-                if conn.total_changes > 0:
+                if conn.total_changes > _before_changes:
                     new_count += 1
                     # 增量追加到 Redis winrate 缓存
                     _winrate_cache_append(
@@ -821,11 +823,44 @@ def api_ingest():
             except Exception as e:
                 pass
         conn.commit()
+        if new_count:
+            # 当前 Phase 有新 run 后，按需求主动使全部 T 表筛选组合失效。
+            from plugins.bazaar_plugin import runs_query as _runs_query
+            _runs_query._card_tier_cache.clear()
         total = conn.execute('SELECT COUNT(*) FROM runs').fetchone()[0]
         conn.close()
         return jsonify({'ok': True, 'new': new_count, 'total': total})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/card-tier', methods=['GET'])
+@rate_limit
+def api_card_tier():
+    """返回当前职业、筛选条件下的卡牌 T 表。"""
+    hero_raw = request.args.get('hero', '').strip()
+    days = request.args.get('days', type=int)
+    rank_filter = request.args.get('rank', 'all')
+    if days not in (None, 1, 3, 7):
+        return jsonify({'error': '时间范围仅支持全赛段、1天、3天或7天'}), 400
+    if rank_filter not in ('all', 'legendary'):
+        return jsonify({'error': '段位仅支持全部或传奇'}), 400
+    ip = _mask_ip(request.headers.get('X-Forwarded-For', request.remote_addr))
+    if not hero_raw:
+        return jsonify({'error': '请指定职业'}), 400
+    try:
+        query = RunsQuery()
+        query.load()
+        hero = query.resolve_hero(hero_raw)
+        if not hero:
+            return jsonify({'error': f'未知职业: {hero_raw}'}), 400
+        result = query.card_tier_table(hero=hero, days=days, rank_filter=rank_filter)
+        _log_query('card_tier', {'hero': hero_raw, 'days': days, 'rank': rank_filter}, ip,
+                   sum(len(group.get('cards', [])) for group in result.get('tiers', [])), True)
+        return jsonify(result)
+    except Exception as exc:
+        _log_query('card_tier', {'hero': hero_raw, 'days': days, 'rank': rank_filter}, ip, 0, False)
+        return jsonify({'error': str(exc)}), 500
 
 
 @app.route('/api/topcard', methods=['GET'])
