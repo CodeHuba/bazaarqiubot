@@ -70,6 +70,7 @@ def test_card_tier_table_uses_dynamic_threshold_and_excludes_shared_cards(tmp_pa
         "b": {"name": "b", "type": "item"},
         "c": {"name": "c", "type": "ITEM"},
         "low-sample": {"name": "low-sample", "type": "Item"},
+        "zero-appearance": {"name": "zero-appearance", "type": "Item"},
         "shared": {"name": "shared", "type": "Item"},
         "skill": {"name": "skill", "type": "Skill"},
         "merchant": {"name": "merchant", "type": "Merchant"},
@@ -77,7 +78,7 @@ def test_card_tier_table_uses_dynamic_threshold_and_excludes_shared_cards(tmp_pa
     }
     query.card_heroes = {
         "a": ["Vanessa"], "b": ["Vanessa"], "c": ["Vanessa"],
-        "low-sample": ["Vanessa"], "shared": ["Vanessa", "Dooley"],
+        "low-sample": ["Vanessa"], "zero-appearance": ["Vanessa"], "shared": ["Vanessa", "Dooley"],
         "skill": ["Vanessa"], "merchant": ["Vanessa"], "event": ["Vanessa"],
     }
     module._card_tier_cache.clear()
@@ -98,6 +99,7 @@ def test_card_tier_table_uses_dynamic_threshold_and_excludes_shared_cards(tmp_pa
     assert result["tiers"][0]["cards"][0]["ten_win"] == 12
     insufficient_ids = [card["cardId"] for card in result["insufficient"]]
     assert insufficient_ids == ["low-sample"]
+    assert "zero-appearance" not in rated_ids + insufficient_ids
     assert "shared" not in rated_ids + insufficient_ids
     assert not ({"skill", "merchant", "event"} & set(rated_ids + insufficient_ids))
 

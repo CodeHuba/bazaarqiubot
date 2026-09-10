@@ -758,7 +758,8 @@ class RunsQuery:
                           'appearance_rate': count / len(rows) if rows else 0.0,
                           'ten_win': ten_wins[cid], 'win_rate': ten_wins[cid] / count if count else 0.0})
         rated = [card for card in cards if card['appearance_count'] >= threshold]
-        insufficient = [card for card in cards if card['appearance_count'] < threshold]
+        # 未出现过的物品没有可供用户判断的数据，不在“数据不足”区展示。
+        insufficient = [card for card in cards if 0 < card['appearance_count'] < threshold]
         self._score_tier_cards(rated)
         rated.sort(key=lambda c: (-c['score'], -c['appearance_rate'], -c['win_rate'], -c['appearance_count'], c['name']))
         insufficient.sort(key=lambda c: (-c['appearance_count'], -c['win_rate'], c['name']))
