@@ -2180,7 +2180,11 @@ async function shareWinrate() {
     document.getElementById('wr-sc-season').textContent = phase ? ('赛季 ' + phase) : '';
     document.getElementById('wr-sc-filter').textContent = '查询条件：' + filterDesc;
 
-    const shareArts = (d, row = false) => (d.card_details || []).map(c => c.img ? `<img class="wr-sc-card-art size-${c.size || 'Small'}" src="${c.img}" alt="${c.name}">` : '').join('');
+    const shareArts = (d, row = false) => (d.card_details || []).map(c => {
+      if (!c.img) return '';
+      const shareImageUrl = `/api/card_art_proxy?url=${encodeURIComponent(c.img)}`;
+      return `<img class="wr-sc-card-art size-${c.size || 'Small'}" src="" data-src="${shareImageUrl}" alt="${c.name}">`;
+    }).join('');
     let title, bodyHtml;
     if (single) {
       const {data, tag} = results[0];
@@ -2214,6 +2218,7 @@ async function shareWinrate() {
     document.getElementById('wr-sc-body').innerHTML = bodyHtml;
 
     const card = document.getElementById('wr-share-card');
+    await preloadWinrateShareImages(card);
     const canvas = await html2canvas(card, {
       backgroundColor: '#090A2A', scale: 2, useCORS: true, logging: false,
     });
@@ -2242,6 +2247,24 @@ async function shareWinrate() {
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = '📤 分享结果'; }
   }
+}
+
+async function preloadWinrateShareImages(node) {
+  const images = [...node.querySelectorAll('img[data-src]')];
+  await Promise.all(images.map(img => new Promise(resolve => {
+    let settled = false;
+    const done = () => {
+      if (settled) return;
+      settled = true;
+      img.removeEventListener('load', done);
+      img.removeEventListener('error', done);
+      resolve();
+    };
+    img.addEventListener('load', done);
+    img.addEventListener('error', done);
+    img.src = img.dataset.src;
+    if (img.complete) done();
+  })));
 }
 
 async function queryPartner() {
@@ -2654,36 +2677,6 @@ window.addEventListener('DOMContentLoaded', () => {
   </div>
   <div style="margin-top:8px;font-size:12px">© 2026 BazaarQiuBot - The Bazaar 中文社区数据服务</div>
 </footer>
-
-
-<!-- 分享卡片（截图用）-->
-<div id="wr-share-card-wrap">
-  <div class="wr-share-card" id="wr-share-card">
-    <div class="wr-sc-header">
-      <span class="wr-sc-site">Bazaarqiubot.com</span>
-      <span class="wr-sc-season" id="wr-sc-season"></span>
-    </div>
-    <div class="wr-sc-filter" id="wr-sc-filter"></div>
-    <div class="wr-sc-title" id="wr-sc-title"></div>
-    <div id="wr-sc-body"></div>
-    <div class="wr-sc-footer">bazaarqiubot.com · The Bazaar 中文社区数据平台</div>
-  </div>
-</div>
-
-
-<!-- 分享卡片（截图用）-->
-<div id="wr-share-card-wrap">
-  <div class="wr-share-card" id="wr-share-card">
-    <div class="wr-sc-header">
-      <span class="wr-sc-site">🐉 巴扎丘Bot</span>
-      <span class="wr-sc-season" id="wr-sc-season"></span>
-    </div>
-    <div class="wr-sc-filter" id="wr-sc-filter"></div>
-    <div class="wr-sc-title" id="wr-sc-title"></div>
-    <div id="wr-sc-body"></div>
-    <div class="wr-sc-footer">bazaarqiubot.com · The Bazaar 中文社区数据平台</div>
-  </div>
-</div>
 
 
 <div id="wr-share-card-wrap" style="position:fixed;left:-9999px;top:0;width:480px">
