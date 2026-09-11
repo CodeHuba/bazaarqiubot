@@ -665,24 +665,8 @@ def api_partner():
 
 @app.route('/api/heroes', methods=['GET'])
 def api_heroes():
-    from plugins.bazaar_plugin.runs_query import HERO_ZH_TO_EN
-    heroes = [
-        {'zh': zh, 'en': en}
-        for zh, en in HERO_ZH_TO_EN.items()
-        if zh not in {'海盗', '工程师', '法师', '猪', '机甲', '吸血鬼', '兽人'}  # 去重，只保留官方中文名
-    ]
-    # 补全标准名
-    standard = [
-        {'zh': '凡妮莎', 'en': 'Vanessa'},
-        {'zh': '杜利',   'en': 'Dooley'},
-        {'zh': '马克',   'en': 'Mak'},
-        {'zh': '皮格',   'en': 'Pygmalien'},
-        {'zh': '斯黛拉', 'en': 'Stelle'},
-        {'zh': '朱尔斯', 'en': 'Jules'},
-        {'zh': '卡诺克', 'en': 'Karnok'},
-        {'zh': '双龙',   'en': 'The Dragons'},
-    ]
-    return jsonify(standard)
+    from plugins.bazaar_plugin.runs_query import HERO_EN_TO_ZH
+    return jsonify([{'zh': zh, 'en': en} for en, zh in HERO_EN_TO_ZH.items()])
 
 
 
@@ -739,9 +723,8 @@ def api_suggestions():
             # 英雄
             hero = p.get('hero')
             if hero:
-                hero_map = {'Vanessa':'凡妮莎','Dooley':'杜利','Mak':'马克',
-                            'Pygmalien':'皮格','Stelle':'斯黛拉','Jules':'朱尔斯','Karnok':'卡诺克','The Dragons':'双龙'}
-                hero_counter[hero_map.get(hero, hero)] += 1
+                from plugins.bazaar_plugin.runs_query import HERO_EN_TO_ZH
+                hero_counter[HERO_EN_TO_ZH.get(hero, hero)] += 1
             # 卡牌
             cards = p.get('cards') or []
             if isinstance(cards, str):

@@ -4,6 +4,20 @@ from pathlib import Path
 WINRATE_HTML = Path(__file__).parents[1] / "web_runs" / "static" / "winrate.html"
 
 
+def test_static_pages_display_official_hero_names_only():
+    pages = list(WINRATE_HTML.parent.glob("*.html"))
+    deprecated = (
+        "海盗 ·", "工程师 ·", "法师 ·", "猪猪 ·", "机甲 ·", "吸血鬼 ·", "兽人 ·",
+        "凡妮莎", "瓦妮莎", "瓦内萨", "斯黛拉", "斯黛儿", "斯特尔",
+    )
+    for page in pages:
+        content = page.read_text(encoding="utf-8")
+        assert not any(name in content for name in deprecated), page
+    content = WINRATE_HTML.read_text(encoding="utf-8")
+    for official in ("瓦内莎", "皮格马利翁", "斯黛尔", "双龙"):
+        assert official in content
+
+
 def _share_function():
     html = WINRATE_HTML.read_text(encoding="utf-8")
     return html[html.index("async function shareWinrate()"):html.index("async function queryPartner()")]

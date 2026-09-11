@@ -25,6 +25,20 @@ spec.loader.exec_module(runs_query_module)
 RunsQuery = runs_query_module.RunsQuery
 
 
+def test_hero_display_names_are_official_and_legacy_queries_remain_supported():
+    assert runs_query_module.HERO_EN_TO_ZH == {
+        "Vanessa": "瓦内莎", "Dooley": "杜利", "Mak": "马克",
+        "Pygmalien": "皮格马利翁", "Stelle": "斯黛尔", "Jules": "朱尔斯",
+        "Karnok": "卡诺克", "The Dragons": "双龙",
+    }
+    for legacy, hero_id in {
+        "凡妮莎": "Vanessa", "瓦妮莎": "Vanessa", "瓦内萨": "Vanessa", "海盗": "Vanessa",
+        "皮格": "Pygmalien", "猪猪": "Pygmalien",
+        "斯黛拉": "Stelle", "斯黛儿": "Stelle", "斯特尔": "Stelle", "机甲": "Stelle",
+    }.items():
+        assert runs_query_module.HERO_ZH_TO_EN[legacy] == hero_id
+
+
 def _card(card_id):
     return {"cardId": card_id}
 

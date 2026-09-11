@@ -25,12 +25,14 @@ SIZE_ZH = {
 # 英雄名汉化
 HERO_ZH = {
     "Pygmalien": "皮格马利翁",
-    "Vanessa": "瓦妮莎",
+    "Vanessa": "瓦内莎",
     "Dooley": "杜利",
     "Mak": "马克",
     "Jules": "朱尔斯",
-    "Stelle": "斯黛儿",
+    "Karnok": "卡诺克",
+    "Stelle": "斯黛尔",
     "The Dragons": "双龙",
+    "Hero8": "双龙",
     "Common": "通用",
 }
 
@@ -249,7 +251,7 @@ def format_item(item: dict, with_all_enchants: bool = False, translated_tooltips
     name = item.get("name") or "?"
     size = SIZE_ZH.get(item.get("size") or "", item.get("size") or "?")
     starting = TIER_ICON.get(item.get("startingTier") or "", item.get("startingTier") or "?")
-    heroes = [HERO_ZH.get(h, h) for h in (item.get("heroes") or [])]
+    heroes = [translations.get_zh_by_text_key(h) or HERO_ZH.get(h, h) for h in (item.get("heroes") or [])]
     tags = [TAG_ZH.get(t, t) for t in (item.get("tags") or [])]
     hidden = [TAG_ZH.get(t, t) for t in (item.get("hiddenTags") or [])]
 
@@ -325,7 +327,7 @@ def format_skill(skill: dict, translated_tooltips: dict | None = None) -> str:
     name = skill.get("name") or "?"
     size = SIZE_ZH.get(skill.get("size") or "", skill.get("size") or "?")
     starting = TIER_ICON.get(skill.get("startingTier") or "", skill.get("startingTier") or "?")
-    heroes = [HERO_ZH.get(h, h) for h in (skill.get("heroes") or [])]
+    heroes = [translations.get_zh_by_text_key(h) or HERO_ZH.get(h, h) for h in (skill.get("heroes") or [])]
     tags = [TAG_ZH.get(t, t) for t in (skill.get("tags") or [])]
     hidden = [TAG_ZH.get(t, t) for t in (skill.get("hiddenTags") or [])]
 
@@ -346,7 +348,7 @@ def format_skill(skill: dict, translated_tooltips: dict | None = None) -> str:
 def format_merchant(npc: dict) -> str:
     name = npc.get("name") or "?"
     desc = npc.get("description") or ""
-    heroes = [HERO_ZH.get(h, h) for h in (npc.get("heroes") or [])]
+    heroes = [translations.get_zh_by_text_key(h) or HERO_ZH.get(h, h) for h in (npc.get("heroes") or [])]
     filters = npc.get("filters") or {}
 
     lines = [f"🏪 商人 · {name}"]
@@ -575,10 +577,10 @@ def format_player_stat(username: str, data: dict) -> str:
 def _class_name(code: str) -> str:
     """英雄代号 → 中文显示名。"""
     names = {
-        "p": "皮格马利恩",
-        "s": "斯特尔",
+        "p": "皮格马利翁",
+        "s": "斯黛尔",
         "d": "杜利",
-        "v": "瓦内萨",
+        "v": "瓦内莎",
         "j": "朱尔斯",
         "m": "马克",
     }
@@ -663,7 +665,7 @@ def format_pedestal(pedestal: dict) -> str:
     name = pedestal.get("name", "Unknown")
     internal_name = pedestal.get("internal_name", "")
     tier = TIER_ICON.get(pedestal.get("tier", ""), pedestal.get("tier", ""))
-    heroes = [HERO_ZH.get(h, h) for h in pedestal.get("heroes", [])]
+    heroes = [translations.get_zh_by_text_key(h) or HERO_ZH.get(h, h) for h in pedestal.get("heroes", [])]
     desc = pedestal.get("description", "")
     
     lines = [f"✨ {name} ({internal_name})"]

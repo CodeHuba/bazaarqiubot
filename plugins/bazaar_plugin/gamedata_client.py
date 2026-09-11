@@ -695,8 +695,8 @@ def _merge_item_tier_blocks(tier_blocks: list[tuple[str, list[str]]]) -> list[st
 
 TIER_ZH   = {"Bronze": "铜", "Silver": "银", "Gold": "金", "Diamond": "钻", "Legendary": "传说"}
 HERO_ZH   = {
-    "Common": "通用", "Pygmalien": "皮格马利翁", "Vanessa": "瓦内萨",
-    "Dooley": "杜利", "Stelle": "斯特尔", "Jules": "朱尔斯",
+    "Common": "通用", "Pygmalien": "皮格马利翁", "Vanessa": "瓦内莎",
+    "Dooley": "杜利", "Stelle": "斯黛尔", "Jules": "朱尔斯",
     "Mak": "马克", "The Dragons": "双龙", "Hero8": "双龙", "Karnok": "卡诺克",
 }
 TAG_ZH    = {

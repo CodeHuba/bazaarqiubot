@@ -15,13 +15,23 @@ from .data_client import CURRENT_SEASON_ID, CURRENT_PHASE, RUNS_SEASON_ID
 
 ALIAS_FILE = "/opt/qiubot/data/bz_aliases.json"
 
-# 英雄中英文映射
+# 英雄官方中文展示名。查询入口仍接受下方兼容别名。
+HERO_EN_TO_ZH = {
+    'Vanessa': '瓦内莎',
+    'Dooley': '杜利',
+    'Mak': '马克',
+    'Pygmalien': '皮格马利翁',
+    'Stelle': '斯黛尔',
+    'Jules': '朱尔斯',
+    'Karnok': '卡诺克',
+    'The Dragons': '双龙',
+}
 HERO_ZH_TO_EN = {
-    '凡妮莎': 'Vanessa', '海盗': 'Vanessa',
+    '瓦内莎': 'Vanessa', '凡妮莎': 'Vanessa', '瓦妮莎': 'Vanessa', '瓦内萨': 'Vanessa', '海盗': 'Vanessa',
     '杜利': 'Dooley', '工程师': 'Dooley',
     '马克': 'Mak', '法师': 'Mak',
-    '皮格': 'Pygmalien', '猪': 'Pygmalien',
-    '斯黛拉': 'Stelle', '机甲': 'Stelle',
+    '皮格马利翁': 'Pygmalien', '皮格': 'Pygmalien', '猪': 'Pygmalien', '猪猪': 'Pygmalien',
+    '斯黛尔': 'Stelle', '斯黛拉': 'Stelle', '斯黛儿': 'Stelle', '斯特尔': 'Stelle', '机甲': 'Stelle',
     '朱尔斯': 'Jules', '吸血鬼': 'Jules',
     '卡诺克': 'Karnok', '兽人': 'Karnok',
     '双龙': 'The Dragons', '龙': 'The Dragons',
@@ -358,9 +368,7 @@ class RunsQuery:
             items_preview = '、'.join(run['items'])
 
             player = run['username'] or '匿名'
-            hero_zh = {'Vanessa': '海盗', 'Dooley': '工程师', 'Mak': '法师',
-                       'Pygmalien': '猪', 'Stelle': '机甲', 'Jules': '吸血鬼',
-                       'Karnok': '兽人'}.get(run['hero'], run['hero'])
+            hero_zh = HERO_EN_TO_ZH.get(run['hero'], run['hero'])
 
             # 格式化时间
             time_str = ""
@@ -702,11 +710,7 @@ class RunsQuery:
             results.sort(key=lambda x: (-x['total'], -x['rate']))
         top = results[:top_n]
 
-        hero_map = {'Vanessa': '海盗/凡妮莎', 'Dooley': '工程师/杜利',
-                    'Mak': '法师/马克', 'Pygmalien': '猪/皮格',
-                    'Stelle': '机甲/斯黛拉', 'Jules': '吸血鬼/朱尔斯',
-                    'Karnok': '兽人/卡诺克', 'The Dragons': '双龙'}
-        hero_zh = hero_map.get(hero, hero)
+        hero_zh = HERO_EN_TO_ZH.get(hero, hero)
 
         _tc_result = {
             'hero': hero,
@@ -1171,11 +1175,7 @@ class RunsQuery:
                 })
 
 
-        hero_map = {
-            'Vanessa': '海盗/凡妮莎', 'Dooley': '工程师/杜利', 'Mak': '法师/马克',
-            'Pygmalien': '猪/皮格', 'Stelle': '机甲/斯黛拉', 'Jules': '吸血鬼/朱尔斯',
-            'Karnok': '兽人/卡诺克', 'The Dragons': '双龙',
-        }
+        hero_map = HERO_EN_TO_ZH
 
         # 将层级挖掘结果同时扁平为“可直接参考的完整阵容”。
         # L1/L2/L3 保留给体系解释，前台默认消费 recommendations，避免用户逐层展开才看到构筑。
@@ -1260,12 +1260,7 @@ class RunsQuery:
                 hero_stats[hero]['wins'] += 1
 
         results = []
-        hero_map = {
-            'Vanessa': '海盗/凡妮莎', 'Dooley': '工程师/杜利',
-            'Mak': '法师/马克', 'Pygmalien': '猪/皮格',
-            'Stelle': '机甲/斯黛拉', 'Jules': '吸血鬼/朱尔斯',
-            'Karnok': '兽人/卡诺克', 'The Dragons': '双龙'
-        }
+        hero_map = HERO_EN_TO_ZH
         for hero, stats in hero_stats.items():
             total = stats['total']
             wins = stats['wins']
