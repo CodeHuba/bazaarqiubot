@@ -574,10 +574,16 @@ def get_enchant_tooltips(item_data: dict, ench_name: str) -> list[str]:
     all_auras = {**item_data.get("Auras", {}), **ench.get("Auras", {})}
 
     tooltips: list[str] = []
+    # 官方中文是按 tooltip Content.Key 存在 zh-CN.bytes 中的模板。必须先取
+    # 模板、再替换 {ability.*}/{aura.*}，否则数值渲染后无法再以英文全文匹配翻译。
+    from . import translations as trans
     for t in ench.get("Localization", {}).get("Tooltips", []):
-        txt = t.get("Content", {}).get("Text", "")
+        content = t.get("Content") or {}
+        txt = content.get("Text", "")
         if txt:
-            tooltips.append(render_tooltip(txt, all_abilities, all_auras, ench_attrs))
+            key = content.get("Key", "")
+            txt_zh = (trans.get_zh_by_hash(key) if key else None) or trans.get_tooltip_zh(txt) or txt
+            tooltips.append(render_tooltip(txt_zh, all_abilities, all_auras, ench_attrs))
     return tooltips
 
 

@@ -174,3 +174,45 @@ def test_db_partial_chinese_name_returns_candidates(monkeypatch, tmp_path):
 
     assert queried == ["管风", "Pipe Organ"]
     assert "管风琴（物品）" in result
+
+
+def test_db_enchant_tooltip_uses_official_hash_translation(monkeypatch):
+    load_plugin_module(monkeypatch)
+    gdc_module = importlib.import_module("plugins.bazaar_plugin.gamedata_client")
+    trans_module = importlib.import_module("plugins.bazaar_plugin.translations")
+
+    monkeypatch.setattr(
+        trans_module,
+        "get_zh_by_hash",
+        lambda key: "护盾 {ability.e1}" if key == "official-enchant-key" else None,
+    )
+    monkeypatch.setattr(trans_module, "get_tooltip_zh", lambda text: None)
+
+    raw = {
+        "$type": "TCardItem",
+        "InternalName": "Test Item",
+        "StartingTier": "Bronze",
+        "Tiers": {"Bronze": {}},
+        "Enchantments": {
+            "Shielded": {
+                "Attributes": {"ShieldApplyAmount": 25},
+                "Abilities": {
+                    "e1": {"Action": {"$type": "TActionPlayerShieldApply"}},
+                },
+                "Auras": {},
+                "Localization": {
+                    "Tooltips": [{
+                        "Content": {
+                            "Key": "official-enchant-key",
+                            "Text": "Shield {ability.e1}",
+                        },
+                    }],
+                },
+            },
+        },
+    }
+
+    result = gdc_module.format_card_from_raw(raw, show_enchants=True)
+
+    assert "[护盾] 护盾 25" in result
+    assert "Shield 25" not in result

@@ -4,6 +4,7 @@
 - hash映射 (zh-CN.bytes): tooltip Key → 中文（用于 tooltip 渲染）
 """
 import json
+import os
 from pathlib import Path
 
 CACHE_DIR        = Path(__file__).parent / "cache"
@@ -28,8 +29,18 @@ def _load():
             print(f"[translations] 官方翻译加载失败: {e}")
 
     # 2. 加载 hash -> 中文映射（用于 tooltip Key 查翻译）
-    zh_bytes_file = CACHE_DIR.parent.parent.parent / "AppData/LocalLow/Tempo Storm/The Bazaar/prod/cache/translations/zh-CN.bytes"
-    if not zh_bytes_file.exists():
+    # Windows 游戏运行时路径；生产 Linux 可通过 ZH_TRANSLATIONS_DB 指定同步副本。
+    configured_zh = os.getenv("ZH_TRANSLATIONS_DB", "").strip()
+    candidates = []
+    if configured_zh:
+        candidates.append(Path(configured_zh).expanduser())
+    candidates.extend([
+        CACHE_DIR / "zh-CN.bytes",
+        CACHE_DIR.parent.parent.parent / "AppData/LocalLow/Tempo Storm/The Bazaar/prod/cache/translations/zh-CN.bytes",
+        Path("/mnt/c/Users/Administrator/AppData/LocalLow/Tempo Storm/The Bazaar/prod/cache/translations/zh-CN.bytes"),
+    ])
+    zh_bytes_file = next((path for path in candidates if path.is_file()), None)
+    if zh_bytes_file is None:
         zh_json_file = CACHE_DIR / "zh-CN.json"
         if zh_json_file.exists():
             try:
