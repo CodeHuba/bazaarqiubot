@@ -3,6 +3,7 @@
 - 官方翻译 (translations.json): 英文名 → 官方中文名（从 GameData.db + zh-CN.bytes 生成）
 - hash映射 (zh-CN.bytes): tooltip Key → 中文（用于 tooltip 渲染）
 """
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -150,6 +151,13 @@ def get_zh_by_key(key: str) -> str | None:
 def get_zh_by_hash(key: str) -> str | None:
     """兼容旧调用名"""
     return get_zh_by_key(key)
+
+
+def get_zh_by_text_key(key: str) -> str | None:
+    """按客户端字符串 key 的 MD5 查询官方中文文本。"""
+    if not key:
+        return None
+    return _hash_to_zh.get(hashlib.md5(key.encode("utf-8")).hexdigest())
 
 
 def get_tooltip_zh(text_en: str) -> str | None:

@@ -37,6 +37,18 @@ def load_plugin_module(monkeypatch) -> ModuleType:
     return importlib.import_module("plugins.bazaar_plugin.bazaar_plugin")
 
 
+def test_official_text_key_translations_apply_to_db_metadata(monkeypatch):
+    load_plugin_module(monkeypatch)
+    trans = importlib.import_module("plugins.bazaar_plugin.translations")
+    assert trans.get_zh_by_text_key("Vanessa") == "瓦内莎"
+    assert trans.get_zh_by_text_key("Stelle") == "斯黛尔"
+    assert trans.get_zh_by_text_key("Poison") == "剧毒"
+    assert trans.get_zh_by_text_key("Apparel") == "服饰"
+    assert trans.get_zh_by_text_key("Property") == "地产"
+    assert trans.get_zh_by_text_key("Merchant") == "商人"
+    assert trans.get_zh_by_text_key("Trap") == "陷阱"
+
+
 class FakeEvent:
     def __init__(self, raw_message="#bz db 管风琴"):
         self.raw_message = raw_message
