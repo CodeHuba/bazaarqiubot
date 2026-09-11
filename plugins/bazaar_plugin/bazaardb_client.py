@@ -277,7 +277,10 @@ def format_card_brief(card: dict, zh_name: str = "", show_enchants: bool = False
 
     card_type = card.get("Type", "")
     size      = card.get("Size", "")
-    heroes    = "\u3001".join(HERO_ZH.get(h, h) for h in card.get("Heroes", [])) or "通用"
+    heroes    = "、".join(
+        trans.get_zh_by_text_key(h) or HERO_ZH.get(h, h) or h
+        for h in card.get("Heroes", [])
+    ) or "通用"
     base_tier = card.get("BaseTier", "")
     tags      = card.get("DisplayTags", [])
 
@@ -304,7 +307,10 @@ def format_card_brief(card: dict, zh_name: str = "", show_enchants: bool = False
     price_s = f"  价格:买{buy}/卖{sell}金" if (buy or sell) else ""
     out.append(f"类型:{type_label}  尺寸:{size_label}  品质:{TIER_ZH.get(base_tier, base_tier)}  英雄:{heroes}{cd_s}{multi_s}{dmg_s}{hp_s}{price_s}")
     if tags:
-        out.append("标签: " + " ".join(TAG_ZH.get(t, t) for t in tags))
+        out.append("标签: " + " ".join([
+            trans.get_zh_by_text_key(t) or TAG_ZH.get(t, t) or t
+            for t in tags
+        ]))
 
     tiers_data   = card.get("Tiers", {})
     tooltips     = card.get("Tooltips", [])

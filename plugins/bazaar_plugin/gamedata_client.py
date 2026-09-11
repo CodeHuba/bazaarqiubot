@@ -574,10 +574,16 @@ def get_enchant_tooltips(item_data: dict, ench_name: str) -> list[str]:
     all_auras = {**item_data.get("Auras", {}), **ench.get("Auras", {})}
 
     tooltips: list[str] = []
+    # 官方中文是按 tooltip Content.Key 存在 zh-CN.bytes 中的模板。必须先取
+    # 模板、再替换 {ability.*}/{aura.*}，否则数值渲染后无法再以英文全文匹配翻译。
+    from . import translations as trans
     for t in ench.get("Localization", {}).get("Tooltips", []):
-        txt = t.get("Content", {}).get("Text", "")
+        content = t.get("Content") or {}
+        txt = content.get("Text", "")
         if txt:
-            tooltips.append(render_tooltip(txt, all_abilities, all_auras, ench_attrs))
+            key = content.get("Key", "")
+            txt_zh = (trans.get_zh_by_hash(key) if key else None) or trans.get_tooltip_zh(txt) or txt
+            tooltips.append(render_tooltip(txt_zh, all_abilities, all_auras, ench_attrs))
     return tooltips
 
 
@@ -647,10 +653,50 @@ def convert_skill_to_howbazaar_format(skill_data: dict) -> dict:
     }
 
 
+def _merge_item_tier_blocks(tier_blocks: list[tuple[str, list[str]]]) -> list[str] | None:
+    """合并物品各品质中结构相同、仅数值不同的描述。"""
+    if len(tier_blocks) < 2:
+        return None
+    line_blocks = [lines for _, lines in tier_blocks]
+    if not line_blocks or any(len(lines) != len(line_blocks[0]) for lines in line_blocks):
+        return None
+
+    merged = []
+    number_pattern = r"(?<![0-9.])[-+]?\d+(?:\.\d+)?%?(?![0-9.])"
+    for lines_at_position in zip(*line_blocks):
+        template = re.sub(number_pattern, "{value}", lines_at_position[0])
+        values_by_line = [re.findall(number_pattern, line) for line in lines_at_position]
+        if not values_by_line[0]:
+            if any(line != lines_at_position[0] for line in lines_at_position[1:]):
+                return None
+            merged.append(lines_at_position[0])
+            continue
+        if any(re.sub(number_pattern, "{value}", line) != template for line in lines_at_position[1:]):
+            return None
+        if any(len(values) != len(values_by_line[0]) for values in values_by_line[1:]):
+            return None
+        combined_values = []
+        for index in range(len(values_by_line[0])):
+            values = [line_values[index] for line_values in values_by_line]
+            unique_values = []
+            for value in values:
+                if value not in unique_values:
+                    unique_values.append(value)
+            values = unique_values
+            if all(value.startswith("+") for value in values):
+                values = [values[0], *(value[1:] for value in values[1:])]
+            elif all(value.startswith("-") for value in values):
+                values = [values[0], *(value[1:] for value in values[1:])]
+            combined_values.append("/".join(values))
+        value_iter = iter(combined_values)
+        merged.append(re.sub(r"\{value\}", lambda _match: next(value_iter), template))
+    return merged
+
+
 TIER_ZH   = {"Bronze": "铜", "Silver": "银", "Gold": "金", "Diamond": "钻", "Legendary": "传说"}
 HERO_ZH   = {
-    "Common": "通用", "Pygmalien": "皮格马利翁", "Vanessa": "瓦内萨",
-    "Dooley": "杜利", "Stelle": "斯特尔", "Jules": "朱尔斯",
+    "Common": "通用", "Pygmalien": "皮格马利翁", "Vanessa": "瓦内莎",
+    "Dooley": "杜利", "Stelle": "斯黛尔", "Jules": "朱尔斯",
     "Mak": "马克", "The Dragons": "双龙", "Hero8": "双龙", "Karnok": "卡诺克",
 }
 TAG_ZH    = {
@@ -693,8 +739,11 @@ def format_card_from_raw(raw: dict, zh_name: str = "", db_path: str = "", show_e
         raw.get("Size", ""), raw.get("Size", ""))
     type_label = {"TCardItem": "物品", "TCardSkill": "技能"}.get(card_type, "")
     starting_tier = raw.get("StartingTier", "Bronze")
-    heroes = "、".join(HERO_ZH.get(h, h) for h in (raw.get("Heroes") or [])) or "通用"
-    tags = [TAG_ZH.get(t, t) for t in (raw.get("Tags") or [])]
+    heroes = "、".join([
+        trans.get_zh_by_text_key(h) or HERO_ZH.get(h, h) or h
+        for h in (raw.get("Heroes") or [])
+    ]) or "通用"
+    tags = [trans.get_zh_by_text_key(t) or TAG_ZH.get(t, t) for t in (raw.get("Tags") or [])]
 
     out = []
     header = f"📦 {name_zh}"
@@ -715,13 +764,8 @@ def format_card_from_raw(raw: dict, zh_name: str = "", db_path: str = "", show_e
 
     if tier_order:
         out.append("─")
-        # 合并相同内容的 tier（避免重复展示）
-        prev_block = None
-        prev_tiers: list[str] = []
-        def flush(tiers_list, block):
-            label = "/".join(TIER_ZH.get(t, t) for t in tiers_list)
-            out.append(f"[{label}] " + "  ".join(block))
-
+        # 技能保持逐品质展示；物品优先将结构相同、仅数值不同的描述合并。
+        tier_blocks: list[tuple[str, list[str]]] = []
         for tn in tier_order:
             tier_attrs = build_tier_attrs(raw, tn)
             lines: list[str] = []
@@ -743,15 +787,32 @@ def format_card_from_raw(raw: dict, zh_name: str = "", db_path: str = "", show_e
                     txt_zh = (trans.get_zh_by_hash(key) if key else None) or trans.get_tooltip_zh(txt) or txt
                     rendered = render_tooltip(txt_zh, abilities, auras, tier_attrs)
                     lines.append(rendered)
-            if lines == prev_block:
-                prev_tiers.append(tn)
+            tier_blocks.append((tn, lines))
+
+        if card_type == "TCardItem":
+            merged_lines = _merge_item_tier_blocks(tier_blocks)
+            if merged_lines is not None:
+                out.append("  ".join(merged_lines))
             else:
-                if prev_block is not None:
-                    flush(prev_tiers, prev_block)
-                prev_block = lines
-                prev_tiers = [tn]
-        if prev_block is not None:
-            flush(prev_tiers, prev_block)
+                for tn, lines in tier_blocks:
+                    out.append(f"[{TIER_ZH.get(tn, tn)}] " + "  ".join(lines))
+        else:
+            # 合并相同内容的 tier（避免重复展示）
+            prev_block = None
+            prev_tiers: list[str] = []
+            def flush(tiers_list, block):
+                label = "/".join(TIER_ZH.get(t, t) for t in tiers_list)
+                out.append(f"[{label}] " + "  ".join(block))
+            for tn, lines in tier_blocks:
+                if lines == prev_block:
+                    prev_tiers.append(tn)
+                else:
+                    if prev_block is not None:
+                        flush(prev_tiers, prev_block)
+                    prev_block = lines
+                    prev_tiers = [tn]
+            if prev_block is not None:
+                flush(prev_tiers, prev_block)
 
     # Quest
     quests = raw.get("Quests") or []

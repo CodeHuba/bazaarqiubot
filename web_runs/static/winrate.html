@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>胜率查询 | 巴扎丘Bot</title>
 <meta name="description" content="查询 The Bazaar 卡牌组合的真实 10 胜率。">
-<meta name="keywords" content="The Bazaar,巴扎,阵容查询,胜率,天梯,卡牌,攻略,凡妮莎,杜利,马克,皮格,斯黛拉,朱尔斯,卡诺克,双龙">
+<meta name="keywords" content="The Bazaar,巴扎,阵容查询,胜率,天梯,卡牌,攻略,瓦内莎,杜利,马克,皮格马利翁,斯黛尔,朱尔斯,卡诺克,双龙">
 <meta name="author" content="BazaarQiuBot">
 <meta name="robots" content="index, follow">
 <meta property="og:title" content="巴扎丘Bot">
@@ -1760,11 +1760,11 @@ input[type="file"] {
         <label>英雄（可选）</label>
         <select id="wr-hero">
           <option value="">不限</option>
-          <option value="凡妮莎">凡妮莎</option>
+          <option value="瓦内莎">瓦内莎</option>
           <option value="杜利">杜利</option>
           <option value="马克">马克</option>
-          <option value="皮格">皮格</option>
-          <option value="斯黛拉">斯黛拉</option>
+          <option value="皮格马利翁">皮格马利翁</option>
+          <option value="斯黛尔">斯黛尔</option>
           <option value="朱尔斯">朱尔斯</option>
           <option value="卡诺克">卡诺克</option>
           <option value="双龙">双龙</option>
@@ -1927,7 +1927,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!box.contains(e.target) && !dd.contains(e.target)) _wrClose();
   });
 });
-const HEROES = {凡妮莎:'Vanessa',杜利:'Dooley',马克:'Mak',皮格:'Pygmalien',斯黛拉:'Stelle',朱尔斯:'Jules',卡诺克:'Karnok',双龙:'The Dragons'};
+const HEROES = {瓦内莎:'Vanessa',杜利:'Dooley',马克:'Mak',皮格马利翁:'Pygmalien',斯黛尔:'Stelle',朱尔斯:'Jules',卡诺克:'Karnok',双龙:'The Dragons'};
 let lastQuery = 0;
 
 function switchTab(tab) {
@@ -1988,7 +1988,7 @@ function renderRuns(data, page, params) {
     document.getElementById('runs-result').innerHTML = '<div class="result-card"><div class="empty">未找到符合条件的阵容</div></div>';
     return;
   }
-  const heroZh = {Vanessa:'凡妮莎',Dooley:'杜利',Mak:'马克',Pygmalien:'皮格',Stelle:'斯黛拉',Jules:'朱尔斯',Karnok:'卡诺克','The Dragons':'双龙'};
+  const heroZh = {Vanessa:'瓦内莎',Dooley:'杜利',Mak:'马克',Pygmalien:'皮格马利翁',Stelle:'斯黛尔',Jules:'朱尔斯',Karnok:'卡诺克','The Dragons':'双龙'};
   let items = runs.map(r => {
     const day = r.wins + r.losses;
     const itemsStr = r.items.slice(0,5).join('、') + (r.items.length>5?` +${r.items.length-5}`:'');
@@ -2180,7 +2180,11 @@ async function shareWinrate() {
     document.getElementById('wr-sc-season').textContent = phase ? ('赛季 ' + phase) : '';
     document.getElementById('wr-sc-filter').textContent = '查询条件：' + filterDesc;
 
-    const shareArts = (d, row = false) => (d.card_details || []).map(c => c.img ? `<img class="wr-sc-card-art size-${c.size || 'Small'}" src="${c.img}" alt="${c.name}">` : '').join('');
+    const shareArts = (d, row = false) => (d.card_details || []).map(c => {
+      if (!c.img) return '';
+      const shareImageUrl = `/api/card_art_proxy?url=${encodeURIComponent(c.img)}`;
+      return `<img class="wr-sc-card-art size-${c.size || 'Small'}" src="" data-src="${shareImageUrl}" alt="${c.name}">`;
+    }).join('');
     let title, bodyHtml;
     if (single) {
       const {data, tag} = results[0];
@@ -2214,6 +2218,7 @@ async function shareWinrate() {
     document.getElementById('wr-sc-body').innerHTML = bodyHtml;
 
     const card = document.getElementById('wr-share-card');
+    await preloadWinrateShareImages(card);
     const canvas = await html2canvas(card, {
       backgroundColor: '#090A2A', scale: 2, useCORS: true, logging: false,
     });
@@ -2242,6 +2247,24 @@ async function shareWinrate() {
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = '📤 分享结果'; }
   }
+}
+
+async function preloadWinrateShareImages(node) {
+  const images = [...node.querySelectorAll('img[data-src]')];
+  await Promise.all(images.map(img => new Promise(resolve => {
+    let settled = false;
+    const done = () => {
+      if (settled) return;
+      settled = true;
+      img.removeEventListener('load', done);
+      img.removeEventListener('error', done);
+      resolve();
+    };
+    img.addEventListener('load', done);
+    img.addEventListener('error', done);
+    img.src = img.dataset.src;
+    if (img.complete) done();
+  })));
 }
 
 async function queryPartner() {
@@ -2346,13 +2369,13 @@ function applySuggestion(type, val) {
   }
 }
 const TC_HEROES = [
-  {key:'Vanessa', zh:'海盗 · 凡妮莎'},
-  {key:'Dooley',  zh:'工程师 · 杜利'},
-  {key:'Mak',     zh:'法师 · 马克'},
-  {key:'Pygmalien',zh:'猪猪 · 皮格'},
-  {key:'Stelle',  zh:'机甲 · 斯黛拉'},
-  {key:'Jules',   zh:'吸血鬼 · 朱尔斯'},
-  {key:'Karnok',  zh:'兽人 · 卡诺克'},
+  {key:'Vanessa', zh:'瓦内莎'},
+  {key:'Dooley',  zh:'杜利'},
+  {key:'Mak',     zh:'马克'},
+  {key:'Pygmalien',zh:'皮格马利翁'},
+  {key:'Stelle',  zh:'斯黛尔'},
+  {key:'Jules',   zh:'朱尔斯'},
+  {key:'Karnok',  zh:'卡诺克'},
   {key:'The Dragons', zh:'双龙'},
 ];
 const RANK_ICONS = ['🥇','🥈','🥉','4️⃣','5️⃣','6️⃣','7️⃣','8️⃣','9️⃣','🔟'];
@@ -2654,36 +2677,6 @@ window.addEventListener('DOMContentLoaded', () => {
   </div>
   <div style="margin-top:8px;font-size:12px">© 2026 BazaarQiuBot - The Bazaar 中文社区数据服务</div>
 </footer>
-
-
-<!-- 分享卡片（截图用）-->
-<div id="wr-share-card-wrap">
-  <div class="wr-share-card" id="wr-share-card">
-    <div class="wr-sc-header">
-      <span class="wr-sc-site">Bazaarqiubot.com</span>
-      <span class="wr-sc-season" id="wr-sc-season"></span>
-    </div>
-    <div class="wr-sc-filter" id="wr-sc-filter"></div>
-    <div class="wr-sc-title" id="wr-sc-title"></div>
-    <div id="wr-sc-body"></div>
-    <div class="wr-sc-footer">bazaarqiubot.com · The Bazaar 中文社区数据平台</div>
-  </div>
-</div>
-
-
-<!-- 分享卡片（截图用）-->
-<div id="wr-share-card-wrap">
-  <div class="wr-share-card" id="wr-share-card">
-    <div class="wr-sc-header">
-      <span class="wr-sc-site">🐉 巴扎丘Bot</span>
-      <span class="wr-sc-season" id="wr-sc-season"></span>
-    </div>
-    <div class="wr-sc-filter" id="wr-sc-filter"></div>
-    <div class="wr-sc-title" id="wr-sc-title"></div>
-    <div id="wr-sc-body"></div>
-    <div class="wr-sc-footer">bazaarqiubot.com · The Bazaar 中文社区数据平台</div>
-  </div>
-</div>
 
 
 <div id="wr-share-card-wrap" style="position:fixed;left:-9999px;top:0;width:480px">

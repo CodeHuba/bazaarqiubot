@@ -14,11 +14,37 @@ def load_gamedata_module() -> ModuleType:
     return cast(ModuleType, module)
 
 
-def test_render_tooltip_replaces_ability_damage_value():
+def test_merge_item_tier_blocks_joins_numeric_values():
     module = load_gamedata_module()
-    text = "造成 {ability.Damage} 点伤害"
-    abilities = {"Damage": {"Action": {"$type": "TActionPlayerDamage"}}}
-    assert module.render_tooltip(text, abilities, {}, {"DamageAmount": 25}) == "造成 25 点伤害"
+    assert module._merge_item_tier_blocks([
+        ("Bronze", ["造成100伤害"]),
+        ("Silver", ["造成150伤害"]),
+        ("Gold", ["造成200伤害"]),
+    ]) == ["造成100/150/200伤害"]
+    assert module._merge_item_tier_blocks([
+        ("Bronze", ["物品+20%暴击率"]),
+        ("Silver", ["物品+30%暴击率"]),
+        ("Gold", ["物品+40%暴击率"]),
+    ]) == ["物品+20%/30%/40%暴击率"]
+    assert module._merge_item_tier_blocks([
+        ("Bronze", ["物品+20%暴击率"]),
+        ("Silver", ["物品+20%暴击率"]),
+        ("Gold", ["物品+30%暴击率"]),
+        ("Diamond", ["物品+30%暴击率"]),
+    ]) == ["物品+20%/30%暴击率"]
+    assert module._merge_item_tier_blocks([
+        ("Bronze", ["造成100伤害"]),
+        ("Silver", ["造成100伤害"]),
+    ]) == ["造成100伤害"]
+
+
+def test_merge_item_tier_blocks_keeps_different_text_separate():
+    module = load_gamedata_module()
+    blocks = [
+        ("Bronze", ["造成100伤害"]),
+        ("Silver", ["获得护盾"]),
+    ]
+    assert module._merge_item_tier_blocks(blocks) is None
 
 
 def test_render_tooltip_preserves_unknown_placeholder():

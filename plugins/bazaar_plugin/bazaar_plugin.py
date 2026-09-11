@@ -406,8 +406,40 @@ class BazaarPlugin(NcatBotPlugin):
                 print(f"[bz db] 本地候选搜索失败: {e}")
                 local_candidates = []
             if local_candidates:
-                lines = [f"🔍 未精确匹配『{query_arg}』，你是否要查询:"]
+                # 同一张卡可能因别名或索引重复出现；按稳定身份去重后，唯一候选可直接展开。
+                unique_candidates = []
+                seen_candidate_keys = set()
                 for card in local_candidates:
+                    candidate_key = (
+                        str(card.get("Id"))
+                        if card.get("Id")
+                        else f"{card.get('InternalName', '')}|{card.get('Type') or card.get('$type', '')}"
+                    )
+                    if candidate_key not in seen_candidate_keys:
+                        seen_candidate_keys.add(candidate_key)
+                        unique_candidates.append(card)
+                if len(unique_candidates) == 1:
+                    card = unique_candidates[0]
+                    title = ((card.get("Localization") or {}).get("Title") or {}).get("Text", "")
+                    card_name = title or card.get("InternalName", "")
+                    zh_name = trans.get_zh(card_name) or ""
+                    text = gdc.format_card_from_raw(
+                        card,
+                        zh_name=zh_name,
+                        db_path=str(db_path),
+                        show_enchants=show_enchants,
+                    )
+                    card_id = card.get("Id", "")
+                    art_url = cih.get_art_url(
+                        card_id=card_id,
+                        internal_name=card_name,
+                        size="artLarge",
+                    )
+                    if art_url:
+                        return f"[CQ:image,file={art_url}]\n" + text
+                    return text
+                lines = [f"🔍 未精确匹配『{query_arg}』，你是否要查询:"]
+                for card in unique_candidates:
                     title = ((card.get("Localization") or {}).get("Title") or {}).get("Text", "")
                     title_zh = trans.get_zh(title) or title or card.get("InternalName", "")
                     card_type = "技能" if card.get("Type") == "Skill" or card.get("$type") == "TCardSkill" else "物品"

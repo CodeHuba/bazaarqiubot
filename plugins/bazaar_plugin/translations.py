@@ -3,7 +3,9 @@
 - 官方翻译 (translations.json): 英文名 → 官方中文名（从 GameData.db + zh-CN.bytes 生成）
 - hash映射 (zh-CN.bytes): tooltip Key → 中文（用于 tooltip 渲染）
 """
+import hashlib
 import json
+import os
 from pathlib import Path
 
 CACHE_DIR        = Path(__file__).parent / "cache"
@@ -28,8 +30,18 @@ def _load():
             print(f"[translations] 官方翻译加载失败: {e}")
 
     # 2. 加载 hash -> 中文映射（用于 tooltip Key 查翻译）
-    zh_bytes_file = CACHE_DIR.parent.parent.parent / "AppData/LocalLow/Tempo Storm/The Bazaar/prod/cache/translations/zh-CN.bytes"
-    if not zh_bytes_file.exists():
+    # Windows 游戏运行时路径；生产 Linux 可通过 ZH_TRANSLATIONS_DB 指定同步副本。
+    configured_zh = os.getenv("ZH_TRANSLATIONS_DB", "").strip()
+    candidates = []
+    if configured_zh:
+        candidates.append(Path(configured_zh).expanduser())
+    candidates.extend([
+        CACHE_DIR / "zh-CN.bytes",
+        CACHE_DIR.parent.parent.parent / "AppData/LocalLow/Tempo Storm/The Bazaar/prod/cache/translations/zh-CN.bytes",
+        Path("/mnt/c/Users/Administrator/AppData/LocalLow/Tempo Storm/The Bazaar/prod/cache/translations/zh-CN.bytes"),
+    ])
+    zh_bytes_file = next((path for path in candidates if path.is_file()), None)
+    if zh_bytes_file is None:
         zh_json_file = CACHE_DIR / "zh-CN.json"
         if zh_json_file.exists():
             try:
@@ -139,6 +151,13 @@ def get_zh_by_key(key: str) -> str | None:
 def get_zh_by_hash(key: str) -> str | None:
     """兼容旧调用名"""
     return get_zh_by_key(key)
+
+
+def get_zh_by_text_key(key: str) -> str | None:
+    """按客户端字符串 key 的 MD5 查询官方中文文本。"""
+    if not key:
+        return None
+    return _hash_to_zh.get(hashlib.md5(key.encode("utf-8")).hexdigest())
 
 
 def get_tooltip_zh(text_en: str) -> str | None:

@@ -7,6 +7,10 @@ import os
 import time
 import json
 import sqlite3 as _sqlite3
+import hashlib
+import threading
+import urllib.parse
+import urllib.request
 from datetime import datetime
 from collections import defaultdict
 from dotenv import load_dotenv
@@ -37,6 +41,7 @@ def _mask_ip(ip):
     return f"{p[0]}.{p[1]}.*.*" if len(p) == 4 else ip
 
 app = Flask(__name__, static_folder='static')
+_card_art_proxy_locks: dict[str, threading.Lock] = {}
 # 线上仅通过 Caddy 单层反代访问；由 Caddy 覆盖 X-Forwarded-For 后再解析真实客户端地址。
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1)
 
@@ -376,7 +381,7 @@ def after_request(response):
     if hasattr(g, 'start_time'):
         duration_ms = int((time.time() - g.start_time) * 1000)
         endpoint = request.endpoint
-        _user_api_paths = ('/api/runs', '/api/winrate', '/api/partner', '/api/heroes', '/api/suggestions', '/api/card_img', '/api/topcard', '/api/feedback')
+        _user_api_paths = ('/api/runs', '/api/winrate', '/api/partner', '/api/heroes', '/api/suggestions', '/api/card_img', '/api/topcard', '/api/card-tier', '/api/feedback')
         if endpoint and endpoint.startswith('api_') and request.path.startswith(_user_api_paths):
             _log_api_call(
                 endpoint=request.path,
@@ -393,6 +398,7 @@ def after_request(response):
         ('GET', '/api/winrate'): ('winrate_query', 'winrate'),
         ('GET', '/api/partner'): ('partner_query', 'partner'),
         ('GET', '/api/topcard'): ('topcard_query', 'topcard'),
+        ('GET', '/api/card-tier'): ('card_tier_query', 'topcard'),
         ('GET', '/api/comp'): ('comp_query', 'topcard'),
         ('GET', '/api/comp/card'): ('comp_card_query', 'runs'),
         ('GET', '/api/hero_overview'): ('hero_overview', 'topcard'),
@@ -659,24 +665,8 @@ def api_partner():
 
 @app.route('/api/heroes', methods=['GET'])
 def api_heroes():
-    from plugins.bazaar_plugin.runs_query import HERO_ZH_TO_EN
-    heroes = [
-        {'zh': zh, 'en': en}
-        for zh, en in HERO_ZH_TO_EN.items()
-        if zh not in {'海盗', '工程师', '法师', '猪', '机甲', '吸血鬼', '兽人'}  # 去重，只保留官方中文名
-    ]
-    # 补全标准名
-    standard = [
-        {'zh': '凡妮莎', 'en': 'Vanessa'},
-        {'zh': '杜利',   'en': 'Dooley'},
-        {'zh': '马克',   'en': 'Mak'},
-        {'zh': '皮格',   'en': 'Pygmalien'},
-        {'zh': '斯黛拉', 'en': 'Stelle'},
-        {'zh': '朱尔斯', 'en': 'Jules'},
-        {'zh': '卡诺克', 'en': 'Karnok'},
-        {'zh': '双龙',   'en': 'The Dragons'},
-    ]
-    return jsonify(standard)
+    from plugins.bazaar_plugin.runs_query import HERO_EN_TO_ZH
+    return jsonify([{'zh': zh, 'en': en} for en, zh in HERO_EN_TO_ZH.items()])
 
 
 
@@ -733,9 +723,8 @@ def api_suggestions():
             # 英雄
             hero = p.get('hero')
             if hero:
-                hero_map = {'Vanessa':'凡妮莎','Dooley':'杜利','Mak':'马克',
-                            'Pygmalien':'皮格','Stelle':'斯黛拉','Jules':'朱尔斯','Karnok':'卡诺克','The Dragons':'双龙'}
-                hero_counter[hero_map.get(hero, hero)] += 1
+                from plugins.bazaar_plugin.runs_query import HERO_EN_TO_ZH
+                hero_counter[HERO_EN_TO_ZH.get(hero, hero)] += 1
             # 卡牌
             cards = p.get('cards') or []
             if isinstance(cards, str):
@@ -753,6 +742,47 @@ def api_suggestions():
         })
     except Exception as e:
         return jsonify({'heroes': [], 'cards': []}), 200
+
+
+@app.route('/api/card_art_proxy')
+def card_art_proxy():
+    """为分享图提供同源 BazaarDB 卡图：落盘缓存 + 单飞锁，避免并发分享重复拉 CDN。"""
+    raw_url = request.args.get('url', '')
+    parsed = urllib.parse.urlparse(raw_url)
+    if parsed.scheme != 'https' or parsed.netloc != 's.bazaardb.gg' or not parsed.path.startswith('/v1/'):
+        abort(400)
+    suffix = os.path.splitext(parsed.path)[1].lower()
+    if suffix not in ('.webp', '.png', '.jpg', '.jpeg'):
+        abort(400)
+    cache_dir = '/opt/qiubot/web_runs/cache/share_card_art'
+    cache_key = hashlib.sha256(raw_url.encode('utf-8')).hexdigest()
+    cache_path = os.path.join(cache_dir, cache_key + suffix)
+    mime_types = {'.webp': 'image/webp', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg'}
+    content_type = mime_types[suffix]
+    if os.path.isfile(cache_path):
+        return send_file(cache_path, mimetype=content_type, max_age=2678400)
+    lock = _card_art_proxy_locks.setdefault(cache_key, threading.Lock())
+    with lock:
+        if os.path.isfile(cache_path):
+            return send_file(cache_path, mimetype=content_type, max_age=2678400)
+        try:
+            upstream = urllib.request.Request(raw_url, headers={'User-Agent': 'BazaarQiuBot/1.0'})
+            with urllib.request.urlopen(upstream, timeout=10) as response:
+                upstream_type = response.headers.get_content_type()
+                if upstream_type != content_type:
+                    abort(502)
+                payload = response.read()
+            os.makedirs(cache_dir, exist_ok=True)
+            temp_path = cache_path + '.tmp'
+            with open(temp_path, 'wb') as file:
+                file.write(payload)
+            os.replace(temp_path, cache_path)
+            return Response(payload, content_type=content_type,
+                            headers={'Cache-Control': 'public, max-age=2678400'})
+        except Exception:
+            abort(502)
+        finally:
+            _card_art_proxy_locks.pop(cache_key, None)
 
 
 @app.route('/api/card_img/<path:tex_name>')
@@ -792,6 +822,7 @@ def api_ingest():
                     )
                 except Exception:
                     _card_ids_text = ''
+                _before_changes = conn.total_changes
                 conn.execute("""INSERT OR IGNORE INTO runs
                     (id, hero, username, created_at, items_json, skills_json, combats_json,
                      stat_wins, stat_losses, player_rating, player_rating_after,
@@ -809,7 +840,7 @@ def api_ingest():
                      __import__('json').dumps(run, ensure_ascii=False),
                      __import__('datetime').datetime.now().isoformat(), RUNS_SEASON_ID, CURRENT_PHASE,
                      _card_ids_text))
-                if conn.total_changes > 0:
+                if conn.total_changes > _before_changes:
                     new_count += 1
                     # 增量追加到 Redis winrate 缓存
                     _winrate_cache_append(
@@ -821,11 +852,44 @@ def api_ingest():
             except Exception as e:
                 pass
         conn.commit()
+        if new_count:
+            # 当前 Phase 有新 run 后，按需求主动使全部 T 表筛选组合失效。
+            from plugins.bazaar_plugin import runs_query as _runs_query
+            _runs_query._card_tier_cache.clear()
         total = conn.execute('SELECT COUNT(*) FROM runs').fetchone()[0]
         conn.close()
         return jsonify({'ok': True, 'new': new_count, 'total': total})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/card-tier', methods=['GET'])
+@rate_limit
+def api_card_tier():
+    """返回当前职业、筛选条件下的卡牌 T 表。"""
+    hero_raw = request.args.get('hero', '').strip()
+    days = request.args.get('days', type=int)
+    rank_filter = request.args.get('rank', 'all')
+    if days not in (None, 1, 3, 7):
+        return jsonify({'error': '时间范围仅支持全赛段、1天、3天或7天'}), 400
+    if rank_filter not in ('all', 'legendary'):
+        return jsonify({'error': '段位仅支持全部或传奇'}), 400
+    ip = _mask_ip(request.headers.get('X-Forwarded-For', request.remote_addr))
+    if not hero_raw:
+        return jsonify({'error': '请指定职业'}), 400
+    try:
+        query = RunsQuery()
+        query.load()
+        hero = query.resolve_hero(hero_raw)
+        if not hero:
+            return jsonify({'error': f'未知职业: {hero_raw}'}), 400
+        result = query.card_tier_table(hero=hero, days=days, rank_filter=rank_filter)
+        _log_query('card_tier', {'hero': hero_raw, 'days': days, 'rank': rank_filter}, ip,
+                   sum(len(group.get('cards', [])) for group in result.get('tiers', [])), True)
+        return jsonify(result)
+    except Exception as exc:
+        _log_query('card_tier', {'hero': hero_raw, 'days': days, 'rank': rank_filter}, ip, 0, False)
+        return jsonify({'error': str(exc)}), 500
 
 
 @app.route('/api/topcard', methods=['GET'])
@@ -1636,4 +1700,5 @@ def internal_error(e):
     return '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>500 - BazaarQiuBot</title><style>body{font-family:sans-serif;background:#0a0e1a;color:#e5e7eb;text-align:center;padding:100px 20px}h1{color:#ef4444;font-size:72px;margin:0}p{font-size:18px;margin:20px 0}a{color:#60a5fa;text-decoration:none}</style></head><body><h1>500</h1><p>服务器内部错误，请稍后重试</p><a href="/">返回首页</a></body></html>', 500
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=1027, debug=False)
+    # 单个慢统计请求不能阻塞其它页面/API 请求。
+    app.run(host='0.0.0.0', port=1027, debug=False, threaded=True)

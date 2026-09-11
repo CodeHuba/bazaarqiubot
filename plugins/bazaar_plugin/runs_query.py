@@ -4,6 +4,7 @@ BazaarDB Runs 查询模块
 """
 
 import json
+import math
 import sqlite3
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional
@@ -14,13 +15,23 @@ from .data_client import CURRENT_SEASON_ID, CURRENT_PHASE, RUNS_SEASON_ID
 
 ALIAS_FILE = "/opt/qiubot/data/bz_aliases.json"
 
-# 英雄中英文映射
+# 英雄官方中文展示名。查询入口仍接受下方兼容别名。
+HERO_EN_TO_ZH = {
+    'Vanessa': '瓦内莎',
+    'Dooley': '杜利',
+    'Mak': '马克',
+    'Pygmalien': '皮格马利翁',
+    'Stelle': '斯黛尔',
+    'Jules': '朱尔斯',
+    'Karnok': '卡诺克',
+    'The Dragons': '双龙',
+}
 HERO_ZH_TO_EN = {
-    '凡妮莎': 'Vanessa', '海盗': 'Vanessa',
+    '瓦内莎': 'Vanessa', '凡妮莎': 'Vanessa', '瓦妮莎': 'Vanessa', '瓦内萨': 'Vanessa', '海盗': 'Vanessa',
     '杜利': 'Dooley', '工程师': 'Dooley',
     '马克': 'Mak', '法师': 'Mak',
-    '皮格': 'Pygmalien', '猪': 'Pygmalien',
-    '斯黛拉': 'Stelle', '机甲': 'Stelle',
+    '皮格马利翁': 'Pygmalien', '皮格': 'Pygmalien', '猪': 'Pygmalien', '猪猪': 'Pygmalien',
+    '斯黛尔': 'Stelle', '斯黛拉': 'Stelle', '斯黛儿': 'Stelle', '斯特尔': 'Stelle', '机甲': 'Stelle',
     '朱尔斯': 'Jules', '吸血鬼': 'Jules',
     '卡诺克': 'Karnok', '兽人': 'Karnok',
     '双龙': 'The Dragons', '龙': 'The Dragons',
@@ -142,18 +153,24 @@ class RunsQuery:
         info = self.card_mapping.get(card_id)
         return info if isinstance(info, dict) else {}
 
-    def card_display_info(self, card_id: str) -> dict:
+    def card_display_info(self, card_id: str, validate_image: bool = True) -> dict:
         """返回网页统一使用的卡牌展示信息，图片优先使用 #bz db 同源原图。"""
         from . import card_image_helper as _cih
         info = self._safe_mapping_info(card_id)
         image_info = self._card_image_info(card_id)
         name_en = info.get('name') or image_info.get('internalName') or card_id
         name_zh = image_info.get('name') or self.get_zh_name(name_en)
+        if validate_image:
+            image_url = (_cih.get_art_url(card_id=card_id, internal_name=name_en, size='artLarge')
+                         or _cih.get_art_url(card_id=card_id, internal_name=name_en, size='art') or '')
+        else:
+            # 统计接口不得为每张卡串行探测 CDN；浏览器按原 URL 加载图片即可。
+            image_url = image_info.get('artLarge') or image_info.get('art') or ''
         return {
             'cardId': card_id,
             'name': name_zh if name_zh != name_en else name_en,
             'name_en': name_en,
-            'img': _cih.get_art_url(card_id=card_id, internal_name=name_en, size='artLarge') or _cih.get_art_url(card_id=card_id, internal_name=name_en, size='art') or '',
+            'img': image_url,
             'size': self.size_map.get(card_id) or image_info.get('size') or 'Small',
         }
 
@@ -351,9 +368,7 @@ class RunsQuery:
             items_preview = '、'.join(run['items'])
 
             player = run['username'] or '匿名'
-            hero_zh = {'Vanessa': '海盗', 'Dooley': '工程师', 'Mak': '法师',
-                       'Pygmalien': '猪', 'Stelle': '机甲', 'Jules': '吸血鬼',
-                       'Karnok': '兽人'}.get(run['hero'], run['hero'])
+            hero_zh = HERO_EN_TO_ZH.get(run['hero'], run['hero'])
 
             # 格式化时间
             time_str = ""
@@ -674,7 +689,7 @@ class RunsQuery:
             name_zh = image_info.get('name') or self.get_zh_name(name_en)
             ten_win = card_wins.get(cid, 0)
             rate = ten_win / total if total > 0 else 0.0
-            display = self.card_display_info(cid)
+            display = self.card_display_info(cid, validate_image=False)
             results.append({
                 'cardId': cid,
                 'name_zh': display['name'],
@@ -695,11 +710,7 @@ class RunsQuery:
             results.sort(key=lambda x: (-x['total'], -x['rate']))
         top = results[:top_n]
 
-        hero_map = {'Vanessa': '海盗/凡妮莎', 'Dooley': '工程师/杜利',
-                    'Mak': '法师/马克', 'Pygmalien': '猪/皮格',
-                    'Stelle': '机甲/斯黛拉', 'Jules': '吸血鬼/朱尔斯',
-                    'Karnok': '兽人/卡诺克', 'The Dragons': '双龙'}
-        hero_zh = hero_map.get(hero, hero)
+        hero_zh = HERO_EN_TO_ZH.get(hero, hero)
 
         _tc_result = {
             'hero': hero,
@@ -710,6 +721,88 @@ class RunsQuery:
         }
         _topcard_cache[_tc_key] = (_tc_result, _time.time() + _topcard_cache_ttl)
         return _tc_result
+
+    def card_tier_table(self, hero: str, days: int = None, rank_filter: str = "all") -> dict:
+        """按当前赛段、职业专属基础卡计算出场为主的相对 T 表。"""
+        cache_key = (RUNS_SEASON_ID, CURRENT_PHASE, hero, days, rank_filter)
+        cached = _card_tier_cache.get(cache_key)
+        if cached and __import__('time').time() < cached[1]:
+            return cached[0]
+        if not self.conn:
+            self.load()
+        sql = "SELECT items_json, stat_wins FROM runs WHERE season=? AND phase=? AND LOWER(hero)=LOWER(?)"
+        params = [RUNS_SEASON_ID, CURRENT_PHASE, hero]
+        if days:
+            sql += " AND created_at >= ?"
+            params.append((datetime.utcnow() - timedelta(days=days)).isoformat())
+        if rank_filter == "legendary":
+            sql += " AND player_rank='Legendary'"
+        rows = self.conn.execute(sql, params).fetchall()
+        gamedata_hero = {"The Dragons": "Hero8"}.get(hero, hero)
+        exclusive_ids = {
+            cid for cid, heroes in self.card_heroes.items()
+            if isinstance(heroes, (list, tuple, set))
+            and {str(hero) for hero in heroes} == {gamedata_hero}
+            and str(self._safe_mapping_info(cid).get('type') or '').lower() == 'item'
+        }
+        appearances = {cid: 0 for cid in exclusive_ids}
+        ten_wins = {cid: 0 for cid in exclusive_ids}
+        for items_json, wins in rows:
+            try:
+                run_ids = {
+                    item['cardId'] for item in json.loads(items_json)
+                    if isinstance(item, dict) and item.get('cardId') in exclusive_ids
+                }
+            except (TypeError, ValueError, KeyError):
+                continue
+            for cid in run_ids:
+                appearances[cid] += 1
+                if (wins or 0) >= 10:
+                    ten_wins[cid] += 1
+        positive = sorted(value for value in appearances.values() if value > 0)
+        threshold = max(10, positive[max(0, math.ceil(len(positive) * .2) - 1)]) if positive else 10
+        cards = []
+        # 零出场卡既不评级也不展示，无需生成展示信息（会触发图片路径处理）。
+        for cid in exclusive_ids:
+            count = appearances[cid]
+            if count <= 0:
+                continue
+            cards.append({**self.card_display_info(cid, validate_image=False), 'appearance_count': count,
+                          'appearance_rate': count / len(rows) if rows else 0.0,
+                          'ten_win': ten_wins[cid], 'win_rate': ten_wins[cid] / count})
+        rated = [card for card in cards if card['appearance_count'] >= threshold]
+        # 未出现过的物品没有可供用户判断的数据，不在“数据不足”区展示。
+        insufficient = [card for card in cards if 0 < card['appearance_count'] < threshold]
+        self._score_tier_cards(rated)
+        rated.sort(key=lambda c: (-c['score'], -c['appearance_rate'], -c['win_rate'], -c['appearance_count'], c['name']))
+        insufficient.sort(key=lambda c: (-c['appearance_count'], -c['win_rate'], c['name']))
+        specs = [('夯', .10), ('顶级', .20), ('人上人', .30), ('NPC', .25), ('拉完了', .15)]
+        groups = [[] for _ in specs]
+        boundaries = [math.ceil(len(rated) * cumulative) for cumulative in (.10, .30, .60, .85)]
+        group = 0
+        for index, card in enumerate(rated):
+            while group < 4 and index >= boundaries[group] and (index == 0 or card['score'] != rated[index - 1]['score']):
+                group += 1
+            groups[group].append(card)
+        result = {'hero': hero, 'season': RUNS_SEASON_ID, 'phase': CURRENT_PHASE, 'days': days,
+                  'rank_filter': rank_filter, 'total_runs': len(rows), 'sample_threshold': threshold,
+                  'formula': {'appearance_weight': .7, 'winrate_weight': .3}, 'tie_policy': 'higher_tier',
+                  'tiers': [{'name': name, 'target_ratio': ratio, 'cards': group_cards}
+                            for (name, ratio), group_cards in zip(specs, groups)],
+                  'insufficient': insufficient}
+        _card_tier_cache[cache_key] = (result, __import__('time').time() + _card_tier_cache_ttl)
+        return result
+
+    @staticmethod
+    def _score_tier_cards(cards: list) -> None:
+        total = len(cards)
+        for field, target in (('appearance_rate', 'appearance_percentile'), ('win_rate', 'winrate_percentile')):
+            values = sorted(card[field] for card in cards)
+            for card in cards:
+                positions = [index + 1 for index, value in enumerate(values) if value == card[field]]
+                card[target] = sum(positions) / len(positions) / total if positions else 0.0
+        for card in cards:
+            card['score'] = round(card['appearance_percentile'] * .7 + card['winrate_percentile'] * .3, 6)
 
     def comp(self,
              hero: str,
@@ -1082,11 +1175,7 @@ class RunsQuery:
                 })
 
 
-        hero_map = {
-            'Vanessa': '海盗/凡妮莎', 'Dooley': '工程师/杜利', 'Mak': '法师/马克',
-            'Pygmalien': '猪/皮格', 'Stelle': '机甲/斯黛拉', 'Jules': '吸血鬼/朱尔斯',
-            'Karnok': '兽人/卡诺克', 'The Dragons': '双龙',
-        }
+        hero_map = HERO_EN_TO_ZH
 
         # 将层级挖掘结果同时扁平为“可直接参考的完整阵容”。
         # L1/L2/L3 保留给体系解释，前台默认消费 recommendations，避免用户逐层展开才看到构筑。
@@ -1171,12 +1260,7 @@ class RunsQuery:
                 hero_stats[hero]['wins'] += 1
 
         results = []
-        hero_map = {
-            'Vanessa': '海盗/凡妮莎', 'Dooley': '工程师/杜利',
-            'Mak': '法师/马克', 'Pygmalien': '猪/皮格',
-            'Stelle': '机甲/斯黛拉', 'Jules': '吸血鬼/朱尔斯',
-            'Karnok': '兽人/卡诺克', 'The Dragons': '双龙'
-        }
+        hero_map = HERO_EN_TO_ZH
         for hero, stats in hero_stats.items():
             total = stats['total']
             wins = stats['wins']
@@ -1213,6 +1297,10 @@ _comp_cache_ttl = 3600  # 1小时
 # topcard 方法内存缓存 {(hero, top_n, days, all_phases): (result, expire_time)}
 _topcard_cache: dict = {}
 _topcard_cache_ttl = 3600  # 1小时
+
+# T 表缓存：ingest 成功时清空当前 phase 的全部组合，首个访问按条件重算。
+_card_tier_cache: dict = {}
+_card_tier_cache_ttl = 3600  # 1小时
 
 _hero_overview_cache: dict = {}
 _hero_overview_cache_ttl = 3600  # 1小时

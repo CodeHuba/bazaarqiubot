@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>职业榜单 | 巴扎丘Bot</title>
 <meta name="description" content="查看 The Bazaar 各职业物品的真实 10 胜率榜单。">
-<meta name="keywords" content="The Bazaar,巴扎,阵容查询,胜率,天梯,卡牌,攻略,凡妮莎,杜利,马克,皮格,斯黛拉,朱尔斯,卡诺克,双龙">
+<meta name="keywords" content="The Bazaar,巴扎,阵容查询,胜率,天梯,卡牌,攻略,瓦内莎,杜利,马克,皮格马利翁,斯黛尔,朱尔斯,卡诺克,双龙">
 <meta name="author" content="BazaarQiuBot">
 <meta name="robots" content="index, follow">
 <meta property="og:title" content="巴扎丘Bot">
@@ -1485,8 +1485,8 @@ input[type="file"] {
 .hero-tab.active{color:var(--neon-violet);background:rgba(138,77,255,.15);border-color:rgba(138,77,255,.4);border-bottom-color:transparent;}
 
 /* === 二级内容 tab === */
-.content-tabs{display:flex;gap:10px;margin-bottom:20px;}
-.content-tab{padding:8px 22px;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600;color:var(--text-secondary);border:1px solid rgba(38,217,242,.25);background:transparent;transition:all .2s;font-family:inherit;}
+.content-tabs{display:flex;gap:10px;margin-bottom:20px;align-items:center;}
+.content-tab{padding:8px 22px;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600;color:var(--text-secondary);border:1px solid rgba(38,217,242,.25);background:transparent;transition:all .2s;font-family:inherit;text-decoration:none;}
 .content-tab:hover{color:var(--neon-cyan);background:rgba(38,217,242,.08);}
 .content-tab.active{color:var(--text-primary);background:linear-gradient(135deg,rgba(38,217,242,.15),rgba(244,56,184,.1));border-color:var(--neon-cyan);box-shadow:0 0 12px rgba(38,217,242,.3);}
 
@@ -1682,9 +1682,18 @@ input[type="range"]::-moz-range-thumb{width:18px;height:18px;background:var(--ne
   transition: width 0.5s cubic-bezier(0.4,0,0.2,1);
 }
 
+/* 卡牌 T 表：主界面压缩信息密度，详情放入弹窗。 */
+.tier-summary{margin-bottom:14px;padding:10px 14px;border:1px solid rgba(38,217,242,.25);border-radius:7px;color:var(--text-secondary);font-size:12px;background:rgba(38,217,242,.04)}
+.tier-section{margin:0 0 16px;border:1px solid color-mix(in srgb,var(--tier-color) 38%,transparent);border-radius:9px;overflow:hidden;background:rgba(23,16,71,.55)}
+.tier-section header{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:color-mix(in srgb,var(--tier-color) 12%,transparent);border-left:4px solid var(--tier-color);color:var(--text-secondary);font-size:12px}.tier-section header strong{font-size:20px;color:var(--tier-color);letter-spacing:.08em}
+.tier-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(152px,1fr));gap:9px;padding:12px}.tier-card{display:flex;min-height:138px;flex-direction:column;align-items:center;justify-content:center;gap:3px;padding:8px;border:1px solid color-mix(in srgb,var(--tier-color) 36%,transparent);border-radius:7px;background:rgba(9,10,42,.55);color:var(--text-primary);font:inherit;cursor:pointer;transition:.2s}.tier-card:hover{transform:translateY(-2px);border-color:var(--tier-color);box-shadow:0 5px 16px color-mix(in srgb,var(--tier-color) 22%,transparent)}.tier-card-img{object-fit:contain;max-width:64px;height:48px}.tier-card-img.size-Small{width:26px}.tier-card-img.size-Medium{width:48px}.tier-card-img.size-Large{width:64px}.tier-card-name{font-size:13px;font-weight:700}.tier-card-stats{font-size:10px;color:var(--text-secondary);white-space:nowrap}.tier-card-count{font-size:10px;color:var(--tier-color)}.tier-insufficient{margin:20px 0;padding:12px;border:1px dashed rgba(181,179,215,.35);border-radius:8px;color:var(--text-secondary)}.tier-insufficient summary{cursor:pointer;font-weight:700}.tier-empty{color:var(--text-secondary);font-size:12px;padding:9px}
+.tier-modal{position:fixed;inset:0;z-index:1000;display:flex;align-items:center;justify-content:center;padding:20px;background:rgba(0,0,0,.7)}.tier-modal-box{position:relative;width:min(440px,100%);max-height:90vh;overflow:auto;padding:24px;border:1px solid var(--neon-cyan);border-radius:10px;background:var(--bg-surface);text-align:center;box-shadow:var(--glow-cyan)}.tier-modal-box>img{max-width:160px;max-height:120px;object-fit:contain}.tier-modal-box p{text-align:left;color:var(--text-secondary);font-size:13px;margin:9px 0}.tier-modal-close{position:absolute;right:10px;top:8px;border:0;background:transparent;color:var(--text-primary);font-size:28px;cursor:pointer}.tier-modal-badge{display:inline-block;padding:3px 12px;border-radius:999px;background:rgba(244,56,184,.18);color:var(--neon-magenta);font-weight:800}.tier-share-tab-btn{display:none;margin-left:auto;padding:5px 10px;border:1px solid rgba(38,217,242,.3);border-radius:5px;background:transparent;color:var(--neon-cyan);font:600 11px inherit;cursor:pointer;white-space:nowrap}.tier-share-tab-btn.is-visible{display:inline-flex}.tier-share-tab-btn:hover{background:rgba(38,217,242,.12);border-color:var(--neon-cyan)}.tier-share-card{position:fixed;left:-10000px;top:0;width:760px;padding:30px;background:#090A2A;color:#F5F4FF}.tier-share-card h2{margin:0;font-size:26px}.tier-share-card p{margin:7px 0 20px;color:#B5B3D7}.tier-share-tier{margin:14px 0;border:1px solid #34315c;border-left:4px solid var(--share-tier-color);border-radius:8px;padding:10px 12px}.tier-share-tier h3{margin:0 0 9px;color:var(--share-tier-color);font-size:19px}.tier-share-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:8px}.tier-share-item{min-height:102px;padding:5px 3px;border:1px solid #3c356c;border-radius:6px;background:#12113a;text-align:center}.tier-share-item img{display:block;height:auto;max-height:100px;object-fit:contain;margin:0 auto 4px}.tier-share-item img.size-Small{width:30px}.tier-share-item img.size-Medium{width:56px}.tier-share-item img.size-Large{width:88px}.tier-share-item span{display:block;color:#D9D7F2;font-size:10px;line-height:1.45;white-space:nowrap}.tier-share-watermark{margin-top:18px;padding-top:10px;border-top:1px solid rgba(181,179,215,.22);display:flex;justify-content:space-between;align-items:center;color:#817da6;font-size:11px}.tier-share-watermark strong{color:#26D9F2;letter-spacing:.08em;font-size:13px}.tier-share-download{display:inline-flex;align-items:center;justify-content:center;margin-top:12px;padding:7px 14px;border:1px solid var(--border-bright);border-radius:6px;background:rgba(38,217,242,.12);color:var(--neon-cyan);font:600 13px inherit;text-decoration:none}.tier-share-download:hover{text-decoration:none;background:rgba(38,217,242,.2)}.tier-share-progress{position:fixed;inset:0;z-index:999;display:flex;align-items:center;justify-content:center;background:rgba(5,5,22,.72);backdrop-filter:blur(3px)}.tier-share-progress-box{width:min(340px,calc(100vw - 40px));padding:20px;border:1px solid rgba(38,217,242,.5);border-radius:10px;background:#171047;box-shadow:var(--glow-cyan);text-align:center}.tier-share-progress-title{font-size:14px;font-weight:700;color:#F5F4FF}.tier-share-progress-track{height:7px;margin:14px 0 8px;overflow:hidden;border-radius:99px;background:rgba(181,179,215,.18)}.tier-share-progress-bar{height:100%;width:0;border-radius:99px;background:linear-gradient(90deg,#26D9F2,#F438B8);transition:width .15s}.tier-share-progress-text{font-size:11px;color:#B5B3D7}
+@media(max-width:768px){.tier-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;padding:8px}.tier-card{min-height:126px}.tier-section header{padding:9px}.tier-section header strong{font-size:18px}}
+
 </style>
   <link rel="stylesheet" href="/static/query-progress.css">
   <script src="/static/query-progress.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 </head>
 <body>
 
@@ -1737,11 +1746,11 @@ input[type="range"]::-moz-range-thumb{width:18px;height:18px;background:var(--ne
   </div>
 
   <div class="hero-tabs">
-    <button class="hero-tab active" onclick="switchHero('Vanessa',this)">凡妮莎</button>
+    <button class="hero-tab active" onclick="switchHero('Vanessa',this)">瓦内莎</button>
     <button class="hero-tab" onclick="switchHero('Dooley',this)">杜利</button>
     <button class="hero-tab" onclick="switchHero('Mak',this)">马克</button>
-    <button class="hero-tab" onclick="switchHero('Pygmalien',this)">皮格</button>
-    <button class="hero-tab" onclick="switchHero('Stelle',this)">斯黛拉</button>
+    <button class="hero-tab" onclick="switchHero('Pygmalien',this)">皮格马利翁</button>
+    <button class="hero-tab" onclick="switchHero('Stelle',this)">斯黛尔</button>
     <button class="hero-tab" onclick="switchHero('Jules',this)">朱尔斯</button>
     <button class="hero-tab" onclick="switchHero('Karnok',this)">卡诺克</button>
     <button class="hero-tab" onclick="switchHero('The Dragons',this)">双龙</button>
@@ -1751,6 +1760,8 @@ input[type="range"]::-moz-range-thumb{width:18px;height:18px;background:var(--ne
   <div class="content-tabs">
     <button class="content-tab active" id="tab-topcard" onclick="switchContent('topcard')">⚔️ 卡牌榜</button>
     <button class="content-tab" id="tab-comp" onclick="switchContent('comp')">🏆 阵容榜</button>
+    <button class="content-tab" id="tab-tier" onclick="switchContent('tier')">📋 卡牌 T 表</button>
+    <button class="tier-share-tab-btn" id="tier-share-button" onclick="shareTierTable()" aria-label="分享当前卡牌 T 表">↗ 分享</button>
   </div>
 
   <!-- 卡牌榜 -->
@@ -1782,6 +1793,15 @@ input[type="range"]::-moz-range-thumb{width:18px;height:18px;background:var(--ne
       </div>
     </div>
     <div id="topcard-result"><div class="loading">加载中...</div></div>
+  </div>
+
+  <!-- 卡牌 T 表 -->
+  <div id="panel-tier" style="display:none">
+    <div class="topcard-controls">
+      <div class="form-group"><label>时间范围</label><select id="tier-days" onchange="loadTierTable()"><option value="">全赛段</option><option value="7">近 7 天</option><option value="3">近 3 天</option><option value="1">近 1 天</option></select></div>
+      <div class="form-group"><label>段位</label><select id="tier-rank" onchange="loadTierTable()"><option value="all" selected>全部段位</option><option value="legendary">传奇</option></select></div>
+    </div>
+    <div id="tier-result"><div class="loading">加载中...</div></div>
   </div>
 
   <!-- 阵容榜 -->
@@ -1854,13 +1874,16 @@ function rateColor(r){
 
 // 职业切换
 function switchHero(hero, el){
+  const heroChanged=hero!==currentHero;
   currentHero=hero;
   document.querySelectorAll('.hero-tab').forEach(t=>t.classList.remove('active'));
   el.classList.add('active');
-  delete _topcardCache[hero];
-  delete _compCache[hero];
-  if(currentContent==='topcard')loadTopcard();
-  else loadComp();
+  // 已缓存的该职业数据可立即复用；切换职业只请求当前可见的内容 Tab。
+  if(heroChanged){
+    if(currentContent==='topcard')loadTopcard();
+    else if(currentContent==='comp')loadComp();
+    else loadTierTable();
+  }
 }
 
 // 内容切换
@@ -1868,10 +1891,14 @@ function switchContent(type){
   currentContent=type;
   document.getElementById('tab-topcard').classList.toggle('active',type==='topcard');
   document.getElementById('tab-comp').classList.toggle('active',type==='comp');
+  document.getElementById('tab-tier').classList.toggle('active',type==='tier');
+  document.getElementById('tier-share-button').classList.toggle('is-visible',type==='tier');
   document.getElementById('panel-topcard').style.display=type==='topcard'?'block':'none';
   document.getElementById('panel-comp').style.display=type==='comp'?'block':'none';
+  document.getElementById('panel-tier').style.display=type==='tier'?'block':'none';
   if(type==='topcard')loadTopcard();
-  else loadComp();
+  else if(type==='comp')loadComp();
+  else loadTierTable();
 }
 
 // 滑块
@@ -2077,6 +2104,132 @@ function renderTopcard(data){
       </div>
       ${rows}
     </div>`;
+}
+
+// ── 卡牌 T 表 ──
+const _tierCache = {};
+const TIER_BROWSER_CACHE_MS = 60 * 1000;
+let _lastTierData = null;
+function tierEscape(value){return String(value??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));}
+function tierSafeUrl(value){try{const url=new URL(String(value||''),location.origin);return ['http:','https:'].includes(url.protocol)?url.href:'';}catch(_){return '';}}
+const TIER_META = {
+  '夯': ['#F438B8', '版本核心'], '顶级': ['#F5C76A', '强势稳定'],
+  '人上人': ['#36E3C1', '有竞争力'], 'NPC': ['#B5B3D7', '一般'], '拉完了': ['#FF536A', '低优先级']
+};
+
+async function loadTierTable(){
+  const days=document.getElementById('tier-days')?.value||'';
+  const rank=document.getElementById('tier-rank')?.value||'all';
+  const key=currentHero+'_'+days+'_'+rank;
+  if(_tierCache[key] && Date.now()-_tierCache[key].cachedAt<TIER_BROWSER_CACHE_MS){_lastTierData=_tierCache[key].data;renderTierTable(_lastTierData);return;}
+  const el=document.getElementById('tier-result');
+  el.innerHTML='<div class="comp-progress-wrap"><div class="comp-progress-label">正在计算卡牌 T 表，请稍候...</div></div>';
+  const p=new URLSearchParams({hero:currentHero,rank}); if(days)p.set('days',days);
+  try{
+    const response=await fetch('/api/card-tier?'+p); const data=await response.json();
+    if(data.error){el.innerHTML='<div class="error-msg">'+data.error+'</div>';return;}
+    _tierCache[key]={data,cachedAt:Date.now()}; _lastTierData=data; renderTierTable(data);
+  }catch(error){el.innerHTML='<div class="error-msg">请求失败: '+error.message+'</div>';}
+}
+
+function tierCardHtml(card, tierName, insufficient=false){
+  const color=insufficient?'#7d789f':(TIER_META[tierName]?.[0]||'#B5B3D7');
+  const safeName=tierEscape(card.name), safeImg=tierSafeUrl(card.img);
+  const img=safeImg?`<img class="tier-card-img size-${tierEscape(card.size||'Small')}" src="${tierEscape(safeImg)}" alt="${safeName}" loading="lazy" onerror="this.style.display='none'">`:'';
+  const payload=encodeURIComponent(JSON.stringify(card)).replace(/'/g,'%27');
+  return `<button class="tier-card" style="--tier-color:${color}" onclick="openTierDetail(JSON.parse(decodeURIComponent('${payload}')),'${tierName||'数据不足'}')">${img}<span class="tier-card-name">${safeName}</span><span class="tier-card-stats">出场 ${(card.appearance_rate*100).toFixed(1)}% · 10胜 ${(card.win_rate*100).toFixed(1)}%</span><span class="tier-card-count">${card.appearance_count} 次</span></button>`;
+}
+function renderTierTable(data){
+  const groups=(data.tiers||[]).map(group=>`<section class="tier-section"><header style="--tier-color:${TIER_META[group.name]?.[0]||'#B5B3D7'}"><strong>${tierEscape(group.name)}</strong><span>${tierEscape(TIER_META[group.name]?.[1]||'')} · ${group.cards.length} 张</span></header><div class="tier-grid">${group.cards.map(card=>tierCardHtml(card,group.name)).join('')||'<span class="tier-empty">暂无卡牌</span>'}</div></section>`).join('');
+  const insufficient=data.insufficient||[];
+  document.getElementById('tier-result').innerHTML=`<div class="tier-summary">${tierEscape(data.hero)} · 共 ${data.total_runs} 局 · 基于终局阵容统计使用率与 10 胜率 · 动态样本门槛 ${data.sample_threshold} 次 · 出场率 70% + 10 胜率 30%</div>${groups}<details class="tier-insufficient"><summary>📊 数据不足（未参与评级）· ${insufficient.length} 张</summary><div class="tier-grid">${insufficient.map(card=>tierCardHtml(card,'',true)).join('')||'<span class="tier-empty">暂无</span>'}</div></details>`;
+}
+function openTierDetail(card,tier){
+  const old=document.getElementById('tier-detail-modal'); if(old)old.remove();
+  const explain=tier==='数据不足'?'样本未达到当前职业的动态门槛，暂不参与评级。':`出场率职业内百分位 ${(card.appearance_percentile*100||0).toFixed(1)}%，10 胜率职业内百分位 ${(card.winrate_percentile*100||0).toFixed(1)}%；综合分 ${(card.score*100||0).toFixed(1)}。`;
+  const modal=document.createElement('div'); modal.id='tier-detail-modal'; modal.className='tier-modal';
+  const safeName=tierEscape(card.name), safeImg=tierSafeUrl(card.img);
+  modal.innerHTML=`<div class="tier-modal-box"><button class="tier-modal-close" onclick="this.closest('.tier-modal').remove()">×</button>${safeImg?`<img src="${tierEscape(safeImg)}" alt="${safeName}">`:''}<h2>${safeName}</h2><div class="tier-modal-badge">${tierEscape(tier)}</div><p>出场 ${card.appearance_count} 次 · 出场率 ${(card.appearance_rate*100).toFixed(1)}%</p><p>10 胜 ${card.ten_win} 次 · 10 胜率 ${(card.win_rate*100).toFixed(1)}%</p><p>${tierEscape(explain)}</p></div>`;
+  modal.onclick=e=>{if(e.target===modal)modal.remove();}; document.body.appendChild(modal);
+}
+function tierShareImageUrl(url){
+  const safe=tierSafeUrl(url);
+  return safe ? `/api/card_art_proxy?url=${encodeURIComponent(safe)}` : '';
+}
+async function preloadShareImages(node, onProgress, concurrency=6, timeoutMs=12000){
+  const images=[...node.querySelectorAll('img[data-src]')];
+  let cursor=0, complete=0;
+  const update=()=>onProgress?.(complete,images.length);
+  update();
+  async function worker(){
+    while(cursor<images.length){
+      const img=images[cursor++];
+      await new Promise(resolve=>{
+        const timer=setTimeout(resolve,timeoutMs);
+        const done=()=>{clearTimeout(timer);resolve();};
+        img.addEventListener('load',done,{once:true});
+        img.addEventListener('error',done,{once:true});
+        img.src=img.dataset.src;
+      });
+      complete++; update();
+    }
+  }
+  await Promise.all(Array.from({length:Math.min(concurrency,images.length)},worker));
+}
+function withTimeout(promise, timeoutMs, message){
+  let timer;
+  const timeout=new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error(message)),timeoutMs);});
+  return Promise.race([promise,timeout]).finally(()=>clearTimeout(timer));
+}
+async function shareTierTable(){
+  if(!_lastTierData){await loadTierTable();}
+  if(!_lastTierData){return;}
+  if(typeof html2canvas==='undefined'){alert('分享组件加载失败，请刷新页面后重试。');return;}
+  const data=_lastTierData, node=document.createElement('div'); node.className='tier-share-card';
+  const shareButton=document.getElementById('tier-share-button');
+  const oldShareLabel=shareButton?.textContent;
+  const progress=document.createElement('div');
+  progress.className='tier-share-progress';
+  progress.innerHTML='<div class="tier-share-progress-box"><div class="tier-share-progress-title">正在准备分享图</div><div class="tier-share-progress-track"><div class="tier-share-progress-bar"></div></div><div class="tier-share-progress-text">正在加载卡图 0/0</div></div>';
+  document.body.appendChild(progress);
+  const progressBar=progress.querySelector('.tier-share-progress-bar');
+  const progressText=progress.querySelector('.tier-share-progress-text');
+  const progressTitle=progress.querySelector('.tier-share-progress-title');
+  if(shareButton){shareButton.disabled=true;shareButton.textContent='生成中…';}
+  const shareGroups=(data.tiers||[]).map(group=>{
+    const color=TIER_META[group.name]?.[0]||'#B5B3D7';
+    const cards=group.cards.map(card=>{
+      const image=tierShareImageUrl(card.img);
+      const size=tierEscape(card.size||'Small');
+      return `<div class="tier-share-item">${image?`<img class="size-${size}" data-src="${tierEscape(image)}" alt="">`:'<div style="height:64px"></div>'}<span>使用率 ${(card.appearance_rate*100).toFixed(1)}%</span><span>10胜率 ${(card.win_rate*100).toFixed(1)}%</span></div>`;
+    }).join('');
+    return `<section class="tier-share-tier" style="--share-tier-color:${color}"><h3>${tierEscape(group.name)}</h3><div class="tier-share-grid">${cards}</div></section>`;
+  }).join('');
+  node.innerHTML=`<h2>📋 ${tierEscape(data.hero)} 卡牌 T 表</h2><p>基于终局阵容统计使用率与 10 胜率 · 当前赛季 ${tierEscape(data.phase)} · ${data.rank_filter==='legendary'?'传奇':'全部段位'} · ${data.days?`近 ${data.days} 天`:'全赛段'}</p>${shareGroups}<footer class="tier-share-watermark"><span>bazaarqiubot.com · ${new Date().toLocaleDateString('zh-CN')}</span><strong>BazaarQiuBot</strong></footer>`;
+  document.body.appendChild(node);
+  try{
+    await preloadShareImages(node,(complete,total)=>{
+      const percent=total?Math.round(complete/total*100):100;
+      if(progressBar)progressBar.style.width=percent+'%';
+      if(progressText)progressText.textContent=`正在加载卡图 ${complete}/${total}`;
+    });
+    if(progressTitle)progressTitle.textContent='正在生成图片…';
+    if(progressText)progressText.textContent='卡图已就绪，正在渲染';
+    if(progressBar)progressBar.style.width='100%';
+    await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+    const canvas=await withTimeout(
+      html2canvas(node,{backgroundColor:'#090A2A',scale:1,useCORS:true,allowTaint:false,imageTimeout:8000,logging:false}),
+      20000,
+      '分享图渲染超时'
+    );
+    const url=canvas.toDataURL('image/png'), overlay=document.createElement('div');
+    overlay.className='tier-modal'; overlay.innerHTML=`<div class="tier-modal-box"><button class="tier-modal-close" onclick="this.closest('.tier-modal').remove()">×</button><h2>分享图片已生成</h2><p>长按保存，或点击下载。</p><img src="${url}" alt="T表分享图"><a class="content-tab" href="${url}" download="bazaarqiubot-tier-table.png">⬇ 下载图片</a></div>`; document.body.appendChild(overlay);
+  }catch(error){console.error('T 表分享图生成失败',error);alert('分享图生成失败，请稍后重试。');}
+  finally{
+    node.remove();
+    progress.remove();
+    if(shareButton){shareButton.disabled=false;shareButton.textContent=oldShareLabel||'↗ 分享';}
+  }
 }
 
 // ── 阵容榜 ──
