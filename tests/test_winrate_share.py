@@ -18,6 +18,21 @@ def test_static_pages_display_official_hero_names_only():
         assert official in content
 
 
+def test_hero_overview_share_has_button_podium_and_watermark():
+    html = WINRATE_HTML.parent.joinpath("topcard.html").read_text(encoding="utf-8")
+    assert html.count('id="overview-share-button"') == 1
+    assert "async function shareOverview()" in html
+    share_fn = html[html.index("async function shareOverview()"):html.index("function jumpToHero(")]
+    assert "overview-share-podium" in share_fn
+    assert "podiumColors" in share_fn
+    assert "BazaarQiuBot" in share_fn
+    assert "overview-days" in share_fn
+    assert "overview-rank" in share_fn
+    assert "sortBy" in share_fn
+    assert "html2canvas(node" in share_fn
+    assert 'download="bazaarqiubot-hero-overview.png"' in share_fn
+
+
 def _share_function():
     html = WINRATE_HTML.read_text(encoding="utf-8")
     return html[html.index("async function shareWinrate()"):html.index("async function queryPartner()")]

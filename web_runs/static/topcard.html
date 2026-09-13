@@ -1590,6 +1590,84 @@ input[type="range"]::-moz-range-thumb{width:18px;height:18px;background:var(--ne
   align-items: center;
   gap: 8px;
 }
+.overview-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.overview-title-row .overview-title { margin-bottom: 0; }
+.overview-share-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  border: 1px solid rgba(38,217,242,.3);
+  border-radius: 5px;
+  background: transparent;
+  color: var(--neon-cyan);
+  font: 600 11px inherit;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.overview-share-btn:hover { background: rgba(38,217,242,.12); border-color: var(--neon-cyan); }
+.overview-share-btn:disabled { opacity: .55; cursor: wait; }
+.overview-share-card {
+  position: fixed;
+  left: -10000px;
+  top: 0;
+  width: 760px;
+  padding: 30px;
+  background: #090A2A;
+  color: #F5F4FF;
+  font-family: 'Noto Sans CJK SC', sans-serif;
+}
+.overview-share-card h2 { margin: 0; font-size: 26px; }
+.overview-share-meta { margin: 7px 0 20px; color: #B5B3D7; font-size: 12px; }
+.overview-share-podium {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  align-items: end;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+.overview-share-podium-item {
+  min-height: 126px;
+  padding: 14px 10px 12px;
+  border: 1px solid var(--podium-border);
+  border-radius: 8px 8px 4px 4px;
+  background: var(--podium-bg);
+  text-align: center;
+}
+.overview-share-podium-item.rank-1 { min-height: 156px; }
+.overview-share-podium-rank { font-size: 25px; line-height: 1; }
+.overview-share-podium-name { margin-top: 9px; font-size: 17px; font-weight: 800; }
+.overview-share-podium-rate { margin-top: 8px; color: var(--podium-color); font-size: 22px; font-weight: 800; }
+.overview-share-podium-stat { margin-top: 4px; color: #B5B3D7; font-size: 11px; }
+.overview-share-list { border-top: 1px solid rgba(38,217,242,.16); }
+.overview-share-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 4px;
+  border-bottom: 1px solid rgba(255,255,255,.06);
+}
+.overview-share-row-rank { width: 28px; color: #B5B3D7; font-size: 14px; text-align: center; }
+.overview-share-row-name { flex: 1; font-size: 14px; font-weight: 700; }
+.overview-share-row-stats { color: #B5B3D7; font-size: 11px; }
+.overview-share-row-rate { width: 72px; color: #10b981; font-size: 15px; font-weight: 800; text-align: right; }
+.overview-share-watermark {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 18px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(38,217,242,.12);
+  color: #4b5563;
+  font-size: 11px;
+}
+.overview-share-watermark strong { color: #26D9F2; font-size: 13px; }
 .overview-title::before {
   content: '';
   width: 3px;
@@ -1618,6 +1696,7 @@ input[type="range"]::-moz-range-thumb{width:18px;height:18px;background:var(--ne
 }
 @media (max-width: 768px) {
   .overview-grid { grid-template-columns: repeat(2, 1fr); }
+  .overview-share-card { width: 680px; }
 }
 .overview-card {
   background: rgba(9,10,42,0.6);
@@ -1715,7 +1794,10 @@ input[type="range"]::-moz-range-thumb{width:18px;height:18px;background:var(--ne
 
   <!-- 职业概况 -->
   <div class="hero-overview-section">
-    <div class="overview-title">职业概况</div>
+    <div class="overview-title-row">
+      <div class="overview-title">职业概况</div>
+      <button class="overview-share-btn" id="overview-share-button" onclick="shareOverview()" aria-label="分享职业概况">↗ 分享</button>
+    </div>
     <div class="overview-controls">
       <div class="form-group">
         <label>时间范围</label>
@@ -1949,6 +2031,7 @@ async function loadOverview() {
 }
 
 function renderOverview(data, sortBy) {
+  window._overviewShareData = { data, sortBy };
   let heroes = [...(data.heroes || [])];
   if (!heroes.length) {
     document.getElementById('overview-result').innerHTML = '<div class="empty">暂无数据</div>';
@@ -1999,6 +2082,51 @@ function renderOverview(data, sortBy) {
   }).join('');
   
   document.getElementById('overview-result').innerHTML = '<div class="overview-grid">' + cards + '</div>';
+}
+
+async function shareOverview() {
+  const state = window._overviewShareData;
+  const button = document.getElementById('overview-share-button');
+  if (!state) { await loadOverview(); }
+  const current = window._overviewShareData;
+  if (!current || typeof html2canvas === 'undefined') {
+    alert('分享组件加载失败，请刷新页面后重试。');
+    return;
+  }
+  const { data, sortBy } = current;
+  let heroes = [...(data.heroes || [])];
+  if (!heroes.length) return;
+  if (sortBy === 'rate') heroes.sort((a, b) => b.rate - a.rate || b.total - a.total);
+  else if (sortBy === 'wins') heroes.sort((a, b) => b.wins - a.wins || b.rate - a.rate);
+  else heroes.sort((a, b) => b.total - a.total || b.rate - a.rate);
+
+  const esc = value => String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+  const medal = ['🥇', '🥈', '🥉'];
+  const podiumColors = ['#f5c542', '#c7d2e0', '#cd7f52'];
+  const podium = heroes.slice(0, 3).map((hero, index) => `<div class="overview-share-podium-item rank-${index + 1}" style="--podium-border:${podiumColors[index]};--podium-bg:rgba(255,255,255,.06);--podium-color:${podiumColors[index]}">
+    <div class="overview-share-podium-rank">${medal[index]}</div><div class="overview-share-podium-name">${esc(hero.hero_zh)}</div>
+    <div class="overview-share-podium-rate">${(hero.rate * 100).toFixed(1)}%</div><div class="overview-share-podium-stat">${hero.total.toLocaleString()} 场 · ${hero.wins.toLocaleString()} 胜</div>
+  </div>`).join('');
+  const rows = heroes.slice(3).map((hero, index) => `<div class="overview-share-row"><span class="overview-share-row-rank">${index + 4}</span><span class="overview-share-row-name">${esc(hero.hero_zh)}</span><span class="overview-share-row-stats">${hero.total.toLocaleString()} 场 · ${hero.wins.toLocaleString()} 胜</span><span class="overview-share-row-rate">${(hero.rate * 100).toFixed(1)}%</span></div>`).join('');
+  const sortLabel = {total: '出场数', wins: '胜场数', rate: '胜率'}[sortBy] || '出场数';
+  const days = document.getElementById('overview-days')?.value || '';
+  const rank = document.getElementById('overview-rank')?.value || 'all';
+  const node = document.createElement('div');
+  node.className = 'overview-share-card';
+  node.innerHTML = `<h2>职业概况排行榜</h2><div class="overview-share-meta">${days ? `近 ${esc(days)} 天` : '全赛段'} · ${rank === 'legendary' ? '传奇' : '全部段位'} · 按${sortLabel}排序</div><div class="overview-share-podium">${podium}</div><div class="overview-share-list">${rows}</div><footer class="overview-share-watermark"><span>bazaarqiubot.com · ${new Date().toLocaleDateString('zh-CN')}</span><strong>BazaarQiuBot</strong></footer>`;
+  document.body.appendChild(node);
+  const oldLabel = button?.textContent;
+  if (button) { button.disabled = true; button.textContent = '生成中…'; }
+  try {
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    const canvas = await html2canvas(node, {backgroundColor:'#090A2A', scale:1, useCORS:true, allowTaint:false, logging:false});
+    const url = canvas.toDataURL('image/png');
+    const overlay = document.createElement('div');
+    overlay.className = 'tier-modal';
+    overlay.innerHTML = `<div class="tier-modal-box"><button class="tier-modal-close" onclick="this.closest('.tier-modal').remove()">×</button><h2>分享图片已生成</h2><p>长按保存，或点击下载。</p><img src="${url}" alt="职业概况分享图"><a class="content-tab" href="${url}" download="bazaarqiubot-hero-overview.png">⬇ 下载图片</a></div>`;
+    document.body.appendChild(overlay);
+  } catch (error) { console.error('职业概况分享图生成失败', error); alert('分享图生成失败，请稍后重试。'); }
+  finally { node.remove(); if (button) { button.disabled = false; button.textContent = oldLabel || '↗ 分享'; } }
 }
 
 function jumpToHero(heroEn) {
