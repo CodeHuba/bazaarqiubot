@@ -225,3 +225,60 @@ def test_flat_cooldown_reduction_aura_uses_target_attribute_unit():
         "双方所有物品的冷却时间延长 {aura.Trail} 秒",
         {}, auras, {"Custom_0": 2000},
     ) == "双方所有物品的冷却时间延长 2 秒"
+
+
+def test_render_tooltip_adds_units_for_sharkray_damage_and_poison():
+    module = load_gamedata_module()
+    abilities = {
+        "Damage": {"Action": {
+            "$type": "TActionCardModifyAttribute",
+            "AttributeType": "DamageAmount",
+            "Value": {"$type": "TReferenceValueCardAttribute", "AttributeType": "Custom_0"},
+        }},
+        "Poison": {"Action": {
+            "$type": "TActionCardModifyAttribute",
+            "AttributeType": "PoisonApplyAmount",
+            "Value": {"$type": "TReferenceValueCardAttribute", "AttributeType": "Custom_1"},
+        }},
+    }
+    assert module.render_tooltip(
+        "加速伙伴时，己方伙伴获得 {ability.Damage} 和 {ability.Poison}",
+        abilities, {}, {"Custom_0": 5, "Custom_1": 1},
+    ) == "加速伙伴时，己方伙伴获得 5伤害 和 1剧毒"
+
+
+def test_render_tooltip_adds_units_for_real_multi_attribute_cards():
+    module = load_gamedata_module()
+
+    def action(attribute, source):
+        return {"Action": {
+            "$type": "TActionCardModifyAttribute",
+            "AttributeType": attribute,
+            "Value": {"$type": "TReferenceValueCardAttribute", "AttributeType": source},
+        }}
+
+    assert module.render_tooltip(
+        "相邻物品获得 {ability.1} 和 {ability.2}",
+        {"1": action("BurnApplyAmount", "Custom_1"), "2": action("ShieldApplyAmount", "Custom_2")},
+        {}, {"Custom_1": 1, "Custom_2": 5},
+    ) == "相邻物品获得 1灼烧 和 5护盾"
+    assert module.render_tooltip(
+        "你的物品获得 {ability.0}, {ability.1} 和 {ability.2}",
+        {
+            "0": action("DamageAmount", "Custom_0"),
+            "1": action("HealAmount", "Custom_1"),
+            "2": action("ShieldApplyAmount", "Custom_2"),
+        }, {}, {"Custom_0": 10, "Custom_1": 10, "Custom_2": 10},
+    ) == "你的物品获得 10伤害, 10治疗 和 10护盾"
+    assert module.render_tooltip(
+        "燃烧 {ability.0}。剧毒 {ability.1}",
+        {"0": {"Action": {"$type": "TActionPlayerBurnApply"}},
+         "1": {"Action": {"$type": "TActionPlayerPoisonApply"}}},
+        {}, {"BurnApplyAmount": 3, "PoisonApplyAmount": 3},
+    ) == "燃烧 3。剧毒 3"
+
+
+def test_render_tooltip_does_not_duplicate_explicit_units():
+    module = load_gamedata_module()
+    abilities = {"Damage": {"Action": {"$type": "TActionPlayerDamage"}}}
+    assert module.render_tooltip("造成 {ability.Damage} 点伤害", abilities, {}, {"DamageAmount": 20}) == "造成 20 点伤害"

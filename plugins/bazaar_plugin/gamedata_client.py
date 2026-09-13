@@ -61,6 +61,32 @@ ACTION_TARGETS_MAP = {
     "TActionCardFlyingToggle":      "FlyingTargets",
 }
 
+# 部分 GameData tooltip 只包含占位符，没有写出它修改的属性名称。
+# 单位必须由 Action 的目标 AttributeType 决定，不能从引用值来源推断。
+ATTRIBUTE_UNIT_ZH = {
+    "DamageAmount": "伤害",
+    "ShieldApplyAmount": "护盾",
+    "HealAmount": "治疗",
+    "PoisonApplyAmount": "剧毒",
+    "PoisonRemoveAmount": "剧毒",
+    "BurnApplyAmount": "灼烧",
+    "BurnRemoveAmount": "灼烧",
+    "RegenApplyAmount": "回复",
+    "RegenRemoveAmount": "回复",
+    "RageApplyAmount": "狂怒",
+    "RageRemoveAmount": "狂怒",
+    "TempoApplyAmount": "节奏",
+    "TempoRemoveAmount": "节奏",
+    "HealthMax": "生命值",
+    "HealthRegen": "回复",
+    "AmmoMax": "弹药",
+    "Multicast": "多重施法",
+    "CritChance": "暴击率",
+    "Gold": "黄金",
+    "Experience": "经验",
+    "SellPrice": "价值",
+}
+
 # GameData 的时间属性统一以毫秒存储；游戏原生 Tooltip 展示时转换为秒。
 # 冷却修改类效果在不同版本的数据中使用过以下属性名。
 MS_ATTRS = {
@@ -285,6 +311,31 @@ def render_tooltip(
     逻辑对齐 BazaarGameClient TooltipComponentAbility，支持 {A ?? B} coalesce。
     """
 
+    explicit_units = tuple(ATTRIBUTE_UNIT_ZH.values()) + (
+        "Damage", "Shield", "Heal", "Poison", "Burn", "Regen", "Rage",
+        "Tempo", "Health", "Ammo", "Multicast", "Crit", "Gold", "XP",
+        "造成", "伤害", "护盾", "治疗", "剧毒", "中毒", "灼烧", "燃烧",
+        "回复", "狂怒", "节奏", "生命值", "弹药", "暴击", "黄金", "经验",
+    )
+    base_placeholders = re.findall(r"\{(ability|aura)\.[^}.]+\}", text)
+    should_add_implicit_units = len(base_placeholders) >= 2
+
+    def placeholder_unit(ph: str) -> str:
+        """返回基础 ability/aura 占位符对应的目标属性单位。"""
+        parts = ph.strip().split(".")
+        if len(parts) < 2 or (len(parts) > 2 and parts[2] in {"targets", "ref", "mod"}):
+            return ""
+        prefix, value_id = parts[0], parts[1]
+        collection = abilities if prefix == "ability" else auras if prefix == "aura" else {}
+        action = (collection.get(value_id) or {}).get("Action") or {}
+        attr = action.get("AttributeType", "") or ACTION_ATTR_MAP.get(action.get("$type", ""), "")
+        return ATTRIBUTE_UNIT_ZH.get(attr, "")
+
+    def has_explicit_unit(start: int, end: int) -> bool:
+        before = text[max(0, start - 12):start].rstrip()
+        after = text[end:end + 12].lstrip()
+        return any(before.endswith(unit) or after.startswith(unit) for unit in explicit_units)
+
     def resolve_single(ph: str):
         parts = ph.strip().split(".")
         if len(parts) < 2:
@@ -389,13 +440,18 @@ def render_tooltip(
             left, right = ph.split("??", 1)
             left_value = _coalesce_value(resolve_single(left.strip()))
             if left_value is not None:
-                return left_value
+                unit = placeholder_unit(left)
+                return left_value + unit if should_add_implicit_units and unit and not has_explicit_unit(m.start(), m.end()) else left_value
             right_value = _coalesce_value(resolve_single(right.strip()))
             if right_value is not None:
-                return right_value
+                unit = placeholder_unit(right)
+                return right_value + unit if should_add_implicit_units and unit and not has_explicit_unit(m.start(), m.end()) else right_value
             return ""
         r = resolve_single(ph)
-        return r if r is not None else m.group(0)
+        if r is None:
+            return m.group(0)
+        unit = placeholder_unit(ph)
+        return r + unit if should_add_implicit_units and unit and not has_explicit_unit(m.start(), m.end()) else r
 
     return re.sub(r"\{([^}]+)\}", replace_ph, text)
 
