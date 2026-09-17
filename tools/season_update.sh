@@ -25,8 +25,9 @@ UPLOAD_DIR="/home/ubuntu"
 BACKUP_ROOT="$QIUBOT_ROOT/backups"
 COSCMD="$QIUBOT_ROOT/venv/bin/coscmd"
 ARCHIVE_BUILDER="$QIUBOT_ROOT/tools/season_archive_runs.py"
+CACHE_REBUILDER="$QIUBOT_ROOT/tools/rebuild_gamedata_caches.py"
 WEB_SERVICE="web_runs.service"
-BOT_RESTART_SCRIPT="$QIUBOT_ROOT/restart.sh"
+BOT_SERVICE="qiubot.service"
 
 GREEN='\033[0;32m'
 YELLOW='\033[0;33m'
@@ -41,16 +42,18 @@ usage() {
     cat <<EOF
 Usage:
   Patch update:
-    $0 patch <new_phase> "<release time in Asia/Shanghai>"
+    $0 patch <new_phase> "<release time in Asia/Shanghai>" [--skip-assets]
     Example: $0 patch 18.2 "2026-09-20 10:00:00"
 
   Season update:
-    $0 season <new_season_id> <new_phase> "<start time in Asia/Shanghai>"
+    $0 season <new_season_id> <new_phase> "<start time in Asia/Shanghai>" [--skip-assets]
     Example: $0 season 19 19.1 "2026-10-01 10:00:00"
 
 The time argument is Beijing time and records the new phase start. The outgoing
 online runs database is archived to COS, then replaced by an empty database for
-the new phase. Upload $UPLOAD_DIR/GameData.db and $UPLOAD_DIR/zh-CN.bytes first.
+the new phase. By default, upload $UPLOAD_DIR/GameData.db and
+$UPLOAD_DIR/zh-CN.bytes first. Use --skip-assets only when explicitly reusing the
+currently installed game data and translations.
 EOF
 }
 
@@ -80,7 +83,17 @@ read_config_int() {
 }
 
 read_config_phase() {
-    grep -oP '^CURRENT_PHASE = "\\K[^"]+' "$DATA_CLIENT" | head -1
+    python3 - "$DATA_CLIENT" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+text = Path(sys.argv[1]).read_text(encoding="utf-8")
+match = re.search(r'^CURRENT_PHASE\s*=\s*["\']([^"\']+)["\']', text, re.MULTILINE)
+if not match:
+    raise SystemExit("CURRENT_PHASE not found")
+print(match.group(1))
+PY
 }
 
 validate_sqlite() {
@@ -149,17 +162,15 @@ restart_and_verify() {
     done
     sudo systemctl is-active --quiet "$WEB_SERVICE" || return 1
     [ "$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:1027/api/heroes || true)" = "200" ] || return 1
-    if [ -x "$BOT_RESTART_SCRIPT" ]; then
-        sudo systemctl stop qiubot.service || true
-        "$BOT_RESTART_SCRIPT"
-    else
-        log_warn "Bot restart script not found; Web service was restarted, Bot restart is manual."
-    fi
+    sudo systemctl restart "$BOT_SERVICE"
     for _ in $(seq 1 15); do
-        pgrep -f '/opt/qiubot/venv/bin/python main.py' >/dev/null 2>&1 && return 0
+        if sudo systemctl is-active --quiet "$BOT_SERVICE" && \
+           pgrep -f '/opt/qiubot/venv/bin/python main.py' >/dev/null 2>&1; then
+            return 0
+        fi
         sleep 2
     done
-    log_warn 'Bot process was not detected after restart script; inspect /opt/qiubot/logs/bot.log.'
+    log_warn 'Bot service was not healthy after restart; inspect /opt/qiubot/logs/bot.log.'
     return 1
 }
 
@@ -171,15 +182,20 @@ case "$1" in
 esac
 
 UPDATE_TYPE=$1
+SKIP_ASSETS=0
+if [ "${!#}" = "--skip-assets" ]; then
+    SKIP_ASSETS=1
+    set -- "${@:1:$(($# - 1))}"
+fi
 if [ "$UPDATE_TYPE" = "patch" ]; then
-    [ $# -eq 3 ] || die 'Patch usage: season_update.sh patch <new_phase> "<Beijing time>"'
+    [ $# -eq 3 ] || die 'Patch usage: season_update.sh patch <new_phase> "<Beijing time>" [--skip-assets]'
     NEW_PHASE=$2
     CUTOFF_BJ=$3
     CURRENT_SEASON_ID=$(read_config_int CURRENT_SEASON_ID)
     PREVIOUS_RUNS_SEASON_ID=$(read_config_int RUNS_SEASON_ID)
     TARGET_RUNS_SEASON_ID=$PREVIOUS_RUNS_SEASON_ID
 else
-    [ $# -eq 4 ] || die 'Season usage: season_update.sh season <new_season_id> <new_phase> "<Beijing time>"'
+    [ $# -eq 4 ] || die 'Season usage: season_update.sh season <new_season_id> <new_phase> "<Beijing time>" [--skip-assets]'
     CURRENT_SEASON_ID=$2
     NEW_PHASE=$3
     CUTOFF_BJ=$4
@@ -194,14 +210,20 @@ CUTOFF_UTC=$(utc_from_beijing "$CUTOFF_BJ")
 OLD_PHASE=$(read_config_phase)
 
 for command in python3 sha256sum curl df sudo; do require_command "$command"; done
-for file in "$DATA_CLIENT" "$FETCH_IMAGES" "$README_IMAGES" "$GAMEDATA_DB" "$ZH_CN_BYTES" "$RUNS_DB" "$COSCMD" "$ARCHIVE_BUILDER" "$BOT_RESTART_SCRIPT" "$UPLOAD_DIR/GameData.db" "$UPLOAD_DIR/zh-CN.bytes"; do require_file "$file"; done
+for file in "$DATA_CLIENT" "$FETCH_IMAGES" "$README_IMAGES" "$GAMEDATA_DB" "$ZH_CN_BYTES" "$RUNS_DB" "$COSCMD" "$ARCHIVE_BUILDER" "$CACHE_REBUILDER"; do require_file "$file"; done
+if [ "$SKIP_ASSETS" -eq 0 ]; then
+    require_file "$UPLOAD_DIR/GameData.db"
+    require_file "$UPLOAD_DIR/zh-CN.bytes"
+    validate_staged_assets "$UPLOAD_DIR/GameData.db" "$UPLOAD_DIR/zh-CN.bytes"
+else
+    log_warn 'Asset replacement explicitly skipped; reusing installed GameData.db and zh-CN.bytes.'
+fi
 RUNS_TARGET=$(realpath "$RUNS_DB")
 [ -f "$RUNS_TARGET" ] || die "Runs database target is missing: $RUNS_TARGET"
 
 log_info "Preflight: $UPDATE_TYPE, phase $OLD_PHASE -> $NEW_PHASE, start $CUTOFF_UTC"
 log_info "Outgoing database will be archived; new online scope: S$TARGET_RUNS_SEASON_ID / $NEW_PHASE"
 validate_sqlite "$RUNS_DB"
-validate_staged_assets "$UPLOAD_DIR/GameData.db" "$UPLOAD_DIR/zh-CN.bytes"
 
 RUNS_BYTES=$(stat -Lc '%s' "$RUNS_DB")
 ROOT_AVAIL=$(df -PB1 "$BACKUP_ROOT" | awk 'NR==2 {print $4}')
@@ -263,12 +285,19 @@ mv -f "$NEW_RUNS_DB" "$RUNS_TARGET"
 rm -f "${RUNS_TARGET}-wal" "${RUNS_TARGET}-shm"
 log_info 'Outgoing runs were archived to COS and removed from the online database'
 
-cp "$UPLOAD_DIR/GameData.db" "$GAMEDATA_DB"
-cp "$UPLOAD_DIR/zh-CN.bytes" "$ZH_CN_BYTES"
+if [ "$SKIP_ASSETS" -eq 0 ]; then
+    cp "$UPLOAD_DIR/GameData.db" "$GAMEDATA_DB"
+    cp "$UPLOAD_DIR/zh-CN.bytes" "$ZH_CN_BYTES"
+    python3 "$CACHE_REBUILDER"
+fi
 sed -i "s/^CURRENT_SEASON_ID = .*/CURRENT_SEASON_ID = $CURRENT_SEASON_ID/" "$DATA_CLIENT"
 sed -i "s/^RUNS_SEASON_ID = .*/RUNS_SEASON_ID = $TARGET_RUNS_SEASON_ID/" "$DATA_CLIENT"
 sed -i "s/^CURRENT_PHASE = .*/CURRENT_PHASE = \"$NEW_PHASE\"  # Current season phase/" "$DATA_CLIENT"
-sed -i "s/IMAGE_VERSION = os.getenv(\"CARD_IMAGE_VERSION\", \"[^\"]*\")/IMAGE_VERSION = os.getenv(\"CARD_IMAGE_VERSION\", \"$NEW_PHASE\")/" "$FETCH_IMAGES"
+# CDN 资源版本不一定与 phase 相同。补丁更新沿用当前图片资源版本；
+# 仅在确认 CDN 已发布新 z<version> 路径时，通过 CARD_IMAGE_VERSION 显式覆盖。
+if [ "$UPDATE_TYPE" = "season" ]; then
+    log_warn 'Card image CDN version must be verified separately; fetch_card_images.py was not auto-updated.'
+fi
 sed -i "s/\"version\": \"[0-9.]*\"/\"version\": \"$NEW_PHASE\"/" "$README_IMAGES"
 find "$QIUBOT_ROOT/plugins/bazaar_plugin" "$QIUBOT_ROOT/web_runs" -name '*.pyc' -delete
 
@@ -279,7 +308,7 @@ log_info 'Update complete.'
 log_info "Backup directory: $BACKUP_DIR"
 log_info "COS rollback backup: $COS_KEY"
 log_info "Current config: season=$CURRENT_SEASON_ID runs_season=$TARGET_RUNS_SEASON_ID phase=$NEW_PHASE"
-log_warn 'Required follow-up: run fetch_card_images.py and verify card_images.json URLs use the new z<phase> version.'
+log_warn 'Required follow-up: verify the current BazaarDB CDN version before refreshing card_images.json; phase and z<version> can differ.'
 if [ "$UPDATE_TYPE" = "season" ]; then
     log_warn 'Required follow-up: update Windows collector SEASON_START before the next scheduled collection.'
 fi

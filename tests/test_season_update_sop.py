@@ -18,8 +18,8 @@ def test_season_update_script_has_safe_production_guards():
     assert '"$COSCMD" upload "$RUNS_BACKUP" "$COS_KEY"' in text
     assert '"$COSCMD" info "$COS_KEY"' in text
     assert 'sudo systemctl restart "$WEB_SERVICE"' in text
+    assert 'sudo systemctl restart "$BOT_SERVICE"' in text
     assert 'sudo systemctl restart "$WEB_SERVICE" "$BOT_SERVICE"' not in text
-    assert '"$BOT_RESTART_SCRIPT"' in text
     assert 'nohup ../venv/bin/python app.py' not in text
 
 
@@ -33,6 +33,25 @@ def test_phase_transition_archives_all_outgoing_runs_without_retagging():
     assert 'cp "$RUNS_BACKUP" "$RUNS_TARGET"' in text
     assert 'UPDATE runs SET' not in text
     assert 'Only runs at or after that UTC cutoff are' not in text
+
+
+def test_skip_assets_is_explicit_and_preserves_default_asset_validation():
+    text = _text()
+
+    assert 'SKIP_ASSETS=0' in text
+    assert '[ "${!#}" = "--skip-assets" ]' in text
+    assert 'if [ "$SKIP_ASSETS" -eq 0 ]; then' in text
+    assert 'validate_staged_assets "$UPLOAD_DIR/GameData.db" "$UPLOAD_DIR/zh-CN.bytes"' in text
+    assert "Asset replacement explicitly skipped" in text
+
+
+def test_asset_update_rebuilds_mappings_and_does_not_guess_cdn_version():
+    text = _text()
+
+    assert 'CACHE_REBUILDER="$QIUBOT_ROOT/tools/rebuild_gamedata_caches.py"' in text
+    assert 'python3 "$CACHE_REBUILDER"' in text
+    assert 'IMAGE_VERSION = os.getenv' not in text
+    assert 'verify the current BazaarDB CDN version before refreshing card_images.json' in text
 
 
 def test_season_update_uses_new_season_for_future_ingest():
