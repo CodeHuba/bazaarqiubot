@@ -853,9 +853,10 @@ def api_ingest():
                 pass
         conn.commit()
         if new_count:
-            # 当前 Phase 有新 run 后，按需求主动使全部 T 表筛选组合失效。
+            # 当前 Phase 有新 run 后，按需求主动使所有派生统计缓存失效。
             from plugins.bazaar_plugin import runs_query as _runs_query
             _runs_query._card_tier_cache.clear()
+            _runs_query._hero_overview_cache.clear()
         total = conn.execute('SELECT COUNT(*) FROM runs').fetchone()[0]
         conn.close()
         return jsonify({'ok': True, 'new': new_count, 'total': total})

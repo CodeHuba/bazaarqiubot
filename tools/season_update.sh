@@ -1,11 +1,17 @@
-#!/bin/bash
-# 赛季/补丁更新 SOP 脚本
-# 用法:
-#   补丁更新: ./season_update.sh patch 17.4
-#   大赛季更新: ./season_update.sh season 18 18.1 "2026-08-16 16:00:00"
-#     最后一个参数是赛季开始的北京时间，用于修正误打标签的 runs
+#!/usr/bin/env bash
+# BazaarQiuBot season and patch update SOP.
+#
+# Patch:
+#   ./season_update.sh patch <new_phase> "<release time in Asia/Shanghai>"
+# Season:
+#   ./season_update.sh season <new_season_id> <new_phase> "<start time in Asia/Shanghai>"
+#
+# Upload GameData.db and zh-CN.bytes to /home/ubuntu before running. This script
+# archives the entire outgoing online runs database to COS. Every phase transition
+# starts a new, empty online runs database; historic runs are never retagged.
 
-set -e
+set -euo pipefail
+IFS=$'\n\t'
 
 QIUBOT_ROOT="/opt/qiubot"
 DATA_CLIENT="$QIUBOT_ROOT/plugins/bazaar_plugin/data_client.py"
@@ -14,248 +20,300 @@ README_IMAGES="$QIUBOT_ROOT/tools/README_card_images.md"
 GAMEDATA_DB="$QIUBOT_ROOT/plugins/bazaar_plugin/cache/GameData.db"
 ZH_CN_BYTES="$QIUBOT_ROOT/AppData/LocalLow/Tempo Storm/The Bazaar/prod/cache/translations/zh-CN.bytes"
 RUNS_DB="$QIUBOT_ROOT/data/bazaar_runs.db"
+RUNS_TARGET=""
 UPLOAD_DIR="/home/ubuntu"
+BACKUP_ROOT="$QIUBOT_ROOT/backups"
+COSCMD="$QIUBOT_ROOT/venv/bin/coscmd"
+ARCHIVE_BUILDER="$QIUBOT_ROOT/tools/season_archive_runs.py"
+CACHE_REBUILDER="$QIUBOT_ROOT/tools/rebuild_gamedata_caches.py"
+WEB_SERVICE="web_runs.service"
+BOT_SERVICE="qiubot.service"
 
-# 颜色输出
 GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
+YELLOW='\033[0;33m'
 RED='\033[0;31m'
 NC='\033[0m'
 
-log_info() { echo -e "${GREEN}[INFO]${NC} $1"; }
-log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
-log_error() { echo -e "${RED}[ERROR]${NC} $1"; exit 1; }
+log_info() { printf '%b[INFO]%b %s\n' "$GREEN" "$NC" "$*"; }
+log_warn() { printf '%b[WARN]%b %s\n' "$YELLOW" "$NC" "$*"; }
+die() { printf '%b[ERROR]%b %s\n' "$RED" "$NC" "$*" >&2; exit 1; }
 
-# 检查参数
-if [ $# -lt 2 ]; then
-    echo "用法:"
-    echo "  补丁更新: $0 patch <new_phase> <patch_release_time>"
-    echo "    示例: $0 patch 17.4 \"2026-08-21 10:00:00\""
-    echo "    最后一个参数是北京时间，用于修正 runs 数据库中的 phase"
-    echo ""
-    echo "  大赛季更新: $0 season <new_season_id> <new_phase> <season_start_time>"
-    echo "    示例: $0 season 18 18.1 \"2026-08-16 16:00:00\""
-    echo "    最后一个参数是北京时间，用于修正 runs 数据库中误标的赛季号和 phase"
-    exit 1
-fi
+usage() {
+    cat <<EOF
+Usage:
+  Patch update:
+    $0 patch <new_phase> "<release time in Asia/Shanghai>" [--skip-assets]
+    Example: $0 patch 18.2 "2026-09-20 10:00:00"
+
+  Season update:
+    $0 season <new_season_id> <new_phase> "<start time in Asia/Shanghai>" [--skip-assets]
+    Example: $0 season 19 19.1 "2026-10-01 10:00:00"
+
+The time argument is Beijing time and records the new phase start. The outgoing
+online runs database is archived to COS, then replaced by an empty database for
+the new phase. By default, upload $UPLOAD_DIR/GameData.db and
+$UPLOAD_DIR/zh-CN.bytes first. Use --skip-assets only when explicitly reusing the
+currently installed game data and translations.
+EOF
+}
+
+require_file() {
+    [ -f "$1" ] || die "Missing required file: $1"
+}
+
+require_command() {
+    command -v "$1" >/dev/null 2>&1 || die "Missing required command: $1"
+}
+
+utc_from_beijing() {
+    python3 - "$1" <<'PY'
+import sys
+from datetime import datetime
+from zoneinfo import ZoneInfo
+try:
+    value = datetime.strptime(sys.argv[1], '%Y-%m-%d %H:%M:%S')
+except ValueError as exc:
+    raise SystemExit(f'Invalid Beijing time: {exc}')
+print(value.replace(tzinfo=ZoneInfo('Asia/Shanghai')).astimezone(ZoneInfo('UTC')).isoformat(timespec='seconds'))
+PY
+}
+
+read_config_int() {
+    grep -oP "^$1 = \\K[0-9]+" "$DATA_CLIENT" | head -1
+}
+
+read_config_phase() {
+    python3 - "$DATA_CLIENT" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+text = Path(sys.argv[1]).read_text(encoding="utf-8")
+match = re.search(r'^CURRENT_PHASE\s*=\s*["\']([^"\']+)["\']', text, re.MULTILINE)
+if not match:
+    raise SystemExit("CURRENT_PHASE not found")
+print(match.group(1))
+PY
+}
+
+validate_sqlite() {
+    local db=$1
+    python3 - "$db" <<'PY'
+import sqlite3
+import sys
+path = sys.argv[1]
+conn = sqlite3.connect(f'file:{path}?mode=ro', uri=True, timeout=30)
+try:
+    result = conn.execute('PRAGMA quick_check(1)').fetchone()[0]
+finally:
+    conn.close()
+if result != 'ok':
+    raise SystemExit(f'SQLite quick_check failed for {path}: {result}')
+print(f'SQLite quick_check OK: {path}')
+PY
+}
+
+validate_staged_assets() {
+    python3 - "$1" "$2" <<'PY'
+import os
+import sqlite3
+import sys
+
+gamedata, translations = sys.argv[1:]
+conn = sqlite3.connect(f'file:{gamedata}?mode=ro', uri=True, timeout=30)
+try:
+    table = conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='cards'").fetchone()
+    cards = conn.execute('SELECT COUNT(*) FROM cards').fetchone()[0] if table else 0
+finally:
+    conn.close()
+if not table or cards <= 0:
+    raise SystemExit('Staged GameData.db has no usable cards table')
+if os.path.getsize(translations) <= 0:
+    raise SystemExit('Staged zh-CN.bytes is empty')
+print(f'Staged GameData.db OK: {cards} cards')
+print(f'Staged zh-CN.bytes OK: {os.path.getsize(translations)} bytes')
+PY
+}
+
+online_backup() {
+    local source=$1 destination=$2
+    python3 - "$source" "$destination" <<'PY'
+import sqlite3
+import sys
+source, destination = sys.argv[1:]
+src = sqlite3.connect(source, timeout=60)
+dst = sqlite3.connect(destination)
+try:
+    src.backup(dst)
+finally:
+    dst.close()
+    src.close()
+PY
+}
+
+restart_and_verify() {
+    sudo systemctl restart "$WEB_SERVICE"
+    for _ in $(seq 1 20); do
+        if sudo systemctl is-active --quiet "$WEB_SERVICE"; then
+            status=$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:1027/api/heroes || true)
+            [ "$status" = "200" ] && break
+        fi
+        sleep 2
+    done
+    sudo systemctl is-active --quiet "$WEB_SERVICE" || return 1
+    [ "$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:1027/api/heroes || true)" = "200" ] || return 1
+    sudo systemctl restart "$BOT_SERVICE"
+    for _ in $(seq 1 15); do
+        if sudo systemctl is-active --quiet "$BOT_SERVICE" && \
+           pgrep -f '/opt/qiubot/venv/bin/python main.py' >/dev/null 2>&1; then
+            return 0
+        fi
+        sleep 2
+    done
+    log_warn 'Bot service was not healthy after restart; inspect /opt/qiubot/logs/bot.log.'
+    return 1
+}
+
+[ $# -ge 1 ] || { usage; exit 2; }
+case "$1" in
+    --help|-h) usage; exit 0 ;;
+    patch|season) ;;
+    *) usage; exit 2 ;;
+esac
 
 UPDATE_TYPE=$1
-
+SKIP_ASSETS=0
+if [ "${!#}" = "--skip-assets" ]; then
+    SKIP_ASSETS=1
+    set -- "${@:1:$(($# - 1))}"
+fi
 if [ "$UPDATE_TYPE" = "patch" ]; then
+    [ $# -eq 3 ] || die 'Patch usage: season_update.sh patch <new_phase> "<Beijing time>" [--skip-assets]'
     NEW_PHASE=$2
-    PATCH_RELEASE_BJ=$3
-    
-    if [ -z "$PATCH_RELEASE_BJ" ]; then
-        log_error "补丁更新需要提供 <new_phase> 和 <patch_release_time>"
-    fi
-    
-    log_info "补丁更新模式: 新阶段 = $NEW_PHASE"
-    log_info "补丁发布时间(北京): $PATCH_RELEASE_BJ"
-    
-    # 北京时间转 UTC
-    RELEASE_TIME_UTC=$(python3 -c "from datetime import datetime, timedelta; bj=datetime.strptime('$PATCH_RELEASE_BJ', '%Y-%m-%d %H:%M:%S'); utc=bj-timedelta(hours=8); print(utc.strftime('%Y-%m-%dT%H:%M:%S'))")
-    log_info "补丁发布时间(UTC): $RELEASE_TIME_UTC"
-    
-    # 读取当前值
-    CURRENT_SEASON_ID=$(grep -oP 'CURRENT_SEASON_ID = \K\d+' "$DATA_CLIENT")
-    RUNS_SEASON_ID=$(grep -oP 'RUNS_SEASON_ID = \K\d+' "$DATA_CLIENT")
-    OLD_PHASE=$(grep -oP 'CURRENT_PHASE = "\K[^"]+' "$DATA_CLIENT")
-    
-    log_info "保持 CURRENT_SEASON_ID = $CURRENT_SEASON_ID"
-    log_info "保持 RUNS_SEASON_ID = $RUNS_SEASON_ID"
-    log_info "PHASE: $OLD_PHASE → $NEW_PHASE"
-    
-elif [ "$UPDATE_TYPE" = "season" ]; then
-    NEW_SEASON_ID=$2
+    CUTOFF_BJ=$3
+    CURRENT_SEASON_ID=$(read_config_int CURRENT_SEASON_ID)
+    PREVIOUS_RUNS_SEASON_ID=$(read_config_int RUNS_SEASON_ID)
+    TARGET_RUNS_SEASON_ID=$PREVIOUS_RUNS_SEASON_ID
+else
+    [ $# -eq 4 ] || die 'Season usage: season_update.sh season <new_season_id> <new_phase> "<Beijing time>" [--skip-assets]'
+    CURRENT_SEASON_ID=$2
     NEW_PHASE=$3
-    SEASON_START_BJ=$4
-    
-    if [ -z "$NEW_PHASE" ] || [ -z "$SEASON_START_BJ" ]; then
-        log_error "大赛季更新需要提供 <new_season_id> <new_phase> <season_start_time>"
-    fi
-    
-    log_info "大赛季更新模式: 新赛季 = $NEW_SEASON_ID, 新阶段 = $NEW_PHASE"
-    log_info "赛季开始时间(北京): $SEASON_START_BJ"
-    
-    # 北京时间转 UTC (用 Python，避免服务器时区问题)
-    SEASON_START_UTC=$(python3 -c "from datetime import datetime, timedelta; bj=datetime.strptime('$SEASON_START_BJ', '%Y-%m-%d %H:%M:%S'); utc=bj-timedelta(hours=8); print(utc.strftime('%Y-%m-%dT%H:%M:%S'))")
-    log_info "赛季开始时间(UTC): $SEASON_START_UTC"
-    
-    # 大赛季更新时，RUNS_SEASON_ID = 上一个赛季号
-    RUNS_SEASON_ID=$((NEW_SEASON_ID - 1))
-    CURRENT_SEASON_ID=$NEW_SEASON_ID
-    
-    log_info "CURRENT_SEASON_ID = $CURRENT_SEASON_ID"
-    log_info "RUNS_SEASON_ID = $RUNS_SEASON_ID (采集脚本仍在收集上赛季数据)"
-    
+    CUTOFF_BJ=$4
+    PREVIOUS_RUNS_SEASON_ID=$(read_config_int RUNS_SEASON_ID)
+    TARGET_RUNS_SEASON_ID=$CURRENT_SEASON_ID
+fi
+
+[ -n "$CURRENT_SEASON_ID" ] || die 'Could not read CURRENT_SEASON_ID'
+[ -n "$PREVIOUS_RUNS_SEASON_ID" ] || die 'Could not read RUNS_SEASON_ID'
+[ -n "$NEW_PHASE" ] || die 'New phase must not be empty'
+CUTOFF_UTC=$(utc_from_beijing "$CUTOFF_BJ")
+OLD_PHASE=$(read_config_phase)
+
+for command in python3 sha256sum curl df sudo; do require_command "$command"; done
+for file in "$DATA_CLIENT" "$FETCH_IMAGES" "$README_IMAGES" "$GAMEDATA_DB" "$ZH_CN_BYTES" "$RUNS_DB" "$COSCMD" "$ARCHIVE_BUILDER" "$CACHE_REBUILDER"; do require_file "$file"; done
+if [ "$SKIP_ASSETS" -eq 0 ]; then
+    require_file "$UPLOAD_DIR/GameData.db"
+    require_file "$UPLOAD_DIR/zh-CN.bytes"
+    validate_staged_assets "$UPLOAD_DIR/GameData.db" "$UPLOAD_DIR/zh-CN.bytes"
 else
-    log_error "未知的更新类型: $UPDATE_TYPE (应为 patch 或 season)"
+    log_warn 'Asset replacement explicitly skipped; reusing installed GameData.db and zh-CN.bytes.'
 fi
+RUNS_TARGET=$(realpath "$RUNS_DB")
+[ -f "$RUNS_TARGET" ] || die "Runs database target is missing: $RUNS_TARGET"
 
-# ========== 1. 检查上传文件 ==========
-log_info "Step 1: 检查上传文件"
-if [ ! -f "$UPLOAD_DIR/GameData.db" ]; then
-    log_error "未找到 $UPLOAD_DIR/GameData.db，请先上传"
-fi
-if [ ! -f "$UPLOAD_DIR/zh-CN.bytes" ]; then
-    log_error "未找到 $UPLOAD_DIR/zh-CN.bytes，请先上传"
-fi
-log_info "✓ 文件检查通过"
+log_info "Preflight: $UPDATE_TYPE, phase $OLD_PHASE -> $NEW_PHASE, start $CUTOFF_UTC"
+log_info "Outgoing database will be archived; new online scope: S$TARGET_RUNS_SEASON_ID / $NEW_PHASE"
+validate_sqlite "$RUNS_DB"
 
-# ========== 2. 备份旧文件 ==========
-log_info "Step 2: 备份旧文件"
-BACKUP_DIR="$QIUBOT_ROOT/backups/season_update_$(date +%Y%m%d_%H%M%S)"
+RUNS_BYTES=$(stat -Lc '%s' "$RUNS_DB")
+ROOT_AVAIL=$(df -PB1 "$BACKUP_ROOT" | awk 'NR==2 {print $4}')
+MIN_FREE=$((RUNS_BYTES + 1024 * 1024 * 1024))
+[ "$ROOT_AVAIL" -ge "$MIN_FREE" ] || die "Insufficient root space for the outgoing-database rollback copy: need $MIN_FREE bytes, have $ROOT_AVAIL"
+
+STAMP=$(date +%Y%m%d_%H%M%S)
+BACKUP_DIR="$BACKUP_ROOT/season_update_$STAMP"
+RUNS_BACKUP="$BACKUP_DIR/bazaar_runs.outgoing_${OLD_PHASE}.db"
+NEW_RUNS_DB="${RUNS_TARGET}.new_${NEW_PHASE}_${STAMP}"
+COS_KEY="history/bazaar_runs_s${PREVIOUS_RUNS_SEASON_ID}_${OLD_PHASE}_${STAMP}.db"
 mkdir -p "$BACKUP_DIR"
-cp "$DATA_CLIENT" "$BACKUP_DIR/"
-cp "$GAMEDATA_DB" "$BACKUP_DIR/"
-cp "$ZH_CN_BYTES" "$BACKUP_DIR/"
-log_info "✓ 备份完成: $BACKUP_DIR"
 
-# ========== 3. 替换 GameData.db 和 zh-CN.bytes ==========
-log_info "Step 3: 替换 GameData.db 和 zh-CN.bytes"
-cp "$UPLOAD_DIR/GameData.db" "$GAMEDATA_DB"
-cp "$UPLOAD_DIR/zh-CN.bytes" "$ZH_CN_BYTES"
-log_info "✓ 数据库文件替换完成"
+cp -a "$DATA_CLIENT" "$GAMEDATA_DB" "$ZH_CN_BYTES" "$FETCH_IMAGES" "$README_IMAGES" "$BACKUP_DIR/"
 
-# ========== 3.5 修正 runs 数据库的 season 和 phase ==========
-log_info "Step 3.5: 检查并修正 runs 数据库"
-
-if [ "$UPDATE_TYPE" = "patch" ]; then
-    CUTOFF_UTC="$RELEASE_TIME_UTC"
-    FIX_SEASON=0
-elif [ "$UPDATE_TYPE" = "season" ]; then
-    CUTOFF_UTC="$SEASON_START_UTC"
-    FIX_SEASON=1
-fi
-
-FIX_RESULT=$(python3 << PYEOF
-import sqlite3
-
-db = "$RUNS_DB"
-fix_season = $FIX_SEASON
-old_season = $RUNS_SEASON_ID
-new_season = $CURRENT_SEASON_ID
-new_phase = "$NEW_PHASE"
-cutoff_utc = "$CUTOFF_UTC"
-
-conn = sqlite3.connect(db)
-
-if fix_season:
-    # 大赛季：同时修正 season 和 phase
-    count = conn.execute(
-        "SELECT COUNT(*) FROM runs WHERE season=? AND created_at >= ?",
-        (old_season, cutoff_utc)
-    ).fetchone()[0]
-    if count > 0:
-        conn.execute(
-            "UPDATE runs SET season=?, phase=? WHERE season=? AND created_at >= ?",
-            (new_season, new_phase, old_season, cutoff_utc)
-        )
-else:
-    # 补丁：只修正 phase（season 不变）
-    count = conn.execute(
-        "SELECT COUNT(*) FROM runs WHERE season=? AND created_at >= ?",
-        (old_season, cutoff_utc)
-    ).fetchone()[0]
-    if count > 0:
-        conn.execute(
-            "UPDATE runs SET phase=? WHERE season=? AND created_at >= ?",
-            (new_phase, old_season, cutoff_utc)
-        )
-
-if count > 0:
-    conn.commit()
-
-print(f"FIXED:{count}")
-conn.close()
-PYEOF
-)
-
-FIX_COUNT=$(echo "$FIX_RESULT" | grep -oP 'FIXED:\K\d+')
-if [ "$FIX_COUNT" -gt 0 ]; then
-    if [ "$FIX_SEASON" = "1" ]; then
-        log_info "✓ 已修正 $FIX_COUNT 条 runs: season S$RUNS_SEASON_ID→S$CURRENT_SEASON_ID, phase→$NEW_PHASE"
-    else
-        log_info "✓ 已修正 $FIX_COUNT 条 runs: phase→$NEW_PHASE"
+rollback() {
+    local status=$?
+    if [ "$status" -ne 0 ]; then
+        log_warn "Update failed; restoring application files and outgoing database"
+        sudo systemctl stop "$WEB_SERVICE" || true
+        cp -a "$BACKUP_DIR/$(basename "$DATA_CLIENT")" "$DATA_CLIENT" || true
+        cp -a "$BACKUP_DIR/$(basename "$GAMEDATA_DB")" "$GAMEDATA_DB" || true
+        cp -a "$BACKUP_DIR/$(basename "$ZH_CN_BYTES")" "$ZH_CN_BYTES" || true
+        cp -a "$BACKUP_DIR/$(basename "$FETCH_IMAGES")" "$FETCH_IMAGES" || true
+        cp -a "$BACKUP_DIR/$(basename "$README_IMAGES")" "$README_IMAGES" || true
+        if [ -f "$RUNS_BACKUP" ]; then
+            cp "$RUNS_BACKUP" "$RUNS_TARGET" || true
+            rm -f "${RUNS_TARGET}-wal" "${RUNS_TARGET}-shm" || true
+        fi
+        rm -f "$NEW_RUNS_DB" || true
+        restart_and_verify || true
     fi
-else
-    log_info "✓ 无需修正（时间点之后无误标数据）"
-fi
+    exit "$status"
+}
+trap rollback EXIT
 
-# ========== 4. 更新 data_client.py ==========
-log_info "Step 4: 更新 data_client.py"
+log_info 'Stopping Web service to freeze the outgoing database'
+sudo systemctl stop "$WEB_SERVICE"
+log_info "Creating complete outgoing-database rollback/history copy: $RUNS_BACKUP"
+online_backup "$RUNS_DB" "$RUNS_BACKUP"
+validate_sqlite "$RUNS_BACKUP"
+RUNS_SHA=$(sha256sum "$RUNS_BACKUP" | awk '{print $1}')
+RUNS_SIZE=$(stat -Lc '%s' "$RUNS_BACKUP")
+log_info "Uploading complete history database to COS: $COS_KEY"
+"$COSCMD" upload "$RUNS_BACKUP" "$COS_KEY"
+COS_INFO=$("$COSCMD" info "$COS_KEY")
+printf '%s\n' "$COS_INFO" | grep -q "$RUNS_SIZE" || die 'COS history object size does not match local archive'
+log_info "COS history verified; SHA-256: $RUNS_SHA; bytes: $RUNS_SIZE"
+
+log_info 'Building an empty online database for the new phase'
+python3 "$ARCHIVE_BUILDER" \
+    --source "$RUNS_BACKUP" \
+    --destination "$NEW_RUNS_DB" \
+    --phase-start-utc "$CUTOFF_UTC" \
+    --target-season "$TARGET_RUNS_SEASON_ID" \
+    --target-phase "$NEW_PHASE"
+validate_sqlite "$NEW_RUNS_DB"
+mv -f "$NEW_RUNS_DB" "$RUNS_TARGET"
+rm -f "${RUNS_TARGET}-wal" "${RUNS_TARGET}-shm"
+log_info 'Outgoing runs were archived to COS and removed from the online database'
+
+if [ "$SKIP_ASSETS" -eq 0 ]; then
+    cp "$UPLOAD_DIR/GameData.db" "$GAMEDATA_DB"
+    cp "$UPLOAD_DIR/zh-CN.bytes" "$ZH_CN_BYTES"
+    python3 "$CACHE_REBUILDER"
+fi
+sed -i "s/^CURRENT_SEASON_ID = .*/CURRENT_SEASON_ID = $CURRENT_SEASON_ID/" "$DATA_CLIENT"
+sed -i "s/^RUNS_SEASON_ID = .*/RUNS_SEASON_ID = $TARGET_RUNS_SEASON_ID/" "$DATA_CLIENT"
+sed -i "s/^CURRENT_PHASE = .*/CURRENT_PHASE = \"$NEW_PHASE\"  # Current season phase/" "$DATA_CLIENT"
+# CDN 资源版本不一定与 phase 相同。补丁更新沿用当前图片资源版本；
+# 仅在确认 CDN 已发布新 z<version> 路径时，通过 CARD_IMAGE_VERSION 显式覆盖。
 if [ "$UPDATE_TYPE" = "season" ]; then
-    sed -i "s/^CURRENT_SEASON_ID = .*/CURRENT_SEASON_ID = $CURRENT_SEASON_ID/" "$DATA_CLIENT"
-    sed -i "s/^RUNS_SEASON_ID = .*/RUNS_SEASON_ID = $RUNS_SEASON_ID/" "$DATA_CLIENT"
+    log_warn 'Card image CDN version must be verified separately; fetch_card_images.py was not auto-updated.'
 fi
-sed -i "s/^CURRENT_PHASE = .*/CURRENT_PHASE = \"$NEW_PHASE\"  # 当前赛季阶段，补丁后手动更新/" "$DATA_CLIENT"
-log_info "✓ data_client.py 已更新"
+sed -i "s/\"version\": \"[0-9.]*\"/\"version\": \"$NEW_PHASE\"/" "$README_IMAGES"
+find "$QIUBOT_ROOT/plugins/bazaar_plugin" "$QIUBOT_ROOT/web_runs" -name '*.pyc' -delete
 
-# ========== 5. 更新 fetch_card_images.py ==========
-log_info "Step 5: 更新 fetch_card_images.py"
-sed -i "s/'version': '[^']*'/'version': '$NEW_PHASE'/" "$FETCH_IMAGES"
-log_info "✓ fetch_card_images.py 已更新"
+restart_and_verify || die 'Service restart or health check failed'
+validate_sqlite "$RUNS_DB"
 
-# ========== 6. 更新 README_card_images.md ==========
-log_info "Step 6: 更新 README_card_images.md"
-if [ -f "$README_IMAGES" ]; then
-    # README 里是 JSON 格式: "version": "17.3"
-    sed -i "s/\"version\": \"[0-9.]*\"/\"version\": \"$NEW_PHASE\"/" "$README_IMAGES"
-    log_info "✓ README_card_images.md 已更新"
-else
-    log_warn "未找到 $README_IMAGES，跳过"
-fi
-
-# ========== 7. 清理 pyc 缓存 ==========
-log_info "Step 7: 清理 Python 缓存"
-find "$QIUBOT_ROOT/plugins/bazaar_plugin" -name '*.pyc' -delete
-find "$QIUBOT_ROOT/web_runs" -name '*.pyc' -delete
-log_info "✓ pyc 缓存已清理"
-
-# ========== 8. 重启 web_runs 服务 ==========
-log_info "Step 8: 重启 web_runs 服务"
-pkill -f 'python.*app.py' || true
-sleep 2
-cd "$QIUBOT_ROOT/web_runs"
-nohup ../venv/bin/python app.py >> logs/app.log 2>&1 &
-sleep 3
-log_info "✓ web_runs 服务已重启"
-
-# ========== 9. 验证接口 ==========
-log_info "Step 9: 验证接口"
-RESPONSE=$(curl -s 'http://localhost:1027/api/runs?hero=Vanessa&min_wins=10&rank=all')
-TOTAL=$(echo "$RESPONSE" | python3 -c "import json,sys; print(json.load(sys.stdin).get('total', 0))")
-if [ "$TOTAL" -gt 0 ]; then
-    log_info "✓ 接口验证通过: total = $TOTAL"
-else
-    log_warn "接口返回 total = 0，请检查日志"
-fi
-
-# ========== 10. Git 提交 ==========
-log_info "Step 10: Git 提交"
-cd "$QIUBOT_ROOT"
-git add plugins/bazaar_plugin/data_client.py tools/fetch_card_images.py docs/README_card_images.md 2>/dev/null || true
+log_info 'Update complete.'
+log_info "Backup directory: $BACKUP_DIR"
+log_info "COS rollback backup: $COS_KEY"
+log_info "Current config: season=$CURRENT_SEASON_ID runs_season=$TARGET_RUNS_SEASON_ID phase=$NEW_PHASE"
+log_warn 'Required follow-up: verify the current BazaarDB CDN version before refreshing card_images.json; phase and z<version> can differ.'
 if [ "$UPDATE_TYPE" = "season" ]; then
-    COMMIT_MSG="chore: 赛季更新 S$NEW_SEASON_ID ($NEW_PHASE)"
-else
-    COMMIT_MSG="chore: 补丁更新 $NEW_PHASE"
+    log_warn 'Required follow-up: update Windows collector SEASON_START before the next scheduled collection.'
 fi
-git commit -m "$COMMIT_MSG" || log_warn "无新改动需要提交"
-log_info "✓ Git 提交完成"
+log_warn 'Git is intentionally not committed here. Review and commit from the authoritative local repository.'
 
-# ========== 11. 提示后续操作 ==========
-echo ""
-log_info "========== 更新完成 =========="
-log_info "当前配置:"
-log_info "  CURRENT_SEASON_ID = $(grep -oP 'CURRENT_SEASON_ID = \K\d+' $DATA_CLIENT)"
-log_info "  CURRENT_PHASE = $(grep -oP 'CURRENT_PHASE = \"\K[^\"]+' $DATA_CLIENT)"
-log_info "  RUNS_SEASON_ID = $(grep -oP 'RUNS_SEASON_ID = \K\d+' $DATA_CLIENT)"
-echo ""
-log_warn "后续手动操作:"
-log_warn "  1. 推送 Git: cd $QIUBOT_ROOT && git push origin main"
-if [ "$UPDATE_TYPE" = "season" ]; then
-    log_warn "  2. 更新 Windows 采集脚本的 SEASON_START (D:\\PJ\\QiuBot\\tools\\bazaardb_runs_collector.py)"
-fi
-log_warn "  3. 重新拉取卡牌图片: cd $QIUBOT_ROOT/tools && ../venv/bin/python fetch_card_images.py"
-log_warn "  4. 清理上传目录: rm $UPLOAD_DIR/GameData.db $UPLOAD_DIR/zh-CN.bytes"
-echo ""
+rm -f "$RUNS_BACKUP"
+log_info 'Removed local runs rollback copy after COS verification; metadata and application-file backups remain locally.'
+trap - EXIT
