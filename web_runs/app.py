@@ -549,6 +549,9 @@ def api_runs():
     cards_raw = request.args.get('cards', '').strip()
     cards = [c.strip() for c in cards_raw.split('+') if c.strip()] or None
     days = request.args.get('days', type=int)
+    day = request.args.get('day', type=int)
+    if day is not None and not 1 <= day <= 10:
+        return jsonify({'error': '游戏 Day 仅支持 1-10'}), 400
     min_wins = request.args.get('min_wins', default=10, type=int)
     page = request.args.get('page', default=1, type=int)
     rank_filter = request.args.get('rank', 'all')
@@ -561,14 +564,17 @@ def api_runs():
             if not resolved:
                 return jsonify({'error': f'未识别的英雄: {hero}'}), 400
             hero = resolved
-        result = client.query(hero=hero, cards=cards, days=days, min_wins=min_wins, page=page, rank_filter=rank_filter)
+        result = client.query(hero=hero, cards=cards, days=days, min_wins=min_wins,
+                              page=page, rank_filter=rank_filter, day=day)
         ip = _mask_ip(request.headers.get('X-Forwarded-For', request.remote_addr).split(',')[0].strip())
-        _log_query('runs', {'hero': hero, 'cards': cards, 'days': days, 'min_wins': min_wins, 'page': page, 'rank': rank_filter},
+        _log_query('runs', {'hero': hero, 'cards': cards, 'days': days, 'day': day,
+                            'min_wins': min_wins, 'page': page, 'rank': rank_filter},
                    ip, result.get('total', 0), True)
         return jsonify(result)
     except Exception as e:
         ip = _mask_ip(request.headers.get('X-Forwarded-For', request.remote_addr).split(',')[0].strip())
-        _log_query('runs', {'hero': hero, 'cards': cards_raw, 'days': days, 'min_wins': min_wins, 'page': page}, ip, 0, False)
+        _log_query('runs', {'hero': hero, 'cards': cards_raw, 'days': days, 'day': day,
+                            'min_wins': min_wins, 'page': page}, ip, 0, False)
         return jsonify({'error': str(e)}), 500
 
 
