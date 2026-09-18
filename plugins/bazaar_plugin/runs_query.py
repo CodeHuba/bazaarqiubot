@@ -218,62 +218,109 @@ class RunsQuery:
               min_wins: Optional[int] = None,
               page: int = 1,
               page_size: int = 5,
-              rank_filter: str = "all") -> Dict:
-        """
-        查询 runs，返回 {runs, total, page, pages, query_desc}
-        """
+              rank_filter: str = "all",
+              day: Optional[int] = None) -> Dict:
+        """查询 runs；先完成筛选和分页，只为当前页构建展示数据。"""
         if not self.conn:
             self.load()
 
-        # 默认只展示当前补丁阶段的阵容，避免旧补丁数据混入。
-        sql = "SELECT id, hero, username, created_at, items_json, skills_json, stat_wins, stat_losses, screenshot_url FROM runs WHERE season=? AND phase=?"
+        select_columns = (
+            "id, hero, username, created_at, items_json, skills_json, combats_json, "
+            "stat_wins, stat_losses, screenshot_url"
+        )
+        where = ["season=?", "phase=?"]
         params = [RUNS_SEASON_ID, CURRENT_PHASE]
-
         if hero:
-            sql += " AND LOWER(hero) = LOWER(?)"
+            # resolve_hero 已返回规范英文名，直接比较可使用 hero 复合索引。
+            where.append("hero=?")
             params.append(hero)
         if days:
             cutoff = (datetime.utcnow() - timedelta(days=days)).isoformat()
-            sql += " AND created_at >= ?"
+            where.append("created_at >= ?")
             params.append(cutoff)
         if min_wins:
-            sql += " AND stat_wins >= ?"
+            where.append("stat_wins >= ?")
             params.append(min_wins)
         if rank_filter == 'legendary':
-            sql += " AND player_rank='Legendary'"
+            where.append("player_rank='Legendary'")
 
-        sql += " ORDER BY created_at DESC"
-        rows = self.conn.execute(sql, params).fetchall()
-
-        # 卡牌筛选
+        base_sql = " FROM runs WHERE " + " AND ".join(where)
         card_ids_sets = []
         if cards:
             for card_name in cards:
                 ids = self.find_card_ids(card_name)
-                if ids:
-                    card_ids_sets.append(set(ids))
-                else:
+                if not ids:
                     return {'runs': [], 'total': 0, 'page': page, 'pages': 0}
+                card_ids_sets.append(set(ids))
 
-        # 过滤
-        filtered = []
-        for row in rows:
-            run_id, hero_name, username, created_at, items_json, skills_json, wins, losses, screenshot = row
-            items = json.loads(items_json) if items_json else []
-            skills = json.loads(skills_json) if skills_json else []
+        if not card_ids_sets and day is None:
+            # 无卡牌/Day 条件时让 SQLite 直接计数、排序和分页，不读取数千条 JSON。
+            total = self.conn.execute("SELECT COUNT(*)" + base_sql, params).fetchone()[0]
+            pages = (total + page_size - 1) // page_size if total else 0
+            page = max(1, min(page, pages)) if pages else 1
+            offset = (page - 1) * page_size
+            page_rows = self.conn.execute(
+                f"SELECT {select_columns}" + base_sql +
+                " ORDER BY created_at DESC LIMIT ? OFFSET ?",
+                [*params, page_size, offset],
+            ).fetchall()
+        else:
+            # 卡牌条件仍做精确集合校验，但这里只筛选，不构建图片和中文名。
+            candidate_rows = self.conn.execute(
+                f"SELECT {select_columns}" + base_sql + " ORDER BY created_at DESC",
+                params,
+            ).fetchall()
+            matched_rows = []
+            for row in candidate_rows:
+                if card_ids_sets:
+                    try:
+                        items = json.loads(row[4] or '[]')
+                        skills = json.loads(row[5] or '[]')
+                    except (TypeError, ValueError, json.JSONDecodeError):
+                        # 单条历史数据损坏时跳过该行，不能让整个筛选接口返回 500。
+                        continue
+                    run_card_ids = {
+                        it.get('cardId') for it in items
+                        if isinstance(it, dict) and it.get('cardId')
+                    }
+                    run_card_ids.update(
+                        sk.get('cardId') for sk in skills
+                        if isinstance(sk, dict) and sk.get('cardId')
+                    )
+                    if not all(run_card_ids & card_set for card_set in card_ids_sets):
+                        continue
+                if day is not None:
+                    try:
+                        combats = json.loads(row[6] or '[]')
+                    except (TypeError, ValueError, json.JSONDecodeError):
+                        continue
+                    reached_days = [
+                        combat.get('d') for combat in combats
+                        if isinstance(combat, dict) and isinstance(combat.get('d'), int)
+                    ]
+                    if day not in reached_days:
+                        continue
+                matched_rows.append(row)
+            total = len(matched_rows)
+            pages = (total + page_size - 1) // page_size if total else 0
+            page = max(1, min(page, pages)) if pages else 1
+            offset = (page - 1) * page_size
+            page_rows = matched_rows[offset:offset + page_size]
 
-            run_card_ids = set(it.get('cardId') for it in items if it.get('cardId'))
-            run_card_ids.update(sk.get('cardId') for sk in skills if isinstance(sk, dict) and sk.get('cardId'))
-
-            if card_ids_sets:
-                if not all(run_card_ids & card_set for card_set in card_ids_sets):
-                    continue
-
+        runs = []
+        for row in page_rows:
+            run_id, hero_name, username, created_at, items_json, _, combats_json, wins, losses, screenshot = row
+            try:
+                items = json.loads(items_json or '[]')
+            except (TypeError, ValueError, json.JSONDecodeError):
+                # 展示数据损坏时保留该 run，其卡牌列表降级为空。
+                items = []
             item_names = []
             card_imgs = []
             card_details = []
-            from . import card_image_helper as _cih
             for it in items:
+                if not isinstance(it, dict):
+                    continue
                 cid = it.get('cardId')
                 if not cid:
                     continue
@@ -283,24 +330,33 @@ class RunsQuery:
                 zh = image_info.get('name') or self.get_zh_name(en)
                 display_name = zh if zh != en else en
                 item_names.append(display_name)
-                tex = self.tex_map.get(en, '')
-                card_imgs.append(tex)
+                card_imgs.append(self.tex_map.get(en, ''))
+                # 阵容列表不能在请求线程串行探测 CDN；浏览器加载失败时自行降级。
+                image_url = image_info.get('artLarge') or image_info.get('art') or ''
                 card_details.append({
                     'cardId': cid,
                     'name': display_name,
                     'name_en': en,
-                    'img': _cih.get_art_url(card_id=cid, internal_name=en, size='artLarge') or _cih.get_art_url(card_id=cid, internal_name=en, size='art') or '',
+                    'img': image_url,
                     'size': self.size_map.get(cid) or image_info.get('size') or 'Small',
                 })
 
             screenshot_full = ('https://usercontent.bzdb.network' + screenshot) if screenshot else ''
-            filtered.append({
+            if day is not None:
+                reached_days = [
+                    combat.get('d') for combat in json.loads(combats_json or '[]')
+                    if isinstance(combat, dict) and isinstance(combat.get('d'), int)
+                ]
+            else:
+                reached_days = None
+            runs.append({
                 'id': run_id,
                 'hero': hero_name,
                 'username': username,
                 'created_at': created_at,
                 'wins': wins or 0,
                 'losses': losses or 0,
+                'reached_days': reached_days,
                 'items': item_names,
                 'cards': card_details,
                 'card_imgs': card_imgs,
@@ -308,19 +364,7 @@ class RunsQuery:
                 'url': f"https://bazaardb.gg/run/tracker/{run_id}"
             })
 
-        total = len(filtered)
-        pages = (total + page_size - 1) // page_size if total > 0 else 0
-        page = max(1, min(page, pages)) if pages > 0 else 1
-
-        start = (page - 1) * page_size
-        end = start + page_size
-
-        return {
-            'runs': filtered[start:end],
-            'total': total,
-            'page': page,
-            'pages': pages
-        }
+        return {'runs': runs, 'total': total, 'page': page, 'pages': pages}
 
     def format_result(self, result: Dict, query_desc: str = "", raw_cmd: str = "") -> str:
         """格式化查询结果"""

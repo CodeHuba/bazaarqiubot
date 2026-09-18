@@ -1545,6 +1545,8 @@ input[type="file"] {
 .comp-hero-badge{font-size:11px;padding:2px 7px;border-radius:10px;background:rgba(255,255,255,.08);color:var(--text-secondary);border:1px solid rgba(255,255,255,.12);flex-shrink:0;}
 </style>
 
+<link rel="stylesheet" href="/static/query-progress.css">
+<script src="/static/query-progress.js"></script>
 </head>
 <body>
 <nav class="navbar">
@@ -1610,6 +1612,17 @@ input[type="file"] {
         <input id="runs-days" type="number" placeholder="不限" min="1" style="width:90px">
       </div>
       <div class="form-group">
+        <label>游戏 Day</label>
+        <select id="runs-day">
+          <option value="">不限</option>
+          <option value="1">Day 1</option><option value="2">Day 2</option>
+          <option value="3">Day 3</option><option value="4">Day 4</option>
+          <option value="5">Day 5</option><option value="6">Day 6</option>
+          <option value="7">Day 7</option><option value="8">Day 8</option>
+          <option value="9">Day 9</option><option value="10">Day 10</option>
+        </select>
+      </div>
+      <div class="form-group">
         <label>段位</label>
         <select id="runs-rank">
           <option value="all" selected>全部段位</option>
@@ -1631,6 +1644,8 @@ input[type="file"] {
 <script>
 const HEROES = {凡妮莎:'Vanessa',杜利:'Dooley',马克:'Mak',皮格:'Pygmalien',斯黛拉:'Stelle',朱尔斯:'Jules',卡诺克:'Karnok',双龙:'The Dragons'};
 let lastQuery = 0;
+let activeRunsController = null;
+let activeRunsRequestId = 0;
 // 初始化视图状态
 document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('comp-result').style.display = 'none';
@@ -1669,6 +1684,11 @@ function winrateColor(r) {
 }
 
 async function queryRuns(page) {
+  if (activeRunsController) {
+    activeRunsController.abort();
+    activeRunsController = null;
+    activeRunsRequestId += 1;
+  }
   const err = checkRate();
   if (err) { showError('runs-error', err); return; }
   showError('runs-error', '');
@@ -1676,14 +1696,24 @@ async function queryRuns(page) {
   const cards = document.getElementById('runs-cards').value.trim();
   const wins = document.getElementById('runs-wins').value;
   const days = document.getElementById('runs-days').value;
+  const day = document.getElementById('runs-day').value;
   const rank = document.getElementById('runs-rank').value;
   // 阵容分析模式
   if (_viewMode === 'comp') {
+    if (activeRunsController) {
+      activeRunsController.abort();
+      activeRunsController = null;
+      activeRunsRequestId += 1;
+    }
     document.getElementById('runs-result').style.display = 'none';
     document.getElementById('comp-result').style.display = '';
     await queryComp();
     return;
   }
+  const requestId = ++activeRunsRequestId;
+  if (activeRunsController) activeRunsController.abort();
+  activeRunsController = new AbortController();
+  const controller = activeRunsController;
   document.getElementById('runs-result').style.display = '';
   document.getElementById('comp-result').style.display = 'none';
   const _runsEl = document.getElementById('runs-result');
@@ -1692,6 +1722,9 @@ async function queryRuns(page) {
     <div class="runs-progress-bar-bg"><div class="runs-progress-bar" id="runs-pbar"></div></div>
     <div class="runs-progress-label" id="runs-pct">0%</div>
   </div>`;
+  const progressStartedAt = performance.now();
+  // 让浏览器先完成一次绘制，避免快速接口返回时进度条只写入 DOM、用户完全看不到。
+  await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
   let _runsPct = 0;
   const _runsTimer = setInterval(() => {
     if (_runsPct < 80) {
@@ -1706,18 +1739,40 @@ async function queryRuns(page) {
   if (hero) params.set('hero', hero);
   if (cards) params.set('cards', cards);
   if (days) params.set('days', days);
+  if (day) params.set('day', day);
+  const timeoutId = setTimeout(() => controller.abort(), 30000);
   try {
-    const res = await fetch('/api/runs?' + params);
+    const res = await fetch('/api/runs?' + params, {signal: controller.signal});
+    if (!res.ok) {
+      let message = `HTTP ${res.status}`;
+      try { const body = await res.json(); message = body.error || message; } catch (_) {}
+      throw new Error(message);
+    }
     const data = await res.json();
-    clearInterval(_runsTimer);
+    if (requestId !== activeRunsRequestId) return;
+    const remaining = Math.max(0, 600 - (performance.now() - progressStartedAt));
+    if (remaining > 0) await new Promise(resolve => setTimeout(resolve, remaining));
+    if (requestId !== activeRunsRequestId) return;
     const bar = document.getElementById('runs-pbar');
     const lbl = document.getElementById('runs-pct');
     if (bar) bar.style.width = '100%';
     if (lbl) lbl.textContent = '100%';
-    await new Promise(res => setTimeout(res, 300));
+    await new Promise(resolve => setTimeout(resolve, 300));
+    if (requestId !== activeRunsRequestId) return;
     if (data.error) { showError('runs-error', data.error); _runsEl.innerHTML=''; return; }
-    renderRuns(data, page, {hero, cards, wins, days});
-  } catch(e) { clearInterval(_runsTimer); showError('runs-error', '请求失败: '+e.message); _runsEl.innerHTML=''; }
+    renderRuns(data, page, {hero, cards, wins, days, day});
+  } catch(e) {
+    if (requestId !== activeRunsRequestId) return;
+    const message = e.name === 'AbortError'
+      ? '查询超时，请缩小筛选范围后重试'
+      : '请求失败: ' + e.message;
+    showError('runs-error', message);
+    _runsEl.innerHTML='';
+  } finally {
+    clearTimeout(timeoutId);
+    clearInterval(_runsTimer);
+    if (requestId === activeRunsRequestId) activeRunsController = null;
+  }
 }
 
 function renderRuns(data, page, params) {
@@ -1763,7 +1818,7 @@ function renderRuns(data, page, params) {
     <div class="result-card">
       <div class="result-header">
         <span>阵容列表</span>
-        <span class="total">共 ${total} 条结果（第 ${page}/${pages} 页）</span>
+        <span class="total">共 ${total} 条结果（第 ${page}/${pages} 页）${params.day ? ` · 打到 Day ${params.day}` : ''}</span>
       </div>
       ${items}
       ${pagination}
