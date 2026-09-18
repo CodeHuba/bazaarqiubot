@@ -122,12 +122,13 @@ def test_day_query_skips_row_with_broken_combats_json(tmp_path):
     assert result["runs"] == []
 
 
-def test_api_runs_validates_day_range_before_querying():
+def test_api_runs_accepts_any_positive_game_day_before_querying():
     app_source = (Path(__file__).parents[1] / "web_runs" / "app.py").read_text(encoding="utf-8")
     start = app_source.index("def api_runs():")
     end = app_source.index("\n\n@app.route('/api/winrate'", start)
     function = app_source[start:end]
 
-    validation = "if day is not None and not 1 <= day <= 10:"
+    validation = "if day is not None and day < 1:"
     assert validation in function
+    assert "1 <= day <= 10" not in function
     assert function.index(validation) < function.index("client = RunsQuery()")

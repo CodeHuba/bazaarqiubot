@@ -4,6 +4,7 @@ BazaarDB Runs 查询 Web API
 """
 import sys
 import os
+import hmac
 import time
 import json
 import sqlite3 as _sqlite3
@@ -29,8 +30,172 @@ from ocr_worker import start_worker, enqueue_run
 
 from plugins.bazaar_plugin.runs_query import RunsQuery
 from plugins.bazaar_plugin.data_client import RUNS_SEASON_ID, CURRENT_PHASE
+from web_runs.day_snapshot_store import DaySnapshotStore
 
-INGEST_TOKEN = '2320869dd20357f336a056abc6b095ea615651ceadabf698'
+INGEST_TOKEN = os.getenv('BAZAAR_INGEST_TOKEN', '')
+RUNS_DB_PATH = os.getenv('RUNS_DB_PATH', '/opt/qiubot/data/bazaar_runs.db')
+DAY_SNAPSHOT_DB_PATH = os.getenv('DAY_SNAPSHOT_DB_PATH', '/opt/qiubot/data/bazaar_day_snapshots.db')
+ENABLE_DAY_SNAPSHOT_QUEUE = os.getenv('ENABLE_DAY_SNAPSHOT_QUEUE', '0') == '1'
+SNAPSHOT_LEASE_MINUTES = int(os.getenv('SNAPSHOT_LEASE_MINUTES', '10'))
+_day_snapshot_store = DaySnapshotStore(DAY_SNAPSHOT_DB_PATH)
+_day_snapshot_store_error = None
+try:
+    _day_snapshot_store.initialize()
+except Exception as exc:
+    _day_snapshot_store_error = str(exc)
+    print(f'[day-snapshot] independent store unavailable: {exc}', flush=True)
+
+
+def _require_snapshot_store():
+    if _day_snapshot_store_error:
+        return jsonify({'error': 'day snapshot store unavailable'}), 503
+    return None
+
+
+def _ingest_authorized() -> bool:
+    supplied = request.headers.get('X-Ingest-Token', '')
+    return bool(INGEST_TOKEN) and hmac.compare_digest(supplied, INGEST_TOKEN)
+
+
+# 旧快照队列保留其表结构以兼容历史数据库，但新 Worker 只使用独立 SQLite 队列。
+
+
+def _ensure_snapshot_job_schema(conn):
+    """详情快照队列只记录本服务新接收的 run，避免重叠采集和历史回填。"""
+    conn.execute('''CREATE TABLE IF NOT EXISTS run_snapshot_jobs (
+        run_id TEXT PRIMARY KEY,
+        status TEXT NOT NULL DEFAULT 'pending',
+        attempts INTEGER NOT NULL DEFAULT 0,
+        last_error TEXT,
+        queued_at TEXT NOT NULL,
+        started_at TEXT,
+        finished_at TEXT
+    )''')
+    conn.execute('''CREATE INDEX IF NOT EXISTS idx_snapshot_jobs_status_queued
+                    ON run_snapshot_jobs(status, queued_at)''')
+
+
+def _enqueue_snapshot_job(conn, run_id):
+    before = conn.total_changes
+    conn.execute('''INSERT OR IGNORE INTO run_snapshot_jobs (run_id, queued_at)
+                    VALUES (?, ?)''', (run_id, datetime.now().isoformat()))
+    return conn.total_changes > before
+
+
+def _claim_snapshot_jobs(conn, limit=20, max_attempts=5):
+    """原子领取待处理任务；超时 processing 会恢复，达到上限后不再领取。"""
+    now = datetime.now()
+    lease_cutoff = (now - __import__('datetime').timedelta(minutes=90)).isoformat()
+    conn.execute('''UPDATE run_snapshot_jobs SET status='retry',
+                    last_error='processing lease expired'
+                    WHERE status='processing' AND started_at < ? AND attempts < ?''',
+                 (lease_cutoff, max_attempts))
+    conn.execute('''UPDATE run_snapshot_jobs SET status='failed', finished_at=?
+                    WHERE status IN ('pending', 'retry', 'processing') AND attempts >= ?''',
+                 (now.isoformat(), max_attempts))
+    rows = conn.execute('''SELECT run_id, attempts FROM run_snapshot_jobs
+                           WHERE status IN ('pending', 'retry') AND attempts < ?
+                           ORDER BY queued_at LIMIT ?''', (max_attempts, limit)).fetchall()
+    claimed = []
+    for run_id, attempts in rows:
+        updated = conn.execute('''UPDATE run_snapshot_jobs
+            SET status='processing', attempts=attempts+1, started_at=?, last_error=NULL
+            WHERE run_id=? AND status IN ('pending', 'retry') AND attempts=?''',
+            (now.isoformat(), run_id, attempts)).rowcount
+        if updated:
+            claimed.append({'run_id': run_id, 'attempts': attempts + 1})
+    return claimed
+
+
+def _complete_snapshot_job(conn, run_id, success, error=None, max_attempts=5):
+    attempts = conn.execute('SELECT attempts FROM run_snapshot_jobs WHERE run_id=?',
+                            (run_id,)).fetchone()
+    status = 'success' if success else ('failed' if attempts and attempts[0] >= max_attempts else 'retry')
+    conn.execute('''UPDATE run_snapshot_jobs
+                    SET status=?, last_error=?, finished_at=?
+                    WHERE run_id=? AND status='processing' ''',
+                 (status, error, datetime.now().isoformat(), run_id))
+
+
+def _ensure_combat_snapshot_schema(conn):
+    """为按游戏日的阵容/转型分析建立可索引的事实表。"""
+    conn.execute('''CREATE TABLE IF NOT EXISTS run_combat_snapshots (
+        event_id TEXT PRIMARY KEY,
+        run_id TEXT NOT NULL,
+        season INTEGER NOT NULL,
+        phase TEXT NOT NULL,
+        hero TEXT,
+        player_rank TEXT,
+        day INTEGER NOT NULL,
+        hour INTEGER,
+        captured_at TEXT,
+        player_level INTEGER,
+        outcome TEXT,
+        is_pvp INTEGER,
+        opponent_hero TEXT,
+        opponent_name TEXT,
+        player_board_json TEXT NOT NULL,
+        player_skills_json TEXT NOT NULL,
+        opponent_board_json TEXT NOT NULL,
+        opponent_skills_json TEXT NOT NULL
+    )''')
+    conn.execute('''CREATE TABLE IF NOT EXISTS run_combat_player_cards (
+        event_id TEXT NOT NULL REFERENCES run_combat_snapshots(event_id),
+        card_id TEXT NOT NULL,
+        card_kind TEXT NOT NULL,
+        tier TEXT,
+        enchantment TEXT,
+        slot_position INTEGER,
+        PRIMARY KEY (event_id, card_id, card_kind, slot_position)
+    ) WITHOUT ROWID''')
+    # Day/hero/rank 限定目标样本后，以 run_id 快速关联同一局的后续快照。
+    conn.execute('''CREATE INDEX IF NOT EXISTS idx_combat_snapshot_scope_day_run
+                    ON run_combat_snapshots(season, phase, day, hero, player_rank, run_id)''')
+    conn.execute('''CREATE INDEX IF NOT EXISTS idx_combat_snapshot_run_day
+                    ON run_combat_snapshots(run_id, day, hour)''')
+    # 以关键卡反查开局样本，避免扫描 snapshots_json 或 runs 全表。
+    conn.execute('''CREATE INDEX IF NOT EXISTS idx_combat_player_cards_card_event
+                    ON run_combat_player_cards(card_id, card_kind, event_id)''')
+
+
+def _insert_combat_snapshots(conn, run):
+    """写入每场 CombatStart；卡牌拆为行，卡面 JSON 仅保存在战斗详情行。"""
+    snapshots = run.get('combatSnapshots') or []
+    for snapshot in snapshots:
+        event_id = snapshot.get('eventId')
+        day = snapshot.get('day')
+        if not event_id or not isinstance(day, int):
+            continue
+        combat = snapshot.get('combat') or {}
+        conn.execute('''INSERT OR IGNORE INTO run_combat_snapshots
+            (event_id, run_id, season, phase, hero, player_rank, day, hour, captured_at,
+             player_level, outcome, is_pvp, opponent_hero, opponent_name,
+             player_board_json, player_skills_json, opponent_board_json, opponent_skills_json)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+            (event_id, run['id'], RUNS_SEASON_ID, CURRENT_PHASE, run.get('hero'),
+             run.get('playerRank'), day, snapshot.get('hour'), snapshot.get('ts'),
+             snapshot.get('playerLevel'), combat.get('outcome'), int(bool(combat.get('is_pvp'))),
+             combat.get('opponent_hero'), combat.get('opponent_name'),
+             json.dumps(snapshot.get('playerBoard', []), ensure_ascii=False),
+             json.dumps(snapshot.get('playerSkills', []), ensure_ascii=False),
+             json.dumps(snapshot.get('opponentBoard', []), ensure_ascii=False),
+             json.dumps(snapshot.get('opponentSkills', []), ensure_ascii=False)))
+        for card_kind, cards in (('item', snapshot.get('playerBoard', [])),
+                                 ('skill', snapshot.get('playerSkills', []))):
+            for card in cards:
+                # tracker 的 board/skills 在部分 run 中包含字符串引用；原始值保留在 JSON，
+                # 只有完整对象才能物化为可检索卡牌事实行。
+                if not isinstance(card, dict):
+                    continue
+                card_id = card.get('baseId') or card.get('cardId')
+                if not card_id:
+                    continue
+                conn.execute('''INSERT OR IGNORE INTO run_combat_player_cards
+                    (event_id, card_id, card_kind, tier, enchantment, slot_position)
+                    VALUES (?, ?, ?, ?, ?, ?)''',
+                    (event_id, card_id, card_kind, card.get('tierOverride'),
+                     card.get('enchantmentOverride'),
+                     card.get('slotPosition') if card.get('slotPosition') is not None else -1))
 
 
 def _mask_ip(ip):
@@ -41,6 +206,7 @@ def _mask_ip(ip):
     return f"{p[0]}.{p[1]}.*.*" if len(p) == 4 else ip
 
 app = Flask(__name__, static_folder='static')
+app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024
 _card_art_proxy_locks: dict[str, threading.Lock] = {}
 # 线上仅通过 Caddy 单层反代访问；由 Caddy 覆盖 X-Forwarded-For 后再解析真实客户端地址。
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1)
@@ -569,8 +735,8 @@ def api_runs():
     cards = [c.strip() for c in cards_raw.split('+') if c.strip()] or None
     days = request.args.get('days', type=int)
     day = request.args.get('day', type=int)
-    if day is not None and not 1 <= day <= 10:
-        return jsonify({'error': '游戏 Day 仅支持 1-10'}), 400
+    if day is not None and day < 1:
+        return jsonify({'error': '游戏 Day 必须大于等于 1'}), 400
     min_wins = request.args.get('min_wins', default=10, type=int)
     page = request.args.get('page', default=1, type=int)
     rank_filter = request.args.get('rank', 'all')
@@ -847,18 +1013,24 @@ def card_img(tex_name):
 @app.route('/api/ingest', methods=['POST'])
 def api_ingest():
     """采集脚本专用：批量写入 runs 数据"""
-    token = request.headers.get('X-Ingest-Token', '')
-    if token != INGEST_TOKEN:
+    if not _ingest_authorized():
         return jsonify({'error': 'unauthorized'}), 401
 
     data = request.get_json(silent=True)
     if not data or not isinstance(data, list):
         return jsonify({'error': 'body must be a JSON array'}), 400
 
-    db_path = '/opt/qiubot/data/bazaar_runs.db'
+    db_path = RUNS_DB_PATH
     try:
         conn = __import__('sqlite3').connect(db_path, check_same_thread=False, timeout=30)
+        # 兼容既有数据库：每日战斗阵容随 run 保存，避免另建高频关联表。
+        columns = {row[1] for row in conn.execute('PRAGMA table_info(runs)')}
+        if 'snapshots_json' not in columns:
+            conn.execute('ALTER TABLE runs ADD COLUMN snapshots_json TEXT')
+        _ensure_snapshot_job_schema(conn)
+        _ensure_combat_snapshot_schema(conn)
         new_count = 0
+        eligible_snapshot_jobs = []
         for run in data:
             wins = run.get('statWins') or 0
             if wins < 1:
@@ -871,17 +1043,18 @@ def api_ingest():
                     )
                 except Exception:
                     _card_ids_text = ''
-                _before_changes = conn.total_changes
+                before_insert_changes = conn.total_changes
                 conn.execute("""INSERT OR IGNORE INTO runs
                     (id, hero, username, created_at, items_json, skills_json, combats_json,
-                     stat_wins, stat_losses, player_rating, player_rating_after,
+                     snapshots_json, stat_wins, stat_losses, player_rating, player_rating_after,
                      player_rank, player_rank_after, screenshot_url, raw_json, collected_at, season, phase, card_ids_text)
-                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                     (run['id'], run.get('hero'), run.get('username'),
                      run.get('createdAt'),
                      _items_json,
                      __import__('json').dumps(run.get('skills', []), ensure_ascii=False),
                      __import__('json').dumps(run.get('combats', []), ensure_ascii=False),
+                     __import__('json').dumps(run.get('combatSnapshots', []), ensure_ascii=False),
                      run.get('statWins'), run.get('statLosses'),
                      run.get('playerRating'), run.get('playerRatingAfter'),
                      run.get('playerRank'), run.get('playerRankAfter'),
@@ -889,8 +1062,19 @@ def api_ingest():
                      __import__('json').dumps(run, ensure_ascii=False),
                      __import__('datetime').datetime.now().isoformat(), RUNS_SEASON_ID, CURRENT_PHASE,
                      _card_ids_text))
-                if conn.total_changes > _before_changes:
+                if conn.total_changes > before_insert_changes:
                     new_count += 1
+                    if ENABLE_DAY_SNAPSHOT_QUEUE and _day_snapshot_store.eligible(
+                            run.get('playerRank'), run.get('statWins')):
+                        eligible_snapshot_jobs.append({
+                            'run_id': run['id'],
+                            'season': RUNS_SEASON_ID,
+                            'phase': CURRENT_PHASE,
+                            'hero': run.get('hero'),
+                            'player_rank': run.get('playerRank'),
+                            'stat_wins': run.get('statWins'),
+                        })
+                    _insert_combat_snapshots(conn, run)
                     # 增量追加到 Redis winrate 缓存
                     _winrate_cache_append(
                         __import__('json').dumps(run.get('items', []), ensure_ascii=False),
@@ -901,16 +1085,109 @@ def api_ingest():
             except Exception as e:
                 pass
         conn.commit()
+        total = conn.execute('SELECT COUNT(*) FROM runs').fetchone()[0]
+        conn.close()
         if new_count:
-            # 当前 Phase 有新 run 后，按需求主动使所有派生统计缓存失效。
+            # 当前 Phase 有新 run 后，使所有派生统计缓存失效。
             from plugins.bazaar_plugin import runs_query as _runs_query
             _runs_query._card_tier_cache.clear()
             _runs_query._hero_overview_cache.clear()
-        total = conn.execute('SELECT COUNT(*) FROM runs').fetchone()[0]
-        conn.close()
-        return jsonify({'ok': True, 'new': new_count, 'total': total})
+        snapshot_queue_errors = []
+        if ENABLE_DAY_SNAPSHOT_QUEUE and _day_snapshot_store_error:
+            snapshot_queue_errors.append({'error': 'day snapshot store unavailable'})
+        elif ENABLE_DAY_SNAPSHOT_QUEUE:
+            for job in eligible_snapshot_jobs:
+                try:
+                    _day_snapshot_store.enqueue_if_eligible(**job)
+                except Exception as exc:
+                    snapshot_queue_errors.append({
+                        'run_id': job['run_id'], 'error': str(exc)[:200]})
+        return jsonify({
+            'ok': True,
+            'new': new_count,
+            'total': total,
+            'snapshot_jobs_eligible': len(eligible_snapshot_jobs),
+            'snapshot_queue_errors': snapshot_queue_errors,
+        })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+
+@app.route('/api/snapshot-jobs/status', methods=['GET'])
+def api_snapshot_jobs_status():
+    if not _ingest_authorized():
+        return jsonify({'error': 'unauthorized'}), 401
+    unavailable = _require_snapshot_store()
+    if unavailable:
+        return unavailable
+    return jsonify({'ok': True, **_day_snapshot_store.status(), 'store': 'day-snapshots'})
+
+
+@app.route('/api/snapshot-jobs/claim', methods=['POST'])
+def api_snapshot_jobs_claim():
+    if not _ingest_authorized():
+        return jsonify({'error': 'unauthorized'}), 401
+    body = request.get_json(silent=True) or {}
+    limit = body.get('limit', 5)
+    if not isinstance(limit, int) or isinstance(limit, bool) or not 1 <= limit <= 20:
+        return jsonify({'error': 'limit must be an integer between 1 and 20'}), 400
+    unavailable = _require_snapshot_store()
+    if unavailable:
+        return unavailable
+    return jsonify({'jobs': _day_snapshot_store.claim(
+        limit=limit, lease_minutes=SNAPSHOT_LEASE_MINUTES)})
+
+
+@app.route('/api/snapshot-jobs/<run_id>', methods=['PUT'])
+def api_snapshot_job_complete(run_id):
+    if not _ingest_authorized():
+        return jsonify({'error': 'unauthorized'}), 401
+    body = request.get_json(silent=True) or {}
+    lease_token = body.get('leaseToken')
+    if not isinstance(lease_token, str) or not 16 <= len(lease_token) <= 128:
+        return jsonify({'error': 'valid leaseToken is required'}), 400
+    unavailable = _require_snapshot_store()
+    if unavailable:
+        return unavailable
+    try:
+        if body.get('error'):
+            status = _day_snapshot_store.complete_failure(
+                run_id, body['error'], lease_token, http_status=body.get('httpStatus'),
+                elapsed_ms=body.get('elapsedMs'), error_type=body.get('errorType'))
+            return jsonify({'ok': True, 'status': status})
+        snapshots = body.get('combatSnapshots')
+        if not isinstance(snapshots, list):
+            return jsonify({'error': 'combatSnapshots must be a list'}), 400
+        if not snapshots:
+            status = _day_snapshot_store.complete_failure(
+                run_id, 'RSC response contains no CombatStart snapshots', lease_token,
+                http_status=body.get('httpStatus'), elapsed_ms=body.get('elapsedMs'),
+                error_type='EmptySnapshotPayload')
+            return jsonify({'ok': True, 'status': status})
+        if len(snapshots) > 50:
+            return jsonify({'error': 'combatSnapshots exceeds maximum length'}), 400
+        _day_snapshot_store.complete_success(
+            run_id, snapshots, lease_token,
+            http_status=body.get('httpStatus', 200), elapsed_ms=body.get('elapsedMs'))
+        return jsonify({'ok': True, 'status': 'success'})
+    except ValueError as exc:
+        return jsonify({'error': str(exc)}), 409
+
+
+@app.route('/api/snapshot-jobs/backfill-current-phase', methods=['POST'])
+def api_snapshot_jobs_backfill_current_phase():
+    if not _ingest_authorized():
+        return jsonify({'error': 'unauthorized'}), 401
+    body = request.get_json(silent=True) or {}
+    unavailable = _require_snapshot_store()
+    if unavailable:
+        return unavailable
+    if body.get('season') not in (None, RUNS_SEASON_ID) or body.get('phase') not in (None, CURRENT_PHASE):
+        return jsonify({'error': 'only current season/phase can be backfilled'}), 400
+    result = _day_snapshot_store.backfill_current_phase(
+        '/opt/qiubot/data/bazaar_runs.db', RUNS_SEASON_ID, CURRENT_PHASE)
+    return jsonify({'ok': True, **result, 'store': 'day-snapshots'})
 
 
 @app.route('/api/card-tier', methods=['GET'])

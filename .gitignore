@@ -36,6 +36,7 @@ data/card_id_mapping.json
 
 # 配置文件（含敏感信息，使用 config.example.yaml 作为模板）
 config.yaml
+tools/run_snapshot_worker.bat
 
 # 权限配置（含真实 QQ 号，使用 data/rbac.example.json 作为模板）
 data/rbac.json
