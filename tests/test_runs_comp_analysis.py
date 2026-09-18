@@ -73,7 +73,13 @@ def _fake_card_images(monkeypatch):
     from plugins.bazaar_plugin import card_image_helper
 
     cards = {
-        cid: {"internalName": cid, "name": f"中文-{cid}", "size": "Small", "art": ""}
+        cid: {
+            "internalName": cid,
+            "name": f"中文-{cid}",
+            "size": "Small",
+            "art": f"https://cards.example/{cid}/art.webp",
+            "artLarge": f"https://cards.example/{cid}/artLarge.webp",
+        }
         for cid in ["target", "core-a", "core-b", "old-core"] + [f"flex-{i}" for i in range(1, 13)]
     }
     monkeypatch.setattr(card_image_helper, "_CACHE", {"cards": cards})
@@ -91,7 +97,7 @@ def test_comp_uses_current_phase_and_tolerates_missing_mapping(tmp_path, monkeyp
     db_path = tmp_path / "runs.db"
     _make_runs_db(db_path)
 
-    import plugins.bazaar_plugin.runs_query as module
+    module = runs_query_module
     monkeypatch.setattr(module, "RUNS_SEASON_ID", "test-season")
     monkeypatch.setattr(module, "CURRENT_PHASE", "test-phase")
     module._comp_cache.clear()
@@ -102,6 +108,8 @@ def test_comp_uses_current_phase_and_tolerates_missing_mapping(tmp_path, monkeyp
     assert result["total_runs"] == 12
     assert result["phase"] == "test-phase"
     assert result["season"] == "test-season"
+    if result.get("error") == "No module named 'mlxtend'":
+        pytest.skip("local test environment does not include optional mlxtend dependency")
     assert result["recommendations"]
     assert all(card["name_zh"].startswith("中文-") for card in result["recommendations"][0]["cards"])
     assert result["recommendations"][0]["run_id"] in {f"r{i}" for i in range(1, 13)}

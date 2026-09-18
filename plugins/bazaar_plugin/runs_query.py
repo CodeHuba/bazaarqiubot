@@ -153,24 +153,21 @@ class RunsQuery:
         info = self.card_mapping.get(card_id)
         return info if isinstance(info, dict) else {}
 
-    def card_display_info(self, card_id: str, validate_image: bool = True) -> dict:
-        """返回网页统一使用的卡牌展示信息，图片优先使用 #bz db 同源原图。"""
-        from . import card_image_helper as _cih
+    def card_display_info(self, card_id: str, validate_image: bool = False) -> dict:
+        """返回网页统一展示信息；请求链路只读本地卡图缓存，不同步探测远程 CDN。"""
+        return self.card_display_info_cached(card_id)
+
+    def card_display_info_cached(self, card_id: str) -> dict:
+        """返回本地缓存中的卡牌展示信息，不在业务请求内逐张探测远程 CDN。"""
         info = self._safe_mapping_info(card_id)
         image_info = self._card_image_info(card_id)
         name_en = info.get('name') or image_info.get('internalName') or card_id
         name_zh = image_info.get('name') or self.get_zh_name(name_en)
-        if validate_image:
-            image_url = (_cih.get_art_url(card_id=card_id, internal_name=name_en, size='artLarge')
-                         or _cih.get_art_url(card_id=card_id, internal_name=name_en, size='art') or '')
-        else:
-            # 统计接口不得为每张卡串行探测 CDN；浏览器按原 URL 加载图片即可。
-            image_url = image_info.get('artLarge') or image_info.get('art') or ''
         return {
             'cardId': card_id,
             'name': name_zh if name_zh != name_en else name_en,
             'name_en': name_en,
-            'img': image_url,
+            'img': image_info.get('artLarge') or image_info.get('art') or '',
             'size': self.size_map.get(card_id) or image_info.get('size') or 'Small',
         }
 
@@ -599,16 +596,21 @@ class RunsQuery:
         # 统计每张搭档卡的出现次数和10胜次数
         total_map = defaultdict(int)
         win_map = defaultdict(int)
+        target_total = 0
 
         for items_json, wins in rows:
             try:
-                items = _json.loads(items_json)
-                run_ids = {item["cardId"] for item in items if "cardId" in item}
-            except Exception:
+                items = _json.loads(items_json or '[]')
+                run_ids = {
+                    item["cardId"] for item in items
+                    if isinstance(item, dict) and item.get("cardId")
+                }
+            except (TypeError, ValueError, KeyError):
                 continue
             # 该局必须包含目标卡
             if not (run_ids & target_ids):
                 continue
+            target_total += 1
             is_win = (wins or 0) >= wins_threshold
             # 统计搭档（排除目标卡自身）
             for cid in run_ids:
@@ -632,16 +634,8 @@ class RunsQuery:
                 continue
             results.append({"name": display['name'], "total": total, "ten_win": ten_win, "rate": rate, "img": display['img'], "size": display['size'], "name_en": en, "cardId": cid})
 
-        # 计算共现率（含目标卡的局里，搭档出现的比例）
-        target_total = sum(1 for items_json, wins in rows
-                          if (lambda ids: bool(ids & target_ids))(
-                              {item['cardId'] for item in __import__('json').loads(items_json) if 'cardId' in item}))
-
-        for r in results:
-            cid_list = [cid for cid, info in self.card_mapping.items()
-                        if (info.get('name','') == (self.en_to_zh.get(r['name'], r['name']) or r['name'])
-                            or self.get_zh_name(info.get('name','')) == r['name'])]
-            r['appear_rate'] = r['total'] / target_total if target_total > 0 else 0
+        for result in results:
+            result['appear_rate'] = result['total'] / target_total if target_total > 0 else 0
 
         by_winrate = sorted(results, key=lambda x: (-x['rate'], -x['total']))[:top_n]
         by_appear = sorted(results, key=lambda x: (-x['appear_rate'], -x['total']))[:top_n]
@@ -811,7 +805,7 @@ class RunsQuery:
             count = appearances[cid]
             if count <= 0:
                 continue
-            cards.append({**self.card_display_info(cid, validate_image=False), 'appearance_count': count,
+            cards.append({**self.card_display_info_cached(cid), 'appearance_count': count,
                           'appearance_rate': count / len(rows) if rows else 0.0,
                           'ten_win': ten_wins[cid], 'win_rate': ten_wins[cid] / count})
         rated = [card for card in cards if card['appearance_count'] >= threshold]
@@ -1006,21 +1000,14 @@ class RunsQuery:
             norm = st['appear_rate'] / max_appear if max_appear else 0.0
             return st['win_rate'] * WIN_WEIGHT + norm * APPEAR_WEIGHT
 
-        from . import card_image_helper as _cih
         def card_info(cid, is_core=False, is_new=False):
-            # card_id_mapping.json 可能缺失、过期，甚至存在 null 值；卡图缓存是更可靠的兜底来源。
-            info = self.card_mapping.get(cid) or {}
-            image_info = _cih.get_card_image(card_id=cid) or {}
-            name_en = info.get('name') or image_info.get('internalName') or cid
-            name_zh = image_info.get('name') or self.get_zh_name(name_en)
-            art_url = _cih.get_art_url(card_id=cid, internal_name=name_en, size='artLarge') or _cih.get_art_url(card_id=cid, internal_name=name_en, size='art') or ''
-            card_size = self.size_map.get(cid) or image_info.get('size') or 'Small'
+            display = self.card_display_info_cached(cid)
             return {
                 'cardId': cid,
-                'name_zh': name_zh if name_zh != name_en else name_en,
-                'name_en': name_en,
-                'img': art_url,
-                'size': card_size,
+                'name_zh': display['name'],
+                'name_en': display['name_en'],
+                'img': display['img'],
+                'size': display['size'],
                 'is_core': is_core,
                 'is_new': is_new,
             }

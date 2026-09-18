@@ -84,6 +84,20 @@ def _build_card_search_index():
     except Exception as e:
         print(f'[card_search] 索引构建失败: {e}', flush=True)
 
+def _find_card_search_matches(query_text):
+    """从启动时预热的卡牌索引精确匹配中英文名，避免请求内重复读取 JSON。"""
+    normalized = (query_text or '').strip().lower().replace(' ', '')
+    if not normalized:
+        return []
+    return [
+        item for item in _card_search_index
+        if normalized in (
+            str(item.get('en') or '').lower().replace(' ', ''),
+            str(item.get('zh') or '').lower().replace(' ', ''),
+        )
+    ]
+
+
 import threading as _threading
 _threading.Thread(target=_build_card_search_index, daemon=True).start()
 
@@ -414,6 +428,11 @@ def after_request(response):
             if _allow_feature_event(feature, page):
                 _track_feature(feature, page, outcome)
             break
+    # 大型只读统计结果允许浏览器/CDN 短期复用；服务端统计缓存仍负责更长周期复用。
+    if request.method == 'GET' and request.path in ('/api/comp', '/api/comp/card') and response.status_code == 200:
+        response.cache_control.public = True
+        response.cache_control.max_age = 60
+        response.cache_control.stale_while_revalidate = 300
     # 静态资源缓存头
     if request.path.startswith('/static/'):
         ext = request.path.rsplit('.', 1)[-1].lower()
@@ -637,7 +656,31 @@ def api_winrate():
             cards = [c.strip() for c in cards_raw.split('+') if c.strip()]
             if not cards:
                 return jsonify({'error': '请指定至少一张卡牌'}), 400
-            result = client.winrate(cards=cards, hero=hero, days=days, rank_filter=rank_filter)
+            if use_cache:
+                card_ids_sets = []
+                not_found = []
+                card_names = []
+                card_details = []
+                for card_name in cards:
+                    ids = client.find_card_ids(card_name)
+                    if not ids:
+                        not_found.append(card_name)
+                    else:
+                        card_ids_sets.append(set(ids))
+                        display = client.card_display_info(ids[0])
+                        card_names.append(display['name'])
+                        card_details.append(display)
+                total, ten_win = _winrate_from_cache(card_ids_sets) if card_ids_sets else (0, 0)
+                result = {
+                    'total': total,
+                    'ten_win': ten_win,
+                    'rate': ten_win / total if total else 0.0,
+                    'card_names': card_names,
+                    'card_details': card_details,
+                    'not_found': not_found,
+                }
+            else:
+                result = client.winrate(cards=cards, hero=hero, days=days, rank_filter=rank_filter)
             _log_query('winrate', {'cards': cards, 'hero': hero_raw, 'days': days, 'rank': rank_filter}, ip, result.get('total', 0), True)
             return jsonify(result)
     except Exception as e:
@@ -963,26 +1006,23 @@ def api_comp_card():
     try:
         query = RunsQuery()
         query.load()
-        # 从 card_images.json 查 cardId（支持中英文、去空格精确匹配）
-        import json as _json
-        _ci = _json.load(open('/opt/qiubot/plugins/bazaar_plugin/cache/card_images.json', encoding='utf-8'))
-        _cards = _ci.get('cards', {})
-        _name_to_ids = {}
-        _zh_to_ids = {}
-        for _cid, _info in _cards.items():
-            _info = _info or {}
-            _en = _info.get('internalName', '')
-            _zh = _info.get('name', '')
-            if _en:
-                _name_to_ids.setdefault(_en.lower().replace(' ', ''), []).append(_cid)
-            if _zh and _zh != _en:
-                _zh_to_ids.setdefault(_zh.lower().replace(' ', ''), []).append(_cid)
-        _q = card_raw.lower().replace(' ', '')
-        _found = _zh_to_ids.get(_q) or _name_to_ids.get(_q) or []
-        if not _found:
+        # 复用启动时预热的卡牌搜索索引，不在每个请求中重新读 card_images.json。
+        matches = _find_card_search_matches(card_raw)
+        if not matches:
+            # 服务启动后的短暂预热窗口内，复用 RunsQuery 已加载的索引兜底。
+            candidate_ids = query.find_card_ids(card_raw)
+            matches = []
+            for candidate_id in candidate_ids:
+                display = query.card_display_info(candidate_id)
+                matches.append({
+                    'cardId': candidate_id,
+                    'zh': display.get('name') or card_raw,
+                    'en': display.get('name_en') or card_raw,
+                })
+        if not matches:
             return jsonify({'error': f'未找到卡牌: {card_raw}'}), 404
-        required_card = _found[0]
-        card_display = _cards.get(required_card, {}).get('name') or card_raw
+        required_card = matches[0]['cardId']
+        card_display = matches[0].get('zh') or matches[0].get('en') or card_raw
         # 解析职业（可选）
         hero = None
         if hero_raw:
