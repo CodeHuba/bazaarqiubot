@@ -25,6 +25,146 @@ from plugins.bazaar_plugin.runs_query import RunsQuery
 from plugins.bazaar_plugin.data_client import RUNS_SEASON_ID, CURRENT_PHASE
 
 INGEST_TOKEN = '2320869dd20357f336a056abc6b095ea615651ceadabf698'
+# Day 快照采集暂停时，ingest 仍保存 runs，但不创建新的详情任务。
+ENABLE_DAY_SNAPSHOT_QUEUE = False
+
+
+def _ensure_snapshot_job_schema(conn):
+    """详情快照队列只记录本服务新接收的 run，避免重叠采集和历史回填。"""
+    conn.execute('''CREATE TABLE IF NOT EXISTS run_snapshot_jobs (
+        run_id TEXT PRIMARY KEY,
+        status TEXT NOT NULL DEFAULT 'pending',
+        attempts INTEGER NOT NULL DEFAULT 0,
+        last_error TEXT,
+        queued_at TEXT NOT NULL,
+        started_at TEXT,
+        finished_at TEXT
+    )''')
+    conn.execute('''CREATE INDEX IF NOT EXISTS idx_snapshot_jobs_status_queued
+                    ON run_snapshot_jobs(status, queued_at)''')
+
+
+def _enqueue_snapshot_job(conn, run_id):
+    before = conn.total_changes
+    conn.execute('''INSERT OR IGNORE INTO run_snapshot_jobs (run_id, queued_at)
+                    VALUES (?, ?)''', (run_id, datetime.now().isoformat()))
+    return conn.total_changes > before
+
+
+def _claim_snapshot_jobs(conn, limit=20, max_attempts=5):
+    """原子领取待处理任务；超时 processing 会恢复，达到上限后不再领取。"""
+    now = datetime.now()
+    lease_cutoff = (now - __import__('datetime').timedelta(minutes=90)).isoformat()
+    conn.execute('''UPDATE run_snapshot_jobs SET status='retry',
+                    last_error='processing lease expired'
+                    WHERE status='processing' AND started_at < ? AND attempts < ?''',
+                 (lease_cutoff, max_attempts))
+    conn.execute('''UPDATE run_snapshot_jobs SET status='failed', finished_at=?
+                    WHERE status IN ('pending', 'retry', 'processing') AND attempts >= ?''',
+                 (now.isoformat(), max_attempts))
+    rows = conn.execute('''SELECT run_id, attempts FROM run_snapshot_jobs
+                           WHERE status IN ('pending', 'retry') AND attempts < ?
+                           ORDER BY queued_at LIMIT ?''', (max_attempts, limit)).fetchall()
+    claimed = []
+    for run_id, attempts in rows:
+        updated = conn.execute('''UPDATE run_snapshot_jobs
+            SET status='processing', attempts=attempts+1, started_at=?, last_error=NULL
+            WHERE run_id=? AND status IN ('pending', 'retry') AND attempts=?''',
+            (now.isoformat(), run_id, attempts)).rowcount
+        if updated:
+            claimed.append({'run_id': run_id, 'attempts': attempts + 1})
+    return claimed
+
+
+def _complete_snapshot_job(conn, run_id, success, error=None, max_attempts=5):
+    attempts = conn.execute('SELECT attempts FROM run_snapshot_jobs WHERE run_id=?',
+                            (run_id,)).fetchone()
+    status = 'success' if success else ('failed' if attempts and attempts[0] >= max_attempts else 'retry')
+    conn.execute('''UPDATE run_snapshot_jobs
+                    SET status=?, last_error=?, finished_at=?
+                    WHERE run_id=? AND status='processing' ''',
+                 (status, error, datetime.now().isoformat(), run_id))
+
+
+def _ensure_combat_snapshot_schema(conn):
+    """为按游戏日的阵容/转型分析建立可索引的事实表。"""
+    conn.execute('''CREATE TABLE IF NOT EXISTS run_combat_snapshots (
+        event_id TEXT PRIMARY KEY,
+        run_id TEXT NOT NULL,
+        season INTEGER NOT NULL,
+        phase TEXT NOT NULL,
+        hero TEXT,
+        player_rank TEXT,
+        day INTEGER NOT NULL,
+        hour INTEGER,
+        captured_at TEXT,
+        player_level INTEGER,
+        outcome TEXT,
+        is_pvp INTEGER,
+        opponent_hero TEXT,
+        opponent_name TEXT,
+        player_board_json TEXT NOT NULL,
+        player_skills_json TEXT NOT NULL,
+        opponent_board_json TEXT NOT NULL,
+        opponent_skills_json TEXT NOT NULL
+    )''')
+    conn.execute('''CREATE TABLE IF NOT EXISTS run_combat_player_cards (
+        event_id TEXT NOT NULL REFERENCES run_combat_snapshots(event_id),
+        card_id TEXT NOT NULL,
+        card_kind TEXT NOT NULL,
+        tier TEXT,
+        enchantment TEXT,
+        slot_position INTEGER,
+        PRIMARY KEY (event_id, card_id, card_kind, slot_position)
+    ) WITHOUT ROWID''')
+    # Day/hero/rank 限定目标样本后，以 run_id 快速关联同一局的后续快照。
+    conn.execute('''CREATE INDEX IF NOT EXISTS idx_combat_snapshot_scope_day_run
+                    ON run_combat_snapshots(season, phase, day, hero, player_rank, run_id)''')
+    conn.execute('''CREATE INDEX IF NOT EXISTS idx_combat_snapshot_run_day
+                    ON run_combat_snapshots(run_id, day, hour)''')
+    # 以关键卡反查开局样本，避免扫描 snapshots_json 或 runs 全表。
+    conn.execute('''CREATE INDEX IF NOT EXISTS idx_combat_player_cards_card_event
+                    ON run_combat_player_cards(card_id, card_kind, event_id)''')
+
+
+def _insert_combat_snapshots(conn, run):
+    """写入每场 CombatStart；卡牌拆为行，卡面 JSON 仅保存在战斗详情行。"""
+    snapshots = run.get('combatSnapshots') or []
+    for snapshot in snapshots:
+        event_id = snapshot.get('eventId')
+        day = snapshot.get('day')
+        if not event_id or not isinstance(day, int):
+            continue
+        combat = snapshot.get('combat') or {}
+        conn.execute('''INSERT OR IGNORE INTO run_combat_snapshots
+            (event_id, run_id, season, phase, hero, player_rank, day, hour, captured_at,
+             player_level, outcome, is_pvp, opponent_hero, opponent_name,
+             player_board_json, player_skills_json, opponent_board_json, opponent_skills_json)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+            (event_id, run['id'], RUNS_SEASON_ID, CURRENT_PHASE, run.get('hero'),
+             run.get('playerRank'), day, snapshot.get('hour'), snapshot.get('ts'),
+             snapshot.get('playerLevel'), combat.get('outcome'), int(bool(combat.get('is_pvp'))),
+             combat.get('opponent_hero'), combat.get('opponent_name'),
+             json.dumps(snapshot.get('playerBoard', []), ensure_ascii=False),
+             json.dumps(snapshot.get('playerSkills', []), ensure_ascii=False),
+             json.dumps(snapshot.get('opponentBoard', []), ensure_ascii=False),
+             json.dumps(snapshot.get('opponentSkills', []), ensure_ascii=False)))
+        for card_kind, cards in (('item', snapshot.get('playerBoard', [])),
+                                 ('skill', snapshot.get('playerSkills', []))):
+            for card in cards:
+                # tracker 的 board/skills 在部分 run 中包含字符串引用；原始值保留在 JSON，
+                # 只有完整对象才能物化为可检索卡牌事实行。
+                if not isinstance(card, dict):
+                    continue
+                card_id = card.get('baseId') or card.get('cardId')
+                if not card_id:
+                    continue
+                conn.execute('''INSERT OR IGNORE INTO run_combat_player_cards
+                    (event_id, card_id, card_kind, tier, enchantment, slot_position)
+                    VALUES (?, ?, ?, ?, ?, ?)''',
+                    (event_id, card_id, card_kind, card.get('tierOverride'),
+                     card.get('enchantmentOverride'),
+                     card.get('slotPosition') if card.get('slotPosition') is not None else -1))
 
 
 def _mask_ip(ip):
@@ -74,6 +214,20 @@ def _build_card_search_index():
         print(f'[card_search] 索引构建完成，共 {len(items)} 张卡牌', flush=True)
     except Exception as e:
         print(f'[card_search] 索引构建失败: {e}', flush=True)
+
+
+def _find_card_search_matches(query_text):
+    """从启动时预热的卡牌索引精确匹配中英文名，避免请求内重复读取并遍历 card_images.json。"""
+    normalized = (query_text or '').strip().lower().replace(' ', '')
+    if not normalized:
+        return []
+    matches = []
+    for item in _card_search_index:
+        en = str(item.get('en') or '').lower().replace(' ', '')
+        zh = str(item.get('zh') or '').lower().replace(' ', '')
+        if normalized in (en, zh):
+            matches.append(item)
+    return matches
 
 import threading as _threading
 _threading.Thread(target=_build_card_search_index, daemon=True).start()
@@ -282,6 +436,12 @@ def after_request(response):
                 success=response.status_code < 400,
                 duration_ms=duration_ms
             )
+    # 大型只读统计结果允许浏览器/CDN 短期复用；服务端统计缓存仍负责更长周期复用。
+    if request.method == 'GET' and request.path in ('/api/comp', '/api/comp/card') and response.status_code == 200:
+        response.cache_control.public = True
+        response.cache_control.max_age = 60
+        response.cache_control.stale_while_revalidate = 300
+
     # 静态资源缓存头
     if request.path.startswith('/static/'):
         ext = request.path.rsplit('.', 1)[-1].lower()
@@ -487,7 +647,31 @@ def api_winrate():
             cards = [c.strip() for c in cards_raw.split('+') if c.strip()]
             if not cards:
                 return jsonify({'error': '请指定至少一张卡牌'}), 400
-            result = client.winrate(cards=cards, hero=hero, days=days, rank_filter=rank_filter)
+            if use_cache:
+                card_ids_sets = []
+                not_found = []
+                card_names = []
+                card_details = []
+                for card_name in cards:
+                    ids = client.find_card_ids(card_name)
+                    if not ids:
+                        not_found.append(card_name)
+                    else:
+                        card_ids_sets.append(set(ids))
+                        display = client.card_display_info(ids[0])
+                        card_names.append(display['name'])
+                        card_details.append(display)
+                total, ten_win = _winrate_from_cache(card_ids_sets) if card_ids_sets else (0, 0)
+                result = {
+                    'total': total,
+                    'ten_win': ten_win,
+                    'rate': ten_win / total if total else 0.0,
+                    'card_names': card_names,
+                    'card_details': card_details,
+                    'not_found': not_found,
+                }
+            else:
+                result = client.winrate(cards=cards, hero=hero, days=days, rank_filter=rank_filter)
             _log_query('winrate', {'cards': cards, 'hero': hero_raw, 'days': days, 'rank': rank_filter}, ip, result.get('total', 0), True)
             return jsonify(result)
     except Exception as e:
@@ -522,23 +706,16 @@ def api_partner():
 @app.route('/api/heroes', methods=['GET'])
 def api_heroes():
     from plugins.bazaar_plugin.runs_query import HERO_ZH_TO_EN
-    heroes = [
+    standard_names = {
+        'Vanessa': '凡妮莎', 'Dooley': '杜利', 'Mak': '马克', 'Pygmalien': '皮格',
+        'Stelle': '斯黛拉', 'Jules': '朱尔斯', 'Karnok': '卡诺克', 'The Dragons': '双龙',
+    }
+    available = set(HERO_ZH_TO_EN.values())
+    return jsonify([
         {'zh': zh, 'en': en}
-        for zh, en in HERO_ZH_TO_EN.items()
-        if zh not in {'海盗', '工程师', '法师', '猪', '机甲', '吸血鬼', '兽人'}  # 去重，只保留官方中文名
-    ]
-    # 补全标准名
-    standard = [
-        {'zh': '凡妮莎', 'en': 'Vanessa'},
-        {'zh': '杜利',   'en': 'Dooley'},
-        {'zh': '马克',   'en': 'Mak'},
-        {'zh': '皮格',   'en': 'Pygmalien'},
-        {'zh': '斯黛拉', 'en': 'Stelle'},
-        {'zh': '朱尔斯', 'en': 'Jules'},
-        {'zh': '卡诺克', 'en': 'Karnok'},
-        {'zh': '双龙',   'en': 'The Dragons'},
-    ]
-    return jsonify(standard)
+        for en, zh in standard_names.items()
+        if en in available
+    ])
 
 
 
@@ -641,7 +818,14 @@ def api_ingest():
     db_path = '/opt/qiubot/data/bazaar_runs.db'
     try:
         conn = __import__('sqlite3').connect(db_path, check_same_thread=False, timeout=30)
+        # 兼容既有数据库：每日战斗阵容随 run 保存，避免另建高频关联表。
+        columns = {row[1] for row in conn.execute('PRAGMA table_info(runs)')}
+        if 'snapshots_json' not in columns:
+            conn.execute('ALTER TABLE runs ADD COLUMN snapshots_json TEXT')
+        _ensure_snapshot_job_schema(conn)
+        _ensure_combat_snapshot_schema(conn)
         new_count = 0
+        new_run_ids = []
         for run in data:
             wins = run.get('statWins') or 0
             if wins < 1:
@@ -656,14 +840,15 @@ def api_ingest():
                     _card_ids_text = ''
                 conn.execute("""INSERT OR IGNORE INTO runs
                     (id, hero, username, created_at, items_json, skills_json, combats_json,
-                     stat_wins, stat_losses, player_rating, player_rating_after,
+                     snapshots_json, stat_wins, stat_losses, player_rating, player_rating_after,
                      player_rank, player_rank_after, screenshot_url, raw_json, collected_at, season, phase, card_ids_text)
-                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                     (run['id'], run.get('hero'), run.get('username'),
                      run.get('createdAt'),
                      _items_json,
                      __import__('json').dumps(run.get('skills', []), ensure_ascii=False),
                      __import__('json').dumps(run.get('combats', []), ensure_ascii=False),
+                     __import__('json').dumps(run.get('combatSnapshots', []), ensure_ascii=False),
                      run.get('statWins'), run.get('statLosses'),
                      run.get('playerRating'), run.get('playerRatingAfter'),
                      run.get('playerRank'), run.get('playerRankAfter'),
@@ -673,6 +858,8 @@ def api_ingest():
                      _card_ids_text))
                 if conn.total_changes > 0:
                     new_count += 1
+                    new_run_ids.append(run['id'])
+                    _insert_combat_snapshots(conn, run)
                     # 增量追加到 Redis winrate 缓存
                     _winrate_cache_append(
                         __import__('json').dumps(run.get('items', []), ensure_ascii=False),
@@ -682,12 +869,102 @@ def api_ingest():
                     # enqueue_run(run['id'], run.get('screenshotUrl', ''))  # 已改为凌晨批量处理
             except Exception as e:
                 pass
+        if ENABLE_DAY_SNAPSHOT_QUEUE:
+            for run_id in new_run_ids:
+                _enqueue_snapshot_job(conn, run_id)
         conn.commit()
         total = conn.execute('SELECT COUNT(*) FROM runs').fetchone()[0]
         conn.close()
         return jsonify({'ok': True, 'new': new_count, 'total': total})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/snapshot-jobs/claim', methods=['POST'])
+def api_claim_snapshot_jobs():
+    """Windows 采集器领取由 ingest 新建的详情快照任务。"""
+    if request.headers.get('X-Ingest-Token', '') != INGEST_TOKEN:
+        return jsonify({'error': 'unauthorized'}), 401
+    body = request.get_json(silent=True) or {}
+    limit = min(max(int(body.get('limit', 20)), 1), 100)
+    conn = _sqlite3.connect('/opt/qiubot/data/bazaar_runs.db', timeout=30)
+    try:
+        _ensure_snapshot_job_schema(conn)
+        jobs = _claim_snapshot_jobs(conn, limit)
+        conn.commit()
+        return jsonify({'jobs': jobs})
+    finally:
+        conn.close()
+
+
+@app.route('/api/snapshot-jobs/<run_id>', methods=['PUT'])
+def api_complete_snapshot_job(run_id):
+    """写入领取任务的快照；异常任务回到 retry，供下一个周期重新领取。"""
+    if request.headers.get('X-Ingest-Token', '') != INGEST_TOKEN:
+        return jsonify({'error': 'unauthorized'}), 401
+    body = request.get_json(silent=True) or {}
+    snapshots = body.get('combatSnapshots')
+    error = str(body.get('error', '')).strip()[:500]
+    conn = _sqlite3.connect('/opt/qiubot/data/bazaar_runs.db', timeout=30)
+    try:
+        _ensure_snapshot_job_schema(conn)
+        _ensure_combat_snapshot_schema(conn)
+        run = conn.execute('''SELECT id, hero, player_rank FROM runs WHERE id=?''', (run_id,)).fetchone()
+        if not run:
+            return jsonify({'error': 'run not found'}), 404
+        job = conn.execute('SELECT status FROM run_snapshot_jobs WHERE run_id=?', (run_id,)).fetchone()
+        if not job or job[0] != 'processing':
+            return jsonify({'error': 'job is not claimed'}), 409
+        if isinstance(snapshots, list) and snapshots:
+            payload = {'id': run_id, 'hero': run[1], 'playerRank': run[2],
+                       'combatSnapshots': snapshots}
+            conn.execute('UPDATE runs SET snapshots_json=? WHERE id=?',
+                         (json.dumps(snapshots, ensure_ascii=False), run_id))
+            _insert_combat_snapshots(conn, payload)
+            _complete_snapshot_job(conn, run_id, success=True)
+        else:
+            _complete_snapshot_job(conn, run_id, success=False,
+                                   error=error or 'no CombatStart snapshots')
+        conn.commit()
+        return jsonify({'ok': True, 'status': 'success' if snapshots else 'retry'})
+    except Exception as exc:
+        conn.rollback()
+        try:
+            _complete_snapshot_job(conn, run_id, success=False, error=str(exc)[:500])
+            conn.commit()
+        except Exception:
+            conn.rollback()
+        return jsonify({'error': 'snapshot persistence failed', 'retry': True}), 500
+    finally:
+        conn.close()
+
+@app.route('/api/card-tier', methods=['GET'])
+@rate_limit
+def api_card_tier():
+    """返回当前职业、筛选条件下的卡牌 T 表。"""
+    hero_raw = request.args.get('hero', '').strip()
+    days = request.args.get('days', type=int)
+    rank_filter = request.args.get('rank', 'all')
+    if days not in (None, 1, 3, 7):
+        return jsonify({'error': '时间范围仅支持全赛段、1天、3天或7天'}), 400
+    if rank_filter not in ('all', 'legendary'):
+        return jsonify({'error': '段位仅支持全部或传奇'}), 400
+    ip = _mask_ip(request.headers.get('X-Forwarded-For', request.remote_addr))
+    if not hero_raw:
+        return jsonify({'error': '请指定职业'}), 400
+    try:
+        query = RunsQuery()
+        query.load()
+        hero = query.resolve_hero(hero_raw)
+        if not hero:
+            return jsonify({'error': f'未知职业: {hero_raw}'}), 400
+        result = query.card_tier_table(hero=hero, days=days, rank_filter=rank_filter)
+        _log_query('card_tier', {'hero': hero_raw, 'days': days, 'rank': rank_filter}, ip,
+                   sum(len(group.get('cards', [])) for group in result.get('tiers', [])), True)
+        return jsonify(result)
+    except Exception as exc:
+        _log_query('card_tier', {'hero': hero_raw, 'days': days, 'rank': rank_filter}, ip, 0, False)
+        return jsonify({'error': str(exc)}), 500
 
 
 @app.route('/api/topcard', methods=['GET'])
@@ -754,26 +1031,23 @@ def api_comp_card():
     try:
         query = RunsQuery()
         query.load()
-        # 从 card_images.json 查 cardId（支持中英文、去空格精确匹配）
-        import json as _json
-        _ci = _json.load(open('/opt/qiubot/plugins/bazaar_plugin/cache/card_images.json', encoding='utf-8'))
-        _cards = _ci.get('cards', {})
-        _name_to_ids = {}
-        _zh_to_ids = {}
-        for _cid, _info in _cards.items():
-            _info = _info or {}
-            _en = _info.get('internalName', '')
-            _zh = _info.get('name', '')
-            if _en:
-                _name_to_ids.setdefault(_en.lower().replace(' ', ''), []).append(_cid)
-            if _zh and _zh != _en:
-                _zh_to_ids.setdefault(_zh.lower().replace(' ', ''), []).append(_cid)
-        _q = card_raw.lower().replace(' ', '')
-        _found = _zh_to_ids.get(_q) or _name_to_ids.get(_q) or []
-        if not _found:
+        # 复用启动时预热的卡牌搜索索引，不在每个请求中重新读 card_images.json。
+        matches = _find_card_search_matches(card_raw)
+        if not matches:
+            # 服务启动后的短暂预热窗口内，复用本请求已经加载好的 RunsQuery 索引兜底。
+            candidate_ids = query.find_card_ids(card_raw)
+            matches = [
+                {
+                    'cardId': candidate_id,
+                    'zh': query.card_display_info(candidate_id).get('name') or card_raw,
+                    'en': query.card_display_info(candidate_id).get('name_en') or card_raw,
+                }
+                for candidate_id in candidate_ids
+            ]
+        if not matches:
             return jsonify({'error': f'未找到卡牌: {card_raw}'}), 404
-        required_card = _found[0]
-        card_display = _cards.get(required_card, {}).get('name') or card_raw
+        required_card = matches[0]['cardId']
+        card_display = matches[0].get('zh') or matches[0].get('en') or card_raw
         # 解析职业（可选）
         hero = None
         if hero_raw:

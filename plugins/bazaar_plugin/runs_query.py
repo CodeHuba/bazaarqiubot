@@ -4,6 +4,7 @@ BazaarDB Runs 查询模块
 """
 
 import json
+import math
 import sqlite3
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional
@@ -143,8 +144,11 @@ class RunsQuery:
         return info if isinstance(info, dict) else {}
 
     def card_display_info(self, card_id: str) -> dict:
-        """返回网页统一使用的卡牌展示信息，图片优先使用 #bz db 同源原图。"""
-        from . import card_image_helper as _cih
+        """返回网页统一展示信息；请求链路只读本地卡图缓存，不同步探测远程 CDN。"""
+        return self.card_display_info_cached(card_id)
+
+    def card_display_info_cached(self, card_id: str) -> dict:
+        """返回本地缓存中的卡牌展示信息，不在业务请求内逐张探测远程 CDN。"""
         info = self._safe_mapping_info(card_id)
         image_info = self._card_image_info(card_id)
         name_en = info.get('name') or image_info.get('internalName') or card_id
@@ -153,7 +157,7 @@ class RunsQuery:
             'cardId': card_id,
             'name': name_zh if name_zh != name_en else name_en,
             'name_en': name_en,
-            'img': _cih.get_art_url(card_id=card_id, internal_name=name_en, size='artLarge') or _cih.get_art_url(card_id=card_id, internal_name=name_en, size='art') or '',
+            'img': image_info.get('artLarge') or image_info.get('art') or '',
             'size': self.size_map.get(card_id) or image_info.get('size') or 'Small',
         }
 
@@ -584,16 +588,21 @@ class RunsQuery:
         # 统计每张搭档卡的出现次数和10胜次数
         total_map = defaultdict(int)
         win_map = defaultdict(int)
+        target_total = 0
 
         for items_json, wins in rows:
             try:
-                items = _json.loads(items_json)
-                run_ids = {item["cardId"] for item in items if "cardId" in item}
-            except Exception:
+                items = _json.loads(items_json or '[]')
+                run_ids = {
+                    item["cardId"] for item in items
+                    if isinstance(item, dict) and item.get("cardId")
+                }
+            except (TypeError, ValueError, KeyError):
                 continue
             # 该局必须包含目标卡
             if not (run_ids & target_ids):
                 continue
+            target_total += 1
             is_win = (wins or 0) >= wins_threshold
             # 统计搭档（排除目标卡自身）
             for cid in run_ids:
@@ -617,16 +626,8 @@ class RunsQuery:
                 continue
             results.append({"name": display['name'], "total": total, "ten_win": ten_win, "rate": rate, "img": display['img'], "size": display['size'], "name_en": en, "cardId": cid})
 
-        # 计算共现率（含目标卡的局里，搭档出现的比例）
-        target_total = sum(1 for items_json, wins in rows
-                          if (lambda ids: bool(ids & target_ids))(
-                              {item['cardId'] for item in __import__('json').loads(items_json) if 'cardId' in item}))
-
-        for r in results:
-            cid_list = [cid for cid, info in self.card_mapping.items()
-                        if (info.get('name','') == (self.en_to_zh.get(r['name'], r['name']) or r['name'])
-                            or self.get_zh_name(info.get('name','')) == r['name'])]
-            r['appear_rate'] = r['total'] / target_total if target_total > 0 else 0
+        for result in results:
+            result['appear_rate'] = result['total'] / target_total if target_total > 0 else 0
 
         by_winrate = sorted(results, key=lambda x: (-x['rate'], -x['total']))[:top_n]
         by_appear = sorted(results, key=lambda x: (-x['appear_rate'], -x['total']))[:top_n]
@@ -754,6 +755,117 @@ class RunsQuery:
         }
         _topcard_cache[_tc_key] = (_tc_result, _time.time() + _topcard_cache_ttl)
         return _tc_result
+
+    def card_tier_table(self, hero: str, days: int = None, rank_filter: str = "all") -> dict:
+        """按当前赛段、职业专属基础物品计算出场率 70% + 十胜率 30% 的 T 表。"""
+        cache_key = (RUNS_SEASON_ID, CURRENT_PHASE, hero, days, rank_filter)
+        cached = _card_tier_cache.get(cache_key)
+        if cached and __import__('time').time() < cached[1]:
+            return cached[0]
+        if not self.conn:
+            self.load()
+
+        sql = "SELECT items_json, stat_wins FROM runs WHERE season=? AND phase=? AND LOWER(hero)=LOWER(?)"
+        params = [RUNS_SEASON_ID, CURRENT_PHASE, hero]
+        if days:
+            sql += " AND created_at >= ?"
+            params.append((datetime.utcnow() - timedelta(days=days)).isoformat())
+        if rank_filter == "legendary":
+            sql += " AND player_rank='Legendary'"
+        rows = self.conn.execute(sql, params).fetchall()
+
+        gamedata_hero = {"The Dragons": "Hero8"}.get(hero, hero)
+        exclusive_ids = {
+            card_id for card_id, heroes in self.card_heroes.items()
+            if isinstance(heroes, (list, tuple, set))
+            and {str(candidate) for candidate in heroes} == {gamedata_hero}
+        }
+        appearances = {card_id: 0 for card_id in exclusive_ids}
+        ten_wins = {card_id: 0 for card_id in exclusive_ids}
+        for items_json, wins in rows:
+            try:
+                run_ids = {
+                    item['cardId'] for item in json.loads(items_json or '[]')
+                    if isinstance(item, dict) and item.get('cardId') in exclusive_ids
+                }
+            except (TypeError, ValueError, KeyError, json.JSONDecodeError):
+                continue
+            for card_id in run_ids:
+                appearances[card_id] += 1
+                if (wins or 0) >= 10:
+                    ten_wins[card_id] += 1
+
+        positive = sorted(value for value in appearances.values() if value > 0)
+        threshold = max(10, positive[max(0, math.ceil(len(positive) * .2) - 1)]) if positive else 10
+        cards = []
+        for card_id in exclusive_ids:
+            count = appearances[card_id]
+            cards.append({
+                **self.card_display_info_cached(card_id),
+                'appearance_count': count,
+                'appearance_rate': count / len(rows) if rows else 0.0,
+                'ten_win': ten_wins[card_id],
+                'win_rate': ten_wins[card_id] / count if count else 0.0,
+            })
+
+        rated = [card for card in cards if card['appearance_count'] >= threshold]
+        insufficient = [card for card in cards if card['appearance_count'] < threshold]
+        self._score_tier_cards(rated)
+        rated.sort(key=lambda card: (
+            -card['score'], -card['appearance_rate'], -card['win_rate'],
+            -card['appearance_count'], card['name'],
+        ))
+        insufficient.sort(key=lambda card: (-card['appearance_count'], -card['win_rate'], card['name']))
+
+        specs = [('夯', .10), ('顶级', .20), ('人上人', .30), ('NPC', .25), ('拉完了', .15)]
+        groups = [[] for _ in specs]
+        boundaries = [math.ceil(len(rated) * cumulative) for cumulative in (.10, .30, .60, .85)]
+        group_index = 0
+        for index, card in enumerate(rated):
+            while (
+                group_index < 4 and index >= boundaries[group_index]
+                and (index == 0 or card['score'] != rated[index - 1]['score'])
+            ):
+                group_index += 1
+            groups[group_index].append(card)
+
+        result = {
+            'hero': hero,
+            'season': RUNS_SEASON_ID,
+            'phase': CURRENT_PHASE,
+            'days': days,
+            'rank_filter': rank_filter,
+            'total_runs': len(rows),
+            'sample_threshold': threshold,
+            'formula': {'appearance_weight': .7, 'winrate_weight': .3},
+            'tie_policy': 'higher_tier',
+            'tiers': [
+                {'name': name, 'target_ratio': ratio, 'cards': group_cards}
+                for (name, ratio), group_cards in zip(specs, groups)
+            ],
+            'insufficient': insufficient,
+        }
+        _card_tier_cache[cache_key] = (result, __import__('time').time() + _card_tier_cache_ttl)
+        return result
+
+    @staticmethod
+    def _score_tier_cards(cards: list) -> None:
+        total = len(cards)
+        if total == 0:
+            return
+        for field, target in (
+            ('appearance_rate', 'appearance_percentile'),
+            ('win_rate', 'winrate_percentile'),
+        ):
+            values = sorted(card[field] for card in cards)
+            for card in cards:
+                positions = [index + 1 for index, value in enumerate(values) if value == card[field]]
+                card[target] = sum(positions) / len(positions) / total if positions else 0.0
+        for card in cards:
+            card['score'] = round(
+                card['appearance_percentile'] * .7 + card['winrate_percentile'] * .3,
+                6,
+            )
 
     def comp(self,
              hero: str,
@@ -913,21 +1025,14 @@ class RunsQuery:
             norm = st['appear_rate'] / max_appear if max_appear else 0.0
             return st['win_rate'] * WIN_WEIGHT + norm * APPEAR_WEIGHT
 
-        from . import card_image_helper as _cih
         def card_info(cid, is_core=False, is_new=False):
-            # card_id_mapping.json 可能缺失、过期，甚至存在 null 值；卡图缓存是更可靠的兜底来源。
-            info = self.card_mapping.get(cid) or {}
-            image_info = _cih.get_card_image(card_id=cid) or {}
-            name_en = info.get('name') or image_info.get('internalName') or cid
-            name_zh = image_info.get('name') or self.get_zh_name(name_en)
-            art_url = _cih.get_art_url(card_id=cid, internal_name=name_en, size='artLarge') or _cih.get_art_url(card_id=cid, internal_name=name_en, size='art') or ''
-            card_size = self.size_map.get(cid) or image_info.get('size') or 'Small'
+            display = self.card_display_info_cached(cid)
             return {
                 'cardId': cid,
-                'name_zh': name_zh if name_zh != name_en else name_en,
-                'name_en': name_en,
-                'img': art_url,
-                'size': card_size,
+                'name_zh': display['name'],
+                'name_en': display['name_en'],
+                'img': display['img'],
+                'size': display['size'],
                 'is_core': is_core,
                 'is_new': is_new,
             }
@@ -1250,6 +1355,9 @@ class RunsQuery:
 
         _hero_overview_cache[_ho_key] = (_ho_result, _time.time() + _hero_overview_cache_ttl)
         return _ho_result
+
+_card_tier_cache: dict = {}
+_card_tier_cache_ttl = 3600
 
 _comp_cache: dict = {}
 _comp_cache_ttl = 3600  # 1小时

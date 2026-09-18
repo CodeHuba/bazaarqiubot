@@ -59,7 +59,13 @@ def _fake_card_images(monkeypatch):
     from plugins.bazaar_plugin import card_image_helper
 
     cards = {
-        cid: {"internalName": cid, "name": f"中文-{cid}", "size": "Small", "art": ""}
+        cid: {
+            "internalName": cid,
+            "name": f"中文-{cid}",
+            "size": "Small",
+            "art": f"https://cards.example/{cid}/art.webp",
+            "artLarge": f"https://cards.example/{cid}/artLarge.webp",
+        }
         for cid in ["target", "core-a", "core-b", "old-core"] + [f"flex-{i}" for i in range(1, 13)]
     }
     monkeypatch.setattr(card_image_helper, "_CACHE", {"cards": cards})

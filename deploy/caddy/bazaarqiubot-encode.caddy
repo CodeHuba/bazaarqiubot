@@ -1,0 +1,3 @@
+# BazaarQiuBot 生产站点使用 Caddy；本片段应放入站点块。
+# 启用 zstd/gzip 内容编码，Caddy 会按客户端 Accept-Encoding 自动协商。
+encode zstd gzip
