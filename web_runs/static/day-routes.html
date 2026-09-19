@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <title>Day 核心阵容 · 巴扎丘Bot</title>
+  <link rel="stylesheet" href="/static/day-routes.css">
+</head>
+<body>
+<nav class="navbar">
+  <a class="logo" href="/admin/day-routes">巴扎丘Bot · Day 路线</a>
+  <div class="nav-links"><a href="/admin/stats">数据看板</a><a href="/">返回查询页</a></div>
+</nav>
+<main class="main">
+  <header class="hero">
+    <div><span class="eyebrow">LEGENDARY RUN INTELLIGENCE</span><h1>Day 核心阵容与发展路线</h1><p>从前 3 Day 的关键物品组合，追踪后续构筑保留、替换与主要转型方向。</p></div>
+    <span class="secure-badge">受保护数据</span>
+  </header>
+
+  <section class="scope-note">
+    <strong>口径：传奇10胜样本</strong>
+    <span>核心 support / observable / coverage 与路线转型率均来自当前发布版本；低频路线汇总为 OTHER。</span>
+  </section>
+
+  <section class="toolbar" aria-label="筛选条件">
+    <label>职业选择<select id="hero-select">
+      <option value="Vanessa">瓦内莎</option><option value="Dooley">杜利</option>
+      <option value="Mak">马克</option><option value="Pygmalien">皮格马利翁</option>
+      <option value="Stelle">斯黛尔</option><option value="Jules">朱尔斯</option>
+      <option value="Karnok">卡诺克</option><option value="The Dragons">双龙</option>
+    </select></label>
+    <div class="day-switch" role="group" aria-label="游戏日">
+      <button class="day-btn" data-day="1">Day 1</button><button class="day-btn" data-day="2">Day 2</button><button class="day-btn active" data-day="3">Day 3</button>
+    </div>
+  </section>
+
+  <section id="metadata" class="metadata" aria-live="polite">
+    <div><span>版本</span><strong id="meta-version">—</strong></div>
+    <div><span>数据截止</span><strong id="meta-cutoff">—</strong></div>
+    <div><span>传奇10胜局</span><strong id="meta-runs">—</strong></div>
+    <div><span>快照样本</span><strong id="meta-snapshots">—</strong></div>
+    <div><span>终局阵容</span><strong id="meta-finals">—</strong></div>
+  </section>
+
+  <div id="status" class="status">正在载入发布版本…</div>
+  <section class="workspace">
+    <aside class="cores-panel">
+      <div class="section-heading"><div><span class="eyebrow">CORE RANKING</span><h2>核心组合</h2></div><span id="core-count" class="count-pill">0</span></div>
+      <div id="core-list" class="core-list"></div>
+    </aside>
+    <section class="route-panel">
+      <div class="section-heading"><div><span class="eyebrow">DAY-BY-DAY ROUTE</span><h2 id="route-title">逐 Day 发展路线</h2></div><div class="legend"><span class="added">＋新增</span><span class="removed">－移除</span><span class="retained">＝保留</span></div></div>
+      <div id="route-content" class="route-empty">选择左侧核心组合，查看各 Day 主要节点与连接信息。</div>
+    </section>
+  </section>
+</main>
+<script src="/static/day-routes.js"></script>
+</body>
+</html>

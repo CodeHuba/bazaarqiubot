@@ -7,6 +7,7 @@ import os
 import hmac
 import time
 import json
+import re
 import sqlite3 as _sqlite3
 import hashlib
 import threading
@@ -35,6 +36,7 @@ from web_runs.day_snapshot_store import DaySnapshotStore
 INGEST_TOKEN = os.getenv('BAZAAR_INGEST_TOKEN', '')
 RUNS_DB_PATH = os.getenv('RUNS_DB_PATH', '/opt/qiubot/data/bazaar_runs.db')
 DAY_SNAPSHOT_DB_PATH = os.getenv('DAY_SNAPSHOT_DB_PATH', '/opt/qiubot/data/bazaar_day_snapshots.db')
+DAY_STATS_DB_PATH = os.getenv('DAY_STATS_DB_PATH', '/opt/qiubot/data/bazaar_day_stats.db')
 ENABLE_DAY_SNAPSHOT_QUEUE = os.getenv('ENABLE_DAY_SNAPSHOT_QUEUE', '0') == '1'
 SNAPSHOT_LEASE_MINUTES = int(os.getenv('SNAPSHOT_LEASE_MINUTES', '10'))
 _day_snapshot_store = DaySnapshotStore(DAY_SNAPSHOT_DB_PATH)
@@ -512,6 +514,180 @@ def require_stats_auth(view):
     return wrapper
 
 
+def _day_stats_connection():
+    """Open the versioned statistics DB read-only; never touch source facts."""
+    path = os.getenv('DAY_STATS_DB_PATH', DAY_STATS_DB_PATH)
+    uri = f"file:{os.path.abspath(path)}?mode=ro"
+    conn = _sqlite3.connect(uri, uri=True, timeout=5)
+    conn.row_factory = _sqlite3.Row
+    conn.execute('PRAGMA query_only=ON')
+    return conn
+
+
+_DAY_STATS_LATEST_TTL = max(1, int(os.getenv('DAY_STATS_LATEST_CACHE_TTL', '60')))
+_DAY_STATS_VERSION_TTL = max(1, int(os.getenv('DAY_STATS_VERSION_CACHE_TTL', '86400')))
+_day_stats_memory_cache = {}
+_day_stats_cache_lock = threading.Lock()
+# Match the service's local Redis setup, but keep cache failure latency bounded.
+_day_stats_redis_client = _redis.Redis(host='localhost', port=6379, db=0,
+                                       socket_connect_timeout=0.05, socket_timeout=0.05)
+
+
+def _day_stats_cache_get(key):
+    now = time.time()
+    with _day_stats_cache_lock:
+        cached = _day_stats_memory_cache.get(key)
+        if cached:
+            expires_at, value = cached
+            if expires_at > now:
+                return value
+            _day_stats_memory_cache.pop(key, None)
+    try:
+        raw = _day_stats_redis_client.get(key)
+        if raw is not None:
+            value = json.loads(raw)
+            ttl = (_DAY_STATS_LATEST_TTL
+                   if key == _day_stats_metadata_cache_key('latest')
+                   else _DAY_STATS_VERSION_TTL)
+            with _day_stats_cache_lock:
+                _day_stats_memory_cache[key] = (now + ttl, value)
+            return value
+    except Exception:
+        pass
+    return None
+
+
+def _day_stats_cache_set(key, value, ttl):
+    with _day_stats_cache_lock:
+        _day_stats_memory_cache[key] = (time.time() + ttl, value)
+    try:
+        payload = json.dumps(value, ensure_ascii=False, separators=(',', ':'))
+        _day_stats_redis_client.setex(key, ttl, payload)
+    except Exception:
+        pass
+
+
+def _day_stats_metadata_cache_key(version):
+    return f'day-stats:metadata:{version}'
+
+
+def _day_stats_result_cache_key(version, resource, *parts):
+    encoded = ':'.join(urllib.parse.quote(str(part), safe='') for part in parts)
+    suffix = f':{encoded}' if encoded else ''
+    # v3 renames the node ratio in API payloads to day_observable_rate.
+    return f'day-stats:result:v3:{version}:{resource}{suffix}'
+
+
+def _day_stats_metadata(conn, version):
+    if version == 'latest':
+        row = conn.execute('SELECT * FROM build_versions ORDER BY built_at DESC, version_id DESC LIMIT 1').fetchone()
+    else:
+        row = conn.execute('SELECT * FROM build_versions WHERE version_id=?', (version,)).fetchone()
+    if row is None:
+        return None
+    return dict(row)
+
+
+def _day_stats_cached_metadata(conn, version):
+    key = _day_stats_metadata_cache_key(version)
+    metadata = _day_stats_cache_get(key)
+    if metadata is not None:
+        return metadata
+    metadata = _day_stats_metadata(conn, version)
+    if metadata is not None:
+        _day_stats_cache_set(_day_stats_metadata_cache_key(metadata['version_id']),
+                             metadata, _DAY_STATS_VERSION_TTL)
+        if version == 'latest':
+            _day_stats_cache_set(key, metadata, _DAY_STATS_LATEST_TTL)
+    return metadata
+
+
+def _valid_day_stats_version(version):
+    return bool(re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.-]{0,79}', version or ''))
+
+
+def _day_stats_invalid_version_response():
+    return jsonify({
+        'error': ('invalid version; expected latest or 1-80 characters matching '
+                  '[A-Za-z0-9][A-Za-z0-9_.-]*')
+    }), 400
+
+
+def _day_stats_context(conn):
+    version = (request.args.get('version') or '').strip()
+    if not version:
+        return None, (jsonify({'error': 'version is required'}), 400)
+    if not _valid_day_stats_version(version):
+        return None, _day_stats_invalid_version_response()
+    metadata = _day_stats_cached_metadata(conn, version)
+    if metadata is None:
+        return None, (jsonify({'error': 'version not found'}), 404)
+    return metadata, None
+
+
+def _valid_day_stats_hero(hero):
+    return bool(hero and len(hero) <= 40 and re.fullmatch(r"[\w .'-]+", hero, re.UNICODE))
+
+
+def _valid_day_stats_core_id(core_id):
+    return bool(core_id and len(core_id) <= 64 and re.fullmatch(r'[A-Za-z0-9_-]+', core_id))
+
+
+def _day_stats_envelope(metadata, **payload):
+    payload.update({
+        'version_id': metadata['version_id'],
+        'source_cutoff': metadata['source_cutoff'],
+        'sample_counts': {
+            'source_success_run_count': metadata['source_success_run_count'],
+            'source_snapshot_count': metadata['source_snapshot_count'],
+            'final_composition_count': metadata['final_composition_count'],
+        },
+    })
+    return payload
+
+
+_day_stats_card_query = None
+_day_stats_card_query_lock = threading.Lock()
+
+
+def _day_stats_cards(card_ids):
+    """Project internal IDs to safe display metadata without exposing auth material."""
+    global _day_stats_card_query
+    ids = [str(card_id) for card_id in card_ids if card_id and card_id != '__OTHER__']
+    if not ids:
+        return []
+    if _day_stats_card_query is None:
+        with _day_stats_card_query_lock:
+            if _day_stats_card_query is None:
+                query = RunsQuery()
+                query.load()
+                _day_stats_card_query = query
+    cards = []
+    for card_id in ids:
+        try:
+            card = dict(_day_stats_card_query.card_display_info_cached(card_id))
+        except Exception:
+            card = {}
+        cards.append({
+            'cardId': card_id,
+            'name': card.get('name') or card_id,
+            'name_en': card.get('name_en') or card_id,
+            'img': card.get('img') or '',
+            'size': card.get('size') or 'Small',
+        })
+    return cards
+
+
+def _day_stats_signature_ids(signature):
+    if signature == '__OTHER__':
+        return []
+    try:
+        parsed = json.loads(signature)
+    except (TypeError, ValueError):
+        return []
+    return parsed if isinstance(parsed, list) else []
+
+
 def _track_feature(feature, page, outcome):
     try:
         ip = _masked_client_ip()
@@ -599,6 +775,10 @@ def after_request(response):
         response.cache_control.public = True
         response.cache_control.max_age = 60
         response.cache_control.stale_while_revalidate = 300
+    # Day stats require Basic Auth; never retain credentials-bound responses in browsers/proxies.
+    if request.path.startswith('/api/day-stats/'):
+        response.cache_control.private = True
+        response.cache_control.no_store = True
     # 静态资源缓存头
     if request.path.startswith('/static/'):
         ext = request.path.rsplit('.', 1)[-1].lower()
@@ -726,6 +906,136 @@ def rate_limit(f):
 
 
 # ===== API 路由 =====
+
+@app.route('/api/day-stats/latest', methods=['GET'])
+@require_stats_auth
+def api_day_stats_latest():
+    metadata = _day_stats_cache_get(_day_stats_metadata_cache_key('latest'))
+    if metadata is None:
+        try:
+            conn = _day_stats_connection()
+        except (_sqlite3.Error, OSError):
+            return jsonify({'error': 'day stats database unavailable'}), 503
+        try:
+            metadata = _day_stats_cached_metadata(conn, 'latest')
+        finally:
+            conn.close()
+    if metadata is None:
+        return jsonify({'error': 'no day stats versions'}), 404
+    return jsonify({key: metadata[key] for key in (
+        'version_id', 'schema_version', 'built_at', 'source_cutoff',
+        'source_success_run_count', 'source_snapshot_count', 'final_composition_count')})
+
+
+@app.route('/api/day-stats/cores', methods=['GET'])
+@require_stats_auth
+def api_day_stats_cores():
+    version = (request.args.get('version') or '').strip()
+    if not version:
+        return jsonify({'error': 'version is required'}), 400
+    if not _valid_day_stats_version(version):
+        return _day_stats_invalid_version_response()
+    hero = request.args.get('hero', '').strip()
+    day_raw = request.args.get('day', '').strip()
+    if not _valid_day_stats_hero(hero):
+        return jsonify({'error': 'invalid hero'}), 400
+    if not day_raw.isdigit() or int(day_raw) not in (1, 2, 3):
+        return jsonify({'error': 'day must be between 1 and 3'}), 400
+    day = int(day_raw)
+
+    metadata = _day_stats_cache_get(_day_stats_metadata_cache_key(version))
+    if metadata is not None:
+        cache_key = _day_stats_result_cache_key(metadata['version_id'], 'cores', hero, day)
+        cached = _day_stats_cache_get(cache_key)
+        if cached is not None:
+            return jsonify(cached)
+    try:
+        conn = _day_stats_connection()
+    except (_sqlite3.Error, OSError):
+        return jsonify({'error': 'day stats database unavailable'}), 503
+    try:
+        metadata, error = _day_stats_context(conn)
+        if error:
+            return error
+        cache_key = _day_stats_result_cache_key(metadata['version_id'], 'cores', hero, day)
+        cached = _day_stats_cache_get(cache_key)
+        if cached is not None:
+            return jsonify(cached)
+        rows = conn.execute('''SELECT season, phase, hero, day, core_id, card_ids,
+                                      support_runs, observable_runs, coverage, rank, min_support
+                               FROM early_day_item_cores
+                               WHERE version_id=? AND hero=? AND day=?
+                               ORDER BY rank, core_id''',
+                            (metadata['version_id'], hero, day)).fetchall()
+        cores = []
+        for row in rows:
+            item = dict(row)
+            item['card_ids'] = json.loads(item['card_ids'])
+            item['cards'] = _day_stats_cards(item['card_ids'])
+            cores.append(item)
+        payload = _day_stats_envelope(metadata, hero=hero, day=day, cores=cores)
+        _day_stats_cache_set(cache_key, payload, _DAY_STATS_VERSION_TTL)
+        return jsonify(payload)
+    finally:
+        conn.close()
+
+
+@app.route('/api/day-stats/cores/<core_id>/route', methods=['GET'])
+@require_stats_auth
+def api_day_stats_core_route(core_id):
+    version = (request.args.get('version') or '').strip()
+    if not version:
+        return jsonify({'error': 'version is required'}), 400
+    if not _valid_day_stats_version(version):
+        return _day_stats_invalid_version_response()
+    if not _valid_day_stats_core_id(core_id):
+        return jsonify({'error': 'invalid core_id'}), 400
+
+    metadata = _day_stats_cache_get(_day_stats_metadata_cache_key(version))
+    if metadata is not None:
+        cache_key = _day_stats_result_cache_key(metadata['version_id'], 'route', core_id)
+        cached = _day_stats_cache_get(cache_key)
+        if cached is not None:
+            return jsonify(cached)
+    try:
+        conn = _day_stats_connection()
+    except (_sqlite3.Error, OSError):
+        return jsonify({'error': 'day stats database unavailable'}), 503
+    try:
+        metadata, error = _day_stats_context(conn)
+        if error:
+            return error
+        cache_key = _day_stats_result_cache_key(metadata['version_id'], 'route', core_id)
+        cached = _day_stats_cache_get(cache_key)
+        if cached is not None:
+            return jsonify(cached)
+        exists = conn.execute('SELECT 1 FROM early_day_item_cores WHERE version_id=? AND core_id=? LIMIT 1',
+                              (metadata['version_id'], core_id)).fetchone()
+        if exists is None:
+            return jsonify({'error': 'core not found'}), 404
+        nodes = [dict(row) for row in conn.execute('''SELECT day, signature, run_count,
+                    observable_runs, parent_rate AS day_observable_rate,
+                    start_rate, added, removed, retained
+                    FROM item_core_route_nodes WHERE version_id=? AND core_id=?
+                    ORDER BY day, run_count DESC, signature''',
+                    (metadata['version_id'], core_id)).fetchall()]
+        edges = [dict(row) for row in conn.execute('''SELECT parent_day, parent_signature,
+                    child_day, child_signature, run_count, observable_runs, transition_rate
+                    FROM item_core_route_edges WHERE version_id=? AND core_id=?
+                    ORDER BY parent_day, child_day, run_count DESC, parent_signature, child_signature''',
+                    (metadata['version_id'], core_id)).fetchall()]
+        for row in nodes:
+            row['is_other'] = row['signature'] == '__OTHER__'
+            row['signature_ids'] = _day_stats_signature_ids(row['signature'])
+            row['cards'] = _day_stats_cards(row['signature_ids'])
+            for field in ('added', 'removed', 'retained'):
+                row[field] = json.loads(row[field])
+                row[f'{field}_cards'] = _day_stats_cards(row[field])
+        payload = _day_stats_envelope(metadata, core_id=core_id, nodes=nodes, edges=edges)
+        _day_stats_cache_set(cache_key, payload, _DAY_STATS_VERSION_TTL)
+        return jsonify(payload)
+    finally:
+        conn.close()
 
 @app.route('/api/runs', methods=['GET'])
 @rate_limit
@@ -2003,6 +2313,12 @@ def admin_delete_announcement(aid):
     return jsonify({'ok': True})
 
 # ===== Admin Stats =====
+
+@app.route('/admin/day-routes')
+@require_stats_auth
+def day_routes_dashboard():
+    return send_from_directory('static', 'day-routes.html')
+
 
 @app.route('/admin/stats')
 @require_stats_auth
