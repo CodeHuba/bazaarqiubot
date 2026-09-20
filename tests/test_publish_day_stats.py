@@ -45,6 +45,30 @@ def _marker(path: Path, value: str) -> None:
     path.write_text(value, encoding="utf-8")
 
 
+def test_validation_rejects_schema_before_daily_routes_v5(tmp_path):
+    import tools.publish_day_stats as publisher
+    source = tmp_path / "source.db"
+    database = tmp_path / "stats.db"
+    _create_publishable_source(source)
+    publisher.build_day_stats(source, database, version_id="old-v4")
+    with sqlite3.connect(database) as conn:
+        conn.execute("UPDATE build_versions SET schema_version=4")
+    with pytest.raises(publisher.ValidationError, match="below 5"):
+        publisher.validate_day_stats(database, expected_version="old-v4")
+
+
+def test_validation_rejects_missing_or_empty_daily_route_tables(tmp_path):
+    import tools.publish_day_stats as publisher
+    source = tmp_path / "source.db"
+    database = tmp_path / "stats.db"
+    _create_publishable_source(source)
+    publisher.build_day_stats(source, database, version_id="daily-v5")
+    with sqlite3.connect(database) as conn:
+        conn.execute("DELETE FROM daily_archetype_edge_members")
+    with pytest.raises(publisher.ValidationError, match="daily route"):
+        publisher.validate_day_stats(database, expected_version="daily-v5")
+
+
 def test_success_builds_valid_single_version_and_atomically_replaces(tmp_path):
     from tools.publish_day_stats import publish_day_stats
 

@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>阵容路线 | 巴扎丘Bot</title>
+  <meta name="description" content="查看 The Bazaar 传奇10胜阵容从前期到后期的逐日演变路线。">
+  <meta name="keywords" content="The Bazaar,巴扎,阵容路线,阵容演变,传奇10胜">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://bazaarqiubot.com/routes">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐉</text></svg>">
+  <link rel="stylesheet" href="/static/routes.css?v=20260921a">
+</head>
+<body>
+<nav class="navbar">
+  <a href="/runs" class="logo">巴扎丘Bot</a>
+  <div class="nav-tabs">
+    <a href="/runs" class="nav-tab">阵容查询</a><a href="/routes" class="nav-tab active">阵容路线</a>
+    <a href="/winrate" class="nav-tab">胜率查询</a><a href="/partner" class="nav-tab">最佳搭档</a>
+    <a href="/topcard" class="nav-tab">职业榜单</a><a href="/trivia" class="nav-tab">冷知识</a>
+    <a href="/feedback" class="nav-tab">意见反馈</a><a href="/support" class="nav-tab">支持</a>
+  </div>
+</nav>
+
+<main class="main">
+  <header class="hero">
+    <div>
+      <span class="eyebrow">DAILY BUILD EVOLUTION</span>
+      <h1>阵容是怎样一步步成型的？</h1>
+      <p>先看某一天的主流阵容，再沿真实对局观察它下一天最常演变成什么。每条分支都由同一批 Run 的每日最终快照统计。</p>
+    </div>
+    <a class="hero-link" href="/runs">查看真实阵容 →</a>
+  </header>
+
+  <section class="scope-note">
+    <strong>统计口径</strong>
+    <span>当前版本 · 传奇段位 · 最终 10 胜；同一 Run/Day 只取最后一次快照。品质、附魔和槽位不参与阵容归类。</span>
+    <button id="details-toggle" type="button" aria-expanded="false">怎么看？</button>
+  </section>
+  <section id="details-panel" class="details-panel" hidden>
+    每个阵容由 1–5 张在同一批 Run 中稳定共现的核心卡描述。后续路线先过滤低样本，再按 80% 核心包含率合并近似变体，最多展示三个差异方向；隐藏路线仍保留在原始分母中。点击方向可查看真实代表阵容、关联牌排行、常见变体和到达 Day 分布。
+  </section>
+
+  <section class="toolbar" aria-label="路线筛选">
+    <label>职业
+      <select id="hero-select">
+        <option value="Vanessa">瓦内莎</option><option value="Dooley">杜利</option>
+        <option value="Mak">马克</option><option value="Pygmalien">皮格马利翁</option>
+        <option value="Stelle">斯黛尔</option><option value="Jules">朱尔斯</option>
+        <option value="Karnok">卡诺克</option><option value="The Dragons">双龙</option>
+      </select>
+    </label>
+    <div class="stage-key" aria-label="阶段划分">
+      <span class="early">前期 Day 1–3</span><span class="middle">中期 Day 4–7</span>
+      <span class="late">后期 Day 8–11</span><span class="very-late">大后期 Day 12+</span>
+    </div>
+  </section>
+
+  <section class="metadata" aria-label="数据版本">
+    <div><span>数据截止</span><strong id="meta-cutoff">—</strong></div>
+    <div><span>传奇10胜局</span><strong id="meta-runs">—</strong></div>
+    <div><span>快照样本</span><strong id="meta-snapshots">—</strong></div>
+    <div><span>逐日终态</span><strong id="meta-finals">—</strong></div>
+    <div class="version-meta"><span>统计版本</span><strong id="meta-version">—</strong></div>
+  </section>
+
+  <div id="status" class="status visible" aria-live="polite">正在载入逐日路线数据…</div>
+
+  <section class="day-overview" aria-labelledby="overview-title">
+    <div class="section-heading">
+      <div><span class="eyebrow">DAILY META</span><h2 id="overview-title">每天的主流阵容</h2></div>
+      <p>选择一个 Day，再选择一套阵容查看后续发展。</p>
+    </div>
+    <div id="day-tabs" class="day-tabs" role="tablist" aria-label="选择 Day"></div>
+  </section>
+
+  <section class="route-workspace">
+    <aside class="archetypes-panel">
+      <div class="panel-heading">
+        <div><span id="stage-label" class="stage-badge">前期</span><h2 id="day-title">Day 3 主流阵容</h2></div>
+        <span id="archetype-count" class="count-pill">0</span>
+      </div>
+      <p class="panel-help">出场率以当天有快照的传奇 10 胜局为分母。</p>
+      <div id="archetype-list" class="archetype-list"></div>
+    </aside>
+
+    <section class="evolution-panel">
+      <div class="panel-heading evolution-heading">
+        <div><span class="eyebrow">NEXT OBSERVED DAY</span><h2 id="evolution-title">选择一套阵容查看演变</h2></div>
+        <div class="change-legend"><span class="retained">＝保留核心</span><span class="added">＋新增核心</span><span class="removed">－退出核心</span></div>
+      </div>
+      <div id="evolution-content" class="empty-state">
+        <strong>从左侧选择一套主流阵容</strong>
+        <span>这里会显示它在真实对局中的下一步演变和统计依据。</span>
+      </div>
+    </section>
+  </section>
+</main>
+
+<footer><a href="/static/privacy.html" target="_blank">隐私政策</a><span>© 2026 BazaarQiuBot</span></footer>
+<script src="/static/routes.js?v=20260921a" defer></script>
+</body>
+</html>

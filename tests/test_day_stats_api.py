@@ -41,6 +41,48 @@ def stats_db(tmp_path):
                 PRIMARY KEY (version_id, core_id, parent_day, parent_signature,
                              child_day, child_signature)
             );
+            CREATE TABLE daily_archetype_nodes (
+                version_id TEXT NOT NULL, season INTEGER NOT NULL, phase TEXT NOT NULL,
+                hero TEXT NOT NULL, day INTEGER NOT NULL, node_id TEXT NOT NULL,
+                rank INTEGER NOT NULL, run_count INTEGER NOT NULL,
+                day_observable_runs INTEGER NOT NULL, day_share REAL NOT NULL,
+                core_items TEXT NOT NULL, core_support_runs INTEGER NOT NULL,
+                core_support_rate REAL NOT NULL, representative_items TEXT NOT NULL,
+                PRIMARY KEY (version_id, hero, day, node_id)
+            );
+            CREATE TABLE daily_archetype_cards (
+                version_id TEXT NOT NULL, node_id TEXT NOT NULL, day INTEGER NOT NULL,
+                card_id TEXT NOT NULL, role TEXT NOT NULL, support_runs INTEGER NOT NULL,
+                support_rate REAL NOT NULL,
+                PRIMARY KEY (version_id, node_id, card_id, role)
+            );
+            CREATE TABLE daily_archetype_edges (
+                version_id TEXT NOT NULL, edge_id TEXT NOT NULL,
+                parent_day INTEGER NOT NULL, parent_node_id TEXT NOT NULL,
+                child_day INTEGER NOT NULL, child_node_id TEXT NOT NULL,
+                run_count INTEGER NOT NULL, parent_runs INTEGER NOT NULL,
+                parent_observable_runs INTEGER NOT NULL, continuation_rate REAL NOT NULL,
+                transition_rate REAL NOT NULL, stage_gap INTEGER NOT NULL,
+                PRIMARY KEY (version_id, edge_id)
+            );
+            CREATE TABLE daily_archetype_edge_members (
+                version_id TEXT NOT NULL, edge_id TEXT NOT NULL, run_id TEXT NOT NULL,
+                PRIMARY KEY (version_id, edge_id, run_id)
+            );
+            CREATE TABLE final_compositions (
+                version_id TEXT NOT NULL, run_id TEXT NOT NULL, event_id TEXT NOT NULL,
+                season INTEGER NOT NULL, phase TEXT NOT NULL, hero TEXT,
+                player_rank TEXT NOT NULL, day INTEGER NOT NULL, day_stage TEXT NOT NULL,
+                hour INTEGER, captured_at TEXT, fetched_at TEXT NOT NULL,
+                player_level INTEGER, outcome TEXT, is_pvp INTEGER,
+                opponent_hero TEXT, opponent_name TEXT, item_signature TEXT NOT NULL,
+                PRIMARY KEY (version_id, run_id, day)
+            );
+            CREATE TABLE daily_archetype_edge_cards (
+                version_id TEXT NOT NULL, edge_id TEXT NOT NULL, change_kind TEXT NOT NULL,
+                card_id TEXT NOT NULL, run_count INTEGER NOT NULL, change_rate REAL NOT NULL,
+                PRIMARY KEY (version_id, edge_id, change_kind, card_id)
+            );
             """
         )
         conn.execute("INSERT INTO build_versions VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
@@ -57,6 +99,35 @@ def stats_db(tmp_path):
                      ("v2", "core-1", 2, '["a","b","c"]', 3, 8, .375, .3, '["c"]', '[]', '["a","b"]'))
         conn.execute("INSERT INTO item_core_route_edges VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                      ("v2", "core-1", 1, '["a","b"]', 2, '["a","b","c"]', 3, 5, .6))
+        conn.execute("INSERT INTO daily_archetype_nodes VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                     ("v2", 18, "18.2", "Vanessa", 3, "daily-a", 1, 10, 20, .5,
+                      '["a","b"]', 8, .8, '["a","b","x"]'))
+        conn.execute("INSERT INTO daily_archetype_nodes VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                     ("v2", 18, "18.2", "Vanessa", 4, "daily-b", 1, 6, 18, 1/3,
+                      '["a","c"]', 4, 2/3, '["a","c","y"]'))
+        conn.execute("INSERT INTO daily_archetype_nodes VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                     ("v2", 18, "18.2", "Vanessa", 4, "daily-dispersed", 2, 4, 18, 2/9,
+                      '[]', 0, 0.0, '["z"]'))
+        conn.execute("INSERT INTO daily_archetype_cards VALUES (?, ?, ?, ?, ?, ?, ?)",
+                     ("v2", "daily-a", 3, "a", "core", 10, 1.0))
+        conn.execute("INSERT INTO daily_archetype_cards VALUES (?, ?, ?, ?, ?, ?, ?)",
+                     ("v2", "daily-b", 4, "c", "core", 6, 1.0))
+        conn.execute("INSERT INTO daily_archetype_edges VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                     ("v2", "edge-daily", 3, "daily-a", 4, "daily-b", 6, 10, 8, .8, .75, 0))
+        conn.execute("INSERT INTO daily_archetype_edges VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                     ("v2", "edge-dispersed", 3, "daily-a", 4, "daily-dispersed", 2, 10, 8, .8, .25, 0))
+        conn.execute("INSERT INTO daily_archetype_edge_cards VALUES (?, ?, ?, ?, ?, ?)",
+                     ("v2", "edge-daily", "added_core", "c", 6, 1.0))
+        for number in range(6):
+            run_id = f"route-{number}"
+            items = ["a", "c", "x"] if number < 5 else ["a", "c", "y"]
+            conn.execute("INSERT INTO daily_archetype_edge_members VALUES (?, ?, ?)",
+                         ("v2", "edge-daily", run_id))
+            conn.execute("INSERT INTO final_compositions VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                         ("v2", run_id, f"event-{number}", 18, "18.2", "Vanessa",
+                          "Legendary", 4, "middle", None, None, "2026-09-20", None,
+                          None, None, None, None, json.dumps(items)))
+        conn.commit()
     return path
 
 
@@ -202,6 +273,189 @@ def test_day_routes_frontend_uses_same_origin_auth_and_readable_route_semantics(
     assert "AbortController" in js
     assert "requestToken" in js
     assert "object-fit: contain" in css
+
+
+def test_day_stats_batched_rows_handles_more_than_sqlite_default_variable_limit(monkeypatch, stats_db):
+    client = _client(monkeypatch, stats_db)
+    values = [f"run-{number}" for number in range(1205)]
+    with sqlite3.connect(stats_db) as conn:
+        rows = client.web_app._day_stats_batched_rows(
+            conn, "SELECT ? AS version_id, value FROM json_each(?) WHERE value IN ({placeholders})",
+            ("v2", json.dumps(values)), values,
+        )
+    assert len(rows) == len(values)
+
+
+def test_public_daily_routes_api_returns_nodes_edges_and_changes(monkeypatch, stats_db):
+    client = _client(monkeypatch, stats_db)
+    response = client.web_app.app.test_client().get(
+        "/api/routes/daily?version=v2&hero=Vanessa&day=3"
+    )
+    assert response.status_code == 200
+    body = response.get_json()
+    assert body["nodes"][0]["node_id"] == "daily-a"
+    assert body["nodes"][0]["core_items"] == ["a", "b"]
+    assert body["nodes"][0]["core_support_runs"] == 8
+    assert body["nodes"][0]["core_support_rate"] == .8
+    assert body["edges"][0]["child_day"] == 4
+    assert body["edges"][0]["transition_rate"] == .75
+    assert body["edges"][0]["changes"][0]["change_kind"] == "added_core"
+    assert body["edges"][0]["changes"][0]["card_id"] == "c"
+    directions = body["directions"]["daily-a"]
+    assert directions[0]["run_count"] == 6
+    assert directions[0]["target_core_items"] == ["a", "c"]
+    assert directions[0]["variants"][0]["target_core_items"] == ["a", "c"]
+    assert directions[0]["representative_run_id"].startswith("route-")
+    assert directions[0]["associated_cards"][0]["card_id"] == "x"
+    assert directions[0]["associated_cards"][0]["support_rate"] == pytest.approx(5 / 6)
+    assert len(directions) <= 3
+    assert [edge["child_node_id"] for edge in body["edges"]] == ["daily-b"]
+
+
+def test_public_daily_routes_hides_dispersed_nodes_from_summary(monkeypatch, stats_db):
+    client = _client(monkeypatch, stats_db)
+    response = client.web_app.app.test_client().get(
+        "/api/routes/daily/summary?version=v2&hero=Vanessa"
+    )
+    assert response.status_code == 200
+    assert "daily-dispersed" not in [row["node_id"] for row in response.get_json()["nodes"]]
+
+
+def test_public_daily_routes_summary_groups_all_days(monkeypatch, stats_db):
+    client = _client(monkeypatch, stats_db)
+    response = client.web_app.app.test_client().get(
+        "/api/routes/daily/summary?version=v2&hero=Vanessa"
+    )
+    assert response.status_code == 200
+    assert [row["day"] for row in response.get_json()["nodes"]] == [3, 4]
+def test_public_routes_page_and_api_do_not_require_basic_auth(monkeypatch, stats_db):
+    client = _client(monkeypatch, stats_db)
+    raw_client = client.web_app.app.test_client()
+
+    page = raw_client.get("/routes")
+    latest = raw_client.get("/api/routes/latest")
+    cores = raw_client.get("/api/routes/cores?version=latest&hero=Vanessa&day=1")
+    route = raw_client.get("/api/routes/cores/core-1?version=v2")
+
+    assert page.status_code == 200
+    assert latest.status_code == 200
+    assert cores.status_code == 200
+    assert route.status_code == 200
+    assert latest.get_json()["version_id"] == "v2"
+    assert cores.get_json()["cores"][0]["core_id"] == "core-1"
+    assert route.get_json()["edges"][0]["transition_rate"] == .6
+
+
+@pytest.mark.parametrize("url", [
+    "/api/routes/cores?hero=Vanessa&day=1",
+    "/api/routes/cores/core-1",
+])
+def test_public_routes_requires_version(monkeypatch, stats_db, url):
+    client = _client(monkeypatch, stats_db)
+    response = client.web_app.app.test_client().get(url)
+    assert response.status_code == 400
+    assert response.get_json()["error"] == "version is required"
+
+
+@pytest.mark.parametrize("url", [
+    "/api/routes/cores?version=bad%20version&hero=Vanessa&day=1",
+    "/api/routes/cores?version=v2&hero=UnknownHero&day=1",
+    "/api/routes/cores?version=v2&hero=%3Cscript%3E&day=1",
+    "/api/routes/cores?version=v2&hero=Vanessa&day=4",
+    "/api/routes/cores/bad%20core?version=v2",
+])
+def test_public_routes_rejects_invalid_inputs(monkeypatch, stats_db, url):
+    client = _client(monkeypatch, stats_db)
+    assert client.web_app.app.test_client().get(url).status_code == 400
+
+
+def test_public_routes_rate_limit_bounds_repeated_requests(monkeypatch, stats_db):
+    client = _client(monkeypatch, stats_db)
+    raw_client = client.web_app.app.test_client()
+    client.web_app._routes_rate_limit.clear()
+    responses = [raw_client.get('/api/routes/latest', headers={'X-Forwarded-For': '203.0.113.9'}) for _ in range(31)]
+    assert all(response.status_code == 200 for response in responses[:30])
+    assert responses[-1].status_code == 429
+
+
+def test_public_routes_responses_are_short_public_cacheable(monkeypatch, stats_db):
+    client = _client(monkeypatch, stats_db)
+    raw_client = client.web_app.app.test_client()
+    responses = [
+        raw_client.get("/api/routes/latest"),
+        raw_client.get("/api/routes/cores?version=v2&hero=Vanessa&day=1"),
+        raw_client.get("/api/routes/cores/core-1?version=v2"),
+    ]
+    assert all(response.status_code == 200 for response in responses)
+    assert all(response.cache_control.public for response in responses)
+    assert all(response.cache_control.max_age == 60 for response in responses)
+    assert all(not response.cache_control.no_store for response in responses)
+
+
+def test_public_routes_page_contract_and_navigation(monkeypatch, stats_db):
+    client = _client(monkeypatch, stats_db)
+    raw_client = client.web_app.app.test_client()
+    html = raw_client.get("/routes").get_data(as_text=True)
+    js = raw_client.get("/static/routes.js").get_data(as_text=True)
+    css = raw_client.get("/static/routes.css").get_data(as_text=True)
+
+    assert '<meta name="robots" content="index, follow">' in html
+    assert 'href="/static/routes.css?v=20260921a"' in html
+    assert 'src="/static/routes.js?v=20260921a"' in html
+    assert 'href="/routes" class="nav-tab active"' in html
+    assert "每天的主流阵容" in html and "真实对局" in html
+    assert "/api/routes/daily" in js and "/api/routes/daily/summary" in js
+    assert "转型概率" not in js or "transition_rate" in js
+    assert "parent_observable_runs" in js and "core_support_rate" in js
+    assert "新增核心" in js and "退出核心" in js
+    assert "directions" in js and "associated_cards" in js
+    assert "最多展示三个差异方向" in html
+    assert "真实代表阵容" in js and "关联牌推荐" in js and "常见变体" in js
+    assert "route-detail" in css
+    assert "/runs?" in js and "查询相似真实阵容" in js
+    assert "URLSearchParams" in js and "history.replaceState" in js
+    assert "AbortController" in js
+    assert "allowedHosts" in js and "s.bazaardb.gg" in js
+    assert "object-fit:contain" in css.replace(" ", "")
+    assert "@media(max-width:760px)" in css.replace(" ", "")
+
+
+def test_route_v2_cache_namespace_is_v5():
+    from pathlib import Path
+    source = (Path(__file__).parents[1] / "web_runs" / "app.py").read_text(encoding="utf-8")
+    assert "'daily-v5'" in source
+    assert "'daily-summary-v5'" in source
+    assert "'daily-v4'" not in source
+    assert "'daily-summary-v4'" not in source
+
+
+def test_app_prefers_its_own_directory_for_sibling_modules():
+    from pathlib import Path
+    source = (Path(__file__).parents[1] / "web_runs" / "app.py").read_text(encoding="utf-8")
+    assert "_APP_DIR = os.path.dirname(os.path.abspath(__file__))" in source
+    assert "_sys.path.insert(0, _APP_DIR)" in source
+
+
+def test_public_navigation_includes_routes_without_removing_existing_items():
+    from pathlib import Path
+    static = Path(__file__).parents[1] / "web_runs" / "static"
+    pages = ["runs.html", "winrate.html", "partner.html", "topcard.html", "trivia.html", "feedback.html", "support.html"]
+    for name in pages:
+        html = (static / name).read_text(encoding="utf-8")
+        assert ('<a href="/routes" class="nav-tab">阵容路线</a>' in html
+                or '<a class="nav-tab" href="/routes">阵容路线</a>' in html)
+        for href in ("/runs", "/winrate", "/partner", "/topcard", "/trivia"):
+            assert f'href="{href}"' in html
+
+
+def test_runs_page_restores_route_link_filters_and_can_auto_query():
+    from pathlib import Path
+    html = (Path(__file__).parents[1] / "web_runs" / "static" / "runs.html").read_text(encoding="utf-8")
+    assert "new URLSearchParams(location.search)" in html
+    assert "params.get('hero')" in html
+    assert "params.get('cards')" in html
+    assert "params.get('auto') === '1'" in html
+    assert "queryRuns(1)" in html
 
 
 @pytest.mark.parametrize("url", [

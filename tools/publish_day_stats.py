@@ -26,7 +26,7 @@ DEFAULT_SOURCE = Path("/opt/qiubot/data/bazaar_day_snapshots.db")
 DEFAULT_CURRENT = Path("/opt/qiubot/data/bazaar_day_stats.db")
 DEFAULT_MIN_FREE_BYTES = 512 * 1024 * 1024
 DEFAULT_BACKUP_COUNT = 2
-MIN_SCHEMA_VERSION = 3
+MIN_SCHEMA_VERSION = 5
 _VERSION_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,79}\Z")
 
 
@@ -155,6 +155,10 @@ def validate_day_stats(path: str | Path, *, expected_version: str) -> dict[str, 
                 "cores": _scalar(connection, "SELECT COUNT(*) FROM early_day_item_cores"),
                 "nodes": _scalar(connection, "SELECT COUNT(*) FROM item_core_route_nodes"),
                 "edges": _scalar(connection, "SELECT COUNT(*) FROM item_core_route_edges"),
+                "daily_nodes": _scalar(connection, "SELECT COUNT(*) FROM daily_archetype_nodes"),
+                "daily_cards": _scalar(connection, "SELECT COUNT(*) FROM daily_archetype_cards"),
+                "daily_edges": _scalar(connection, "SELECT COUNT(*) FROM daily_archetype_edges"),
+                "daily_edge_members": _scalar(connection, "SELECT COUNT(*) FROM daily_archetype_edge_members"),
             }
             if counts["final_compositions"] <= 0:
                 raise ValidationError("final_compositions must not be empty")
@@ -162,6 +166,10 @@ def validate_day_stats(path: str | Path, *, expected_version: str) -> dict[str, 
                 raise ValidationError("early_day_item_cores must not be empty")
             if counts["nodes"] < counts["cores"]:
                 raise ValidationError("every core must have at least one route node")
+            if any(counts[name] <= 0 for name in (
+                "daily_nodes", "daily_cards", "daily_edges", "daily_edge_members"
+            )):
+                raise ValidationError("daily route tables must not be empty")
             if int(metadata["final_composition_count"]) != counts["final_compositions"]:
                 raise ValidationError("metadata final_composition_count is inconsistent")
             if int(metadata["source_snapshot_count"]) < counts["final_compositions"]:
@@ -189,19 +197,44 @@ def validate_day_stats(path: str | Path, *, expected_version: str) -> dict[str, 
                       OR run_count > observable_runs OR child_day <= parent_day
                       OR transition_rate < 0 OR transition_rate > 1""",
             )
+            invalid_daily_edges = _scalar(
+                connection,
+                """SELECT COUNT(*) FROM daily_archetype_edges
+                   WHERE run_count <= 0 OR parent_runs <= 0 OR parent_observable_runs <= 0
+                      OR run_count > parent_observable_runs OR child_day <= parent_day
+                      OR transition_rate < 0 OR transition_rate > 1
+                      OR continuation_rate < 0 OR continuation_rate > 1""",
+            )
+            mismatched_daily_members = _scalar(
+                connection,
+                """SELECT COUNT(*) FROM (
+                     SELECT e.edge_id, e.run_count, COUNT(m.run_id) AS member_count
+                     FROM daily_archetype_edges e
+                     LEFT JOIN daily_archetype_edge_members m
+                       ON m.version_id=e.version_id AND m.edge_id=e.edge_id
+                     GROUP BY e.version_id, e.edge_id
+                     HAVING e.run_count <> member_count
+                   )""",
+            )
             wrong_versions = sum(
                 _scalar(connection, f"SELECT COUNT(*) FROM {table} WHERE version_id <> ?", (expected_version,))
                 for table in (
                     "final_compositions", "final_composition_cards", "early_day_item_cores",
                     "item_core_route_nodes", "item_core_route_edges",
                     "item_core_route_node_runs", "item_core_route_edge_runs",
+                    "daily_archetype_nodes", "daily_archetype_cards",
+                    "daily_archetype_members", "daily_archetype_edges",
+                    "daily_archetype_edge_members", "daily_archetype_edge_cards",
                 )
             )
-            if orphan_cores or invalid_nodes or invalid_edges or wrong_versions:
+            if (orphan_cores or invalid_nodes or invalid_edges or invalid_daily_edges
+                    or mismatched_daily_members or wrong_versions):
                 raise ValidationError(
                     "relational checks failed: "
                     f"orphan_cores={orphan_cores}, invalid_nodes={invalid_nodes}, "
-                    f"invalid_edges={invalid_edges}, wrong_versions={wrong_versions}"
+                    f"invalid_edges={invalid_edges}, invalid_daily_edges={invalid_daily_edges}, "
+                    f"mismatched_daily_members={mismatched_daily_members}, "
+                    f"wrong_versions={wrong_versions}"
                 )
     except ValidationError:
         raise

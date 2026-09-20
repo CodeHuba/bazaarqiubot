@@ -1553,6 +1553,7 @@ input[type="file"] {
   <a href="/runs" class="logo">巴扎丘Bot</a>
   <div class="nav-tabs">
     <a href="/runs" class="nav-tab active">阵容查询</a>
+    <a href="/routes" class="nav-tab">阵容路线</a>
     <a href="/winrate" class="nav-tab">胜率查询</a>
     <a href="/partner" class="nav-tab">最佳搭档</a>
     <a href="/topcard" class="nav-tab">职业榜单</a>
@@ -1650,6 +1651,18 @@ let activeRunsRequestId = 0;
 document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('comp-result').style.display = 'none';
   document.getElementById('comp-result').innerHTML = '<div class="result-card"><div class="empty">输入卡牌名称后点击查询，即可查看阵容分析</div></div>';
+  const params = new URLSearchParams(location.search);
+  const hero = params.get('hero');
+  const cards = params.get('cards');
+  const rank = params.get('rank');
+  if (hero) document.getElementById('runs-hero').value = hero;
+  if (cards) document.getElementById('runs-cards').value = cards;
+  if (rank && document.querySelector(`#runs-rank option[value="${CSS.escape(rank)}"]`)) {
+    document.getElementById('runs-rank').value = rank;
+  }
+  if (params.get('auto') === '1' && (hero || cards)) {
+    setTimeout(() => queryRuns(1), 0);
+  }
 });
 
 function switchTab(tab) {

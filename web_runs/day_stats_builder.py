@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Any
 
 
-_SCHEMA_VERSION = 3
+_SCHEMA_VERSION = 5
 _ROUTE_OTHER_SIGNATURE = "__OTHER__"
 _ROUTE_MIN_SUPPORT_RATE = 0.05
 _ROUTE_MAX_MAJOR_SIGNATURES_PER_DAY = 12
@@ -142,6 +142,93 @@ CREATE TABLE IF NOT EXISTS item_core_route_edges (
 ) WITHOUT ROWID;
 CREATE INDEX IF NOT EXISTS idx_item_core_route_edges_parent
     ON item_core_route_edges(version_id, core_id, parent_day, parent_signature);
+
+CREATE TABLE IF NOT EXISTS daily_archetype_nodes (
+    version_id TEXT NOT NULL,
+    season INTEGER NOT NULL,
+    phase TEXT NOT NULL,
+    hero TEXT NOT NULL,
+    day INTEGER NOT NULL,
+    node_id TEXT NOT NULL,
+    rank INTEGER NOT NULL,
+    run_count INTEGER NOT NULL,
+    day_observable_runs INTEGER NOT NULL,
+    day_share REAL NOT NULL,
+    core_items TEXT NOT NULL,
+    core_support_runs INTEGER NOT NULL,
+    core_support_rate REAL NOT NULL,
+    representative_items TEXT NOT NULL,
+    PRIMARY KEY (version_id, hero, day, node_id)
+) WITHOUT ROWID;
+
+CREATE TABLE IF NOT EXISTS daily_archetype_cards (
+    version_id TEXT NOT NULL,
+    node_id TEXT NOT NULL,
+    day INTEGER NOT NULL,
+    card_id TEXT NOT NULL,
+    role TEXT NOT NULL,
+    support_runs INTEGER NOT NULL,
+    support_rate REAL NOT NULL,
+    PRIMARY KEY (version_id, node_id, card_id, role)
+) WITHOUT ROWID;
+
+CREATE TABLE IF NOT EXISTS daily_archetype_members (
+    version_id TEXT NOT NULL,
+    node_id TEXT NOT NULL,
+    day INTEGER NOT NULL,
+    run_id TEXT NOT NULL,
+    PRIMARY KEY (version_id, node_id, day, run_id)
+) WITHOUT ROWID;
+
+CREATE TABLE IF NOT EXISTS daily_archetype_edges (
+    version_id TEXT NOT NULL,
+    edge_id TEXT NOT NULL,
+    parent_day INTEGER NOT NULL,
+    parent_node_id TEXT NOT NULL,
+    child_day INTEGER NOT NULL,
+    child_node_id TEXT NOT NULL,
+    run_count INTEGER NOT NULL,
+    parent_runs INTEGER NOT NULL,
+    parent_observable_runs INTEGER NOT NULL,
+    continuation_rate REAL NOT NULL,
+    transition_rate REAL NOT NULL,
+    stage_gap INTEGER NOT NULL,
+    PRIMARY KEY (version_id, edge_id)
+) WITHOUT ROWID;
+
+CREATE TABLE IF NOT EXISTS daily_archetype_edge_members (
+    version_id TEXT NOT NULL,
+    edge_id TEXT NOT NULL,
+    run_id TEXT NOT NULL,
+    PRIMARY KEY (version_id, edge_id, run_id)
+) WITHOUT ROWID;
+
+CREATE TABLE IF NOT EXISTS daily_archetype_edge_cards (
+    version_id TEXT NOT NULL,
+    edge_id TEXT NOT NULL,
+    change_kind TEXT NOT NULL,
+    card_id TEXT NOT NULL,
+    run_count INTEGER NOT NULL,
+    change_rate REAL NOT NULL,
+    PRIMARY KEY (version_id, edge_id, change_kind, card_id)
+) WITHOUT ROWID;
+
+CREATE TABLE IF NOT EXISTS daily_archetype_paths (
+    version_id TEXT NOT NULL,
+    path_id TEXT NOT NULL,
+    early_node_id TEXT NOT NULL,
+    middle_node_id TEXT NOT NULL,
+    late_node_id TEXT NOT NULL,
+    run_count INTEGER NOT NULL,
+    complete_path_runs INTEGER NOT NULL,
+    path_share REAL NOT NULL,
+    PRIMARY KEY (version_id, path_id)
+) WITHOUT ROWID;
+
+CREATE INDEX IF NOT EXISTS idx_daily_archetype_nodes_scope
+    ON daily_archetype_nodes(version_id, hero, day, rank);
+CREATE INDEX IF NOT EXISTS idx_daily_archetype_edges_parent
+    ON daily_archetype_edges(version_id, parent_day, parent_node_id, child_day);
 
 CREATE TABLE IF NOT EXISTS item_core_route_node_runs (
     version_id TEXT NOT NULL,
@@ -323,6 +410,574 @@ def _discover_early_day_item_cores(
     return result
 
 
+def _build_daily_route_direction_details(
+    direction: dict[str, Any], edge_members: dict[str, set[str]],
+    run_days: dict[str, dict[int, frozenset[str] | set[str]]]
+) -> dict[str, Any]:
+    """Choose a real medoid-like board and rank non-core cards for one direction."""
+    observations: list[tuple[str, int, frozenset[str]]] = []
+    seen: set[tuple[str, int]] = set()
+    for variant in direction["variants"]:
+        day = int(variant["child_day"])
+        for run_id in sorted(edge_members.get(str(variant["edge_id"]), set())):
+            key = (run_id, day)
+            if key in seen or day not in run_days.get(run_id, {}):
+                continue
+            seen.add(key)
+            observations.append((run_id, day, frozenset(run_days[run_id][day])))
+    core = set(direction["target_core_items"])
+    card_counts = Counter(card for _run, _day, items in observations
+                          for card in items if card not in core)
+    total = len(observations)
+    associated = [
+        {"card_id": card, "support_runs": count, "support_rate": count / total}
+        for card, count in sorted(card_counts.items(), key=lambda row: (-row[1], row[0]))
+        if count >= max(3, math.ceil(total * 0.10))
+    ][:8]
+    frequent = {row["card_id"] for row in associated}
+    representative = None
+    if observations:
+        representative = max(
+            observations,
+            key=lambda row: (
+                len(row[2] & frequent),
+                -len(row[2] - core - frequent),
+                len(row[2]),
+                -row[1],
+                row[0],
+            ),
+        )
+    return {
+        "representative_run_id": representative[0] if representative else None,
+        "representative_day": representative[1] if representative else None,
+        "representative_items": sorted(representative[2]) if representative else [],
+        "associated_cards": associated,
+    }
+
+
+def _build_daily_route_directions(
+    nodes: list[dict[str, Any]], edges: list[dict[str, Any]], max_directions: int = 3
+) -> dict[str, list[dict[str, Any]]]:
+    """Reduce raw next-observation edges to a few distinct target-core directions."""
+    node_lookup = {(int(row["day"]), str(row["node_id"])): row for row in nodes}
+    grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for edge in edges:
+        grouped[str(edge["parent_node_id"])].append(edge)
+
+    result: dict[str, list[dict[str, Any]]] = {}
+    for parent_node, parent_edges in grouped.items():
+        observable = max(int(row["parent_observable_runs"]) for row in parent_edges)
+        threshold = min(15, max(3, math.ceil(observable * 0.03)))
+        candidates = []
+        for edge in parent_edges:
+            if int(edge["run_count"]) < threshold:
+                continue
+            child = node_lookup.get((int(edge["child_day"]), str(edge["child_node_id"])))
+            if not child:
+                continue
+            raw_core = child.get("core_items", [])
+            core = tuple(json.loads(raw_core) if isinstance(raw_core, str) else raw_core)
+            if not core:
+                continue
+            candidates.append({"edge": edge, "core": core})
+        candidates.sort(key=lambda row: (-int(row["edge"]["run_count"]), row["core"],
+                                         int(row["edge"]["child_day"])))
+
+        clusters: list[dict[str, Any]] = []
+        for candidate in candidates:
+            core_set = set(candidate["core"])
+            target = None
+            for cluster in clusters:
+                representative = set(cluster["representative_core"])
+                containment = len(core_set & representative) / min(len(core_set), len(representative))
+                if containment >= 0.80:
+                    target = cluster
+                    break
+            if target is None:
+                target = {"representative_core": candidate["core"], "members": []}
+                clusters.append(target)
+            target["members"].append(candidate)
+
+        directions = []
+        for cluster in clusters:
+            members = cluster["members"]
+            run_count = sum(int(row["edge"]["run_count"]) for row in members)
+            day_counts = Counter()
+            for row in members:
+                day_counts[int(row["edge"]["child_day"])] += int(row["edge"]["run_count"])
+            directions.append({
+                "parent_node_id": parent_node,
+                "target_core_items": list(cluster["representative_core"]),
+                "run_count": run_count,
+                "parent_observable_runs": observable,
+                "transition_rate": run_count / observable if observable else 0.0,
+                "display_threshold": threshold,
+                "variant_count": len(members),
+                "arrival_days": [
+                    {"day": day, "run_count": count, "rate": count / run_count}
+                    for day, count in sorted(day_counts.items())
+                ],
+                "variants": [dict(row["edge"]) for row in members],
+            })
+        directions.sort(key=lambda row: (-row["run_count"], row["target_core_items"]))
+        selected = directions[:max_directions]
+        coverage = sum(row["run_count"] for row in selected) / observable if observable else 0.0
+        for direction in selected:
+            direction["coverage_rate"] = coverage
+        result[parent_node] = selected
+    return result
+
+
+def _build_daily_archetype_routes(
+    version_id: str, facts: list[dict[str, Any]]
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]],
+           list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
+    """Build mutually-exclusive per-Day composition archetypes and observed transitions."""
+    states: dict[tuple[int, str, str], dict[str, dict[int, frozenset[str]]]] = defaultdict(
+        lambda: defaultdict(dict)
+    )
+    for fact in facts:
+        snapshot = fact["snapshot"]
+        scope = (int(snapshot["season"]), str(snapshot["phase"]), str(snapshot["hero"] or ""))
+        states[scope][str(snapshot["run_id"])][int(snapshot["day"])] = frozenset(
+            json.loads(fact["item_signature"])
+        )
+
+    nodes: list[dict[str, Any]] = []
+    node_cards: list[dict[str, Any]] = []
+    members: list[dict[str, Any]] = []
+    edges: list[dict[str, Any]] = []
+    edge_cards: list[dict[str, Any]] = []
+    edge_member_rows: list[dict[str, Any]] = []
+    edge_members: dict[tuple[int, str, int, str], set[str]] = defaultdict(set)
+
+    def entropy(p: float) -> float:
+        if p <= 0.0 or p >= 1.0:
+            return 0.0
+        return -p * math.log2(p) - (1.0 - p) * math.log2(1.0 - p)
+
+    for (season, phase, hero), run_days in sorted(states.items()):
+        assignment: dict[tuple[str, int], str] = {}
+        node_core_items: dict[str, frozenset[str]] = {}
+        all_days = sorted({day for timeline in run_days.values() for day in timeline})
+        for day in all_days:
+            day_items = {run: timeline[day] for run, timeline in run_days.items() if day in timeline}
+            run_ids = sorted(day_items)
+            n = len(run_ids)
+            min_leaf = max(2, math.ceil(n * 0.08))
+            counts = Counter(card for cards in day_items.values() for card in cards)
+            candidates = [card for card, count in counts.items()
+                          if count >= min_leaf and n - count >= min_leaf]
+            candidates.sort(key=lambda card: (-entropy(counts[card] / n), -counts[card], card))
+            candidates = candidates[:32]
+            leaves = [{"runs": run_ids, "present": tuple(), "absent": tuple(), "depth": 0}]
+            while len(leaves) < min(6, max(1, n // min_leaf)):
+                best = None
+                for leaf_index, leaf in enumerate(leaves):
+                    leaf_runs = leaf["runs"]
+                    if leaf["depth"] >= 3 or len(leaf_runs) < min_leaf * 2:
+                        continue
+                    available = [card for card in candidates
+                                 if card not in leaf["present"] and card not in leaf["absent"]]
+                    if not available:
+                        continue
+                    base = sum(entropy(sum(card in day_items[run] for run in leaf_runs) / len(leaf_runs))
+                               for card in candidates) / max(1, len(candidates))
+                    for card in available:
+                        yes = [run for run in leaf_runs if card in day_items[run]]
+                        no = [run for run in leaf_runs if card not in day_items[run]]
+                        if len(yes) < min_leaf or len(no) < min_leaf:
+                            continue
+                        child_impurity = sum(
+                            len(child) / len(leaf_runs) *
+                            (sum(entropy(sum(feature in day_items[run] for run in child) / len(child))
+                                 for feature in candidates) / max(1, len(candidates)))
+                            for child in (yes, no)
+                        )
+                        candidate = (base - child_impurity, min(len(yes), len(no)), card,
+                                     leaf_index, yes, no)
+                        if candidate[0] >= 0.04 and (best is None or candidate[:3] > best[:3]):
+                            best = candidate
+                if best is None:
+                    break
+                _gain, _balance, card, leaf_index, yes, no = best
+                parent = leaves.pop(leaf_index)
+                leaves.extend([
+                    {"runs": yes, "present": tuple(sorted((*parent["present"], card))),
+                     "absent": parent["absent"], "depth": parent["depth"] + 1},
+                    {"runs": no, "present": parent["present"],
+                     "absent": tuple(sorted((*parent["absent"], card))),
+                     "depth": parent["depth"] + 1},
+                ])
+
+            leaves.sort(key=lambda leaf: (-len(leaf["runs"]), leaf["present"], leaf["absent"]))
+            for rank, leaf in enumerate(leaves, start=1):
+                leaf_runs = sorted(leaf["runs"])
+                leaf_count = len(leaf_runs)
+                card_counts = Counter(card for run in leaf_runs for card in day_items[run])
+                # Name each archetype with cards that actually co-occur in the same
+                # runs. Independent marginal frequencies must never be concatenated
+                # into a fake multi-card "core".
+                feature_pool = [card for card, count in sorted(
+                    card_counts.items(), key=lambda row: (-row[1], row[0])
+                ) if count / leaf_count >= 0.20][:16]
+                best_core: tuple[tuple[str, ...], int] | None = None
+                max_size = min(5, len(feature_pool))
+                for size in range(max_size, 1, -1):
+                    candidates_for_size = []
+                    for combo in combinations(feature_pool, size):
+                        support_runs = sum(
+                            set(combo).issubset(day_items[run]) for run in leaf_runs
+                        )
+                        support_rate = support_runs / leaf_count
+                        if support_rate >= 0.50:
+                            candidates_for_size.append((support_runs, combo))
+                    if candidates_for_size:
+                        support_runs, combo = max(
+                            candidates_for_size,
+                            key=lambda row: (row[0], tuple(reversed(row[1]))),
+                        )
+                        best_core = (tuple(combo), support_runs)
+                        break
+                if best_core is None:
+                    singles = [(count, card) for card, count in card_counts.items()
+                               if count / leaf_count >= 0.50]
+                    if singles:
+                        support_runs, card = max(singles, key=lambda row: (row[0], row[1]))
+                        best_core = ((card,), support_runs)
+                core_items = list(best_core[0]) if best_core else []
+                core_support_runs = best_core[1] if best_core else 0
+                core_support_rate = core_support_runs / leaf_count if leaf_count else 0.0
+                representative = [card for card, count in sorted(card_counts.items(), key=lambda row: (-row[1], row[0]))
+                                  if count / leaf_count >= 0.35][:8]
+                identity = json.dumps([version_id, season, phase, hero, day,
+                                       leaf["present"], leaf["absent"]],
+                                      ensure_ascii=False, separators=(",", ":"))
+                node_id = hashlib.sha256(identity.encode()).hexdigest()[:24]
+                node_core_items[node_id] = frozenset(core_items)
+                nodes.append({
+                    "version_id": version_id, "season": season, "phase": phase,
+                    "hero": hero, "day": day, "day_stage": day_stage(day),
+                    "node_id": node_id, "rank": rank, "run_count": leaf_count,
+                    "day_observable_runs": n, "day_share": leaf_count / n,
+                    "core_items": json.dumps(core_items, separators=(",", ":")),
+                    "core_support_runs": core_support_runs,
+                    "core_support_rate": core_support_rate,
+                    "representative_items": json.dumps(representative, separators=(",", ":")),
+                })
+                for card, count in sorted(card_counts.items(), key=lambda row: (-row[1], row[0])):
+                    rate = count / leaf_count
+                    if card in core_items:
+                        role = "core"
+                    elif rate >= 0.35:
+                        role = "common"
+                    elif rate >= 0.20:
+                        role = "variant"
+                    else:
+                        continue
+                    node_cards.append({"version_id": version_id, "node_id": node_id,
+                                       "day": day, "card_id": card, "role": role,
+                                       "support_runs": count, "support_rate": rate})
+                for run in leaf_runs:
+                    assignment[(run, day)] = node_id
+                    members.append({"version_id": version_id, "node_id": node_id,
+                                    "day": day, "run_id": run})
+
+        edge_members.clear()
+        for run, timeline in run_days.items():
+            observed = sorted(day for day in timeline if (run, day) in assignment)
+            for parent_day, child_day in zip(observed, observed[1:]):
+                edge_members[(parent_day, assignment[(run, parent_day)],
+                              child_day, assignment[(run, child_day)])].add(run)
+        node_counts = Counter((row["day"], row["node_id"]) for row in members)
+        # All actual next observations from one parent node share one denominator,
+        # even when missing snapshots mean that the next observed Day differs.
+        parent_next_runs: dict[tuple[int, str], set[str]] = defaultdict(set)
+        for (parent_day, parent_node, _child_day, _child_node), run_set in edge_members.items():
+            parent_next_runs[(parent_day, parent_node)].update(run_set)
+        for key, run_set in sorted(edge_members.items()):
+            parent_day, parent_node, child_day, child_node = key
+            observable = len(parent_next_runs[(parent_day, parent_node)])
+            edge_id = hashlib.sha256(json.dumps([version_id, *key], separators=(",", ":")).encode()).hexdigest()[:24]
+            edges.append({"version_id": version_id, "edge_id": edge_id,
+                          "parent_day": parent_day, "parent_node_id": parent_node,
+                          "child_day": child_day, "child_node_id": child_node,
+                          "run_count": len(run_set),
+                          "parent_runs": node_counts[(parent_day, parent_node)],
+                          "parent_observable_runs": observable,
+                          "continuation_rate": observable / node_counts[(parent_day, parent_node)],
+                          "transition_rate": len(run_set) / observable,
+                          "stage_gap": child_day - parent_day - 1})
+            edge_member_rows.extend({"version_id": version_id, "edge_id": edge_id,
+                                     "run_id": run_id}
+                                    for run_id in sorted(run_set))
+            changes = {"retained": Counter(), "added": Counter(), "removed": Counter()}
+            for run in run_set:
+                before, after = run_days[run][parent_day], run_days[run][child_day]
+                changes["retained"].update(before & after)
+                changes["added"].update(after - before)
+                changes["removed"].update(before - after)
+            for kind, card_counts in changes.items():
+                for card, count in card_counts.items():
+                    rate = count / len(run_set)
+                    if count < 2 or rate < 0.20:
+                        continue
+                    if kind == "retained" and card in node_core_items[parent_node] and card in node_core_items[child_node]:
+                        change_kind = "retained_core"
+                    elif kind == "added" and card in node_core_items[child_node]:
+                        change_kind = "added_core"
+                    elif kind == "removed" and card in node_core_items[parent_node]:
+                        change_kind = "removed_core"
+                    else:
+                        change_kind = kind
+                    edge_cards.append({"version_id": version_id, "edge_id": edge_id,
+                                       "change_kind": change_kind, "card_id": card,
+                                       "run_count": count, "change_rate": rate})
+    return nodes, node_cards, members, edges, edge_cards, edge_member_rows
+
+
+def _build_stage_archetype_routes(
+    version_id: str, facts: list[dict[str, Any]]
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]],
+           list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
+    """Build mutually-exclusive early/middle/late archetypes and real run paths.
+
+    Each run contributes its last observed composition in each stage.  A small,
+    deterministic decision tree groups similar compositions by card presence;
+    every observed run belongs to exactly one archetype and no anonymous OTHER
+    bucket is created.
+    """
+    stage_order = {"early": 0, "middle": 1, "late": 2}
+
+    def stage_for(day: int) -> str:
+        if day <= 3:
+            return "early"
+        if day <= 7:
+            return "middle"
+        return "late"
+
+    # scope -> run -> stage -> (day, items); overwrite only with a later Day.
+    states: dict[tuple[int, str, str], dict[str, dict[str, tuple[int, frozenset[str]]]]] = defaultdict(
+        lambda: defaultdict(dict)
+    )
+    for fact in facts:
+        snapshot = fact["snapshot"]
+        scope = (int(snapshot["season"]), str(snapshot["phase"]), str(snapshot["hero"] or ""))
+        run_id = str(snapshot["run_id"])
+        day = int(snapshot["day"])
+        stage = stage_for(day)
+        items = frozenset(json.loads(fact["item_signature"]))
+        previous = states[scope][run_id].get(stage)
+        if previous is None or day > previous[0]:
+            states[scope][run_id][stage] = (day, items)
+
+    nodes: list[dict[str, Any]] = []
+    node_cards: list[dict[str, Any]] = []
+    members: list[dict[str, Any]] = []
+    edges: list[dict[str, Any]] = []
+    edge_cards: list[dict[str, Any]] = []
+    paths: list[dict[str, Any]] = []
+
+    def entropy(p: float) -> float:
+        if p <= 0.0 or p >= 1.0:
+            return 0.0
+        return -p * math.log2(p) - (1.0 - p) * math.log2(1.0 - p)
+
+    for scope, run_timeline in sorted(states.items()):
+        season, phase, hero = scope
+        assignment: dict[tuple[str, str], str] = {}
+        state_items: dict[tuple[str, str], frozenset[str]] = {}
+        node_core_items: dict[str, frozenset[str]] = {}
+
+        for stage in ("early", "middle", "late"):
+            stage_states = {
+                run_id: timeline[stage]
+                for run_id, timeline in run_timeline.items() if stage in timeline
+            }
+            if not stage_states:
+                continue
+            run_ids = sorted(stage_states)
+            stage_items = {run_id: stage_states[run_id][1] for run_id in run_ids}
+            n = len(run_ids)
+            min_leaf = max(3, math.ceil(n * 0.08))
+            counts = Counter(card for item_set in stage_items.values() for card in item_set)
+            candidates = [
+                card for card, count in counts.items()
+                if count >= min_leaf and n - count >= min_leaf
+            ]
+            candidates.sort(key=lambda card: (-entropy(counts[card] / n), -counts[card], card))
+            candidates = candidates[:32]
+
+            leaves = [{"runs": run_ids, "present": tuple(), "absent": tuple(), "depth": 0}]
+            while len(leaves) < min(6, max(1, n // min_leaf)):
+                best = None
+                for leaf_index, leaf in enumerate(leaves):
+                    leaf_runs = leaf["runs"]
+                    if leaf["depth"] >= 3 or len(leaf_runs) < min_leaf * 2:
+                        continue
+                    available = [c for c in candidates if c not in leaf["present"] and c not in leaf["absent"]]
+                    if not available:
+                        continue
+                    base = sum(entropy(sum(c in stage_items[r] for r in leaf_runs) / len(leaf_runs))
+                               for c in candidates) / max(1, len(candidates))
+                    for card in available:
+                        yes = [r for r in leaf_runs if card in stage_items[r]]
+                        no = [r for r in leaf_runs if card not in stage_items[r]]
+                        if len(yes) < min_leaf or len(no) < min_leaf:
+                            continue
+                        child_impurity = 0.0
+                        for child in (yes, no):
+                            child_impurity += len(child) / len(leaf_runs) * (
+                                sum(entropy(sum(c in stage_items[r] for r in child) / len(child))
+                                    for c in candidates) / max(1, len(candidates))
+                            )
+                        gain = base - child_impurity
+                        candidate = (gain, min(len(yes), len(no)), card, leaf_index, yes, no)
+                        if gain >= 0.04 and (best is None or candidate[:3] > best[:3]):
+                            best = candidate
+                if best is None:
+                    break
+                _gain, _balance, card, leaf_index, yes, no = best
+                parent = leaves.pop(leaf_index)
+                leaves.extend([
+                    {"runs": yes, "present": tuple(sorted((*parent["present"], card))),
+                     "absent": parent["absent"], "depth": parent["depth"] + 1},
+                    {"runs": no, "present": parent["present"],
+                     "absent": tuple(sorted((*parent["absent"], card))), "depth": parent["depth"] + 1},
+                ])
+
+            leaves.sort(key=lambda leaf: (-len(leaf["runs"]), leaf["present"], leaf["absent"]))
+            for rank, leaf in enumerate(leaves, start=1):
+                leaf_runs = sorted(leaf["runs"])
+                leaf_count = len(leaf_runs)
+                card_counts = Counter(card for run_id in leaf_runs for card in stage_items[run_id])
+                representative = [card for card, count in sorted(
+                    card_counts.items(), key=lambda row: (-row[1], row[0])
+                ) if count / leaf_count >= 0.50][:8]
+                # Route identity is expressed by a compact set of stable co-occurring
+                # core cards. Temporary/variant cards remain supporting context only.
+                stable_cards = [card for card, count in sorted(
+                    card_counts.items(), key=lambda row: (-row[1], row[0])
+                ) if count / leaf_count >= 0.70]
+                core_items = list(dict.fromkeys([*leaf["present"], *stable_cards]))[:5]
+                identity = json.dumps(
+                    [version_id, season, phase, hero, stage, leaf["present"], leaf["absent"]],
+                    ensure_ascii=False, separators=(",", ":"),
+                )
+                node_id = hashlib.sha256(identity.encode("utf-8")).hexdigest()[:24]
+                node_core_items[node_id] = frozenset(core_items)
+                snapshot_days = sorted(stage_states[run_id][0] for run_id in leaf_runs)
+                median_day = snapshot_days[(len(snapshot_days) - 1) // 2]
+                nodes.append({
+                    "version_id": version_id, "season": season, "phase": phase,
+                    "hero": hero, "stage": stage, "node_id": node_id, "rank": rank,
+                    "run_count": leaf_count, "stage_observable_runs": n,
+                    "stage_share": leaf_count / n,
+                    "min_snapshot_day": snapshot_days[0], "median_snapshot_day": median_day,
+                    "max_snapshot_day": snapshot_days[-1],
+                    "defining_present": json.dumps(list(leaf["present"]), separators=(",", ":")),
+                    "defining_absent": json.dumps(list(leaf["absent"]), separators=(",", ":")),
+                    "core_items": json.dumps(core_items, separators=(",", ":")),
+                    "representative_items": json.dumps(representative, separators=(",", ":")),
+                })
+                for card, count in sorted(card_counts.items(), key=lambda row: (-row[1], row[0])):
+                    rate = count / leaf_count
+                    if card in leaf["present"]:
+                        role = "defining"
+                    elif rate >= 0.70:
+                        role = "stable"
+                    elif rate >= 0.35:
+                        role = "common"
+                    elif rate >= 0.20:
+                        role = "variant"
+                    else:
+                        continue
+                    node_cards.append({
+                        "version_id": version_id, "node_id": node_id, "stage": stage,
+                        "card_id": card, "role": role, "support_runs": count,
+                        "support_rate": rate,
+                    })
+                for run_id in leaf_runs:
+                    assignment[(run_id, stage)] = node_id
+                    state_items[(run_id, stage)] = stage_items[run_id]
+                    members.append({
+                        "version_id": version_id, "node_id": node_id, "stage": stage,
+                        "run_id": run_id, "snapshot_day": stage_states[run_id][0],
+                    })
+
+        edge_members: dict[tuple[str, str, str, str], set[str]] = defaultdict(set)
+        path_members: dict[tuple[str, str, str], set[str]] = defaultdict(set)
+        for run_id, timeline in run_timeline.items():
+            observed = [stage for stage in ("early", "middle", "late") if (run_id, stage) in assignment]
+            for parent_stage, child_stage in zip(observed, observed[1:]):
+                edge_members[(parent_stage, assignment[(run_id, parent_stage)],
+                              child_stage, assignment[(run_id, child_stage)])].add(run_id)
+            if len(observed) == 3:
+                path_members[tuple(assignment[(run_id, stage)] for stage in observed)].add(run_id)
+
+        parent_runs = Counter((row["stage"], row["node_id"]) for row in members
+                              if any(row["run_id"] == run for run in run_timeline))
+        for key, run_set in sorted(edge_members.items()):
+            parent_stage, parent_node, child_stage, child_node = key
+            observable = sum(len(value) for candidate, value in edge_members.items()
+                             if candidate[0] == parent_stage and candidate[1] == parent_node
+                             and candidate[2] == child_stage)
+            edge_id = hashlib.sha256(json.dumps(
+                [version_id, *key], separators=(",", ":")
+            ).encode()).hexdigest()[:24]
+            edges.append({
+                "version_id": version_id, "edge_id": edge_id,
+                "parent_stage": parent_stage, "parent_node_id": parent_node,
+                "child_stage": child_stage, "child_node_id": child_node,
+                "run_count": len(run_set), "parent_runs": parent_runs[(parent_stage, parent_node)],
+                "parent_observable_runs": observable,
+                "continuation_rate": observable / parent_runs[(parent_stage, parent_node)],
+                "transition_rate": len(run_set) / observable,
+                "stage_gap": stage_order[child_stage] - stage_order[parent_stage] - 1,
+            })
+            changes = {"retained": Counter(), "added": Counter(), "removed": Counter()}
+            parent_core = node_core_items[parent_node]
+            child_core = node_core_items[child_node]
+            for run_id in run_set:
+                before = state_items[(run_id, parent_stage)]
+                after = state_items[(run_id, child_stage)]
+                changes["retained"].update(before & after)
+                changes["added"].update(after - before)
+                changes["removed"].update(before - after)
+            for kind, card_counts in changes.items():
+                for card, count in card_counts.items():
+                    rate = count / len(run_set)
+                    if count >= 3 and rate >= 0.20:
+                        if kind == "retained" and card in parent_core and card in child_core:
+                            change_kind = "retained_core"
+                        elif kind == "added" and card in child_core:
+                            change_kind = "added_core"
+                        elif kind == "removed" and card in parent_core:
+                            change_kind = "removed_core"
+                        else:
+                            change_kind = kind
+                        edge_cards.append({
+                            "version_id": version_id, "edge_id": edge_id,
+                            "change_kind": change_kind, "card_id": card,
+                            "run_count": count, "change_rate": rate,
+                        })
+
+        complete_runs = sum(len(value) for value in path_members.values())
+        for node_ids, run_set in sorted(path_members.items(), key=lambda row: (-len(row[1]), row[0])):
+            path_id = hashlib.sha256(json.dumps(
+                [version_id, season, phase, hero, *node_ids], separators=(",", ":")
+            ).encode()).hexdigest()[:24]
+            paths.append({
+                "version_id": version_id, "season": season, "phase": phase, "hero": hero,
+                "path_id": path_id, "early_node_id": node_ids[0],
+                "middle_node_id": node_ids[1], "late_node_id": node_ids[2],
+                "run_count": len(run_set), "complete_path_runs": complete_runs,
+                "path_share": len(run_set) / complete_runs,
+            })
+
+    return nodes, node_cards, members, edges, edge_cards, paths
+
+
 def _build_item_core_routes(
     cores: list[dict[str, Any]], facts: list[dict[str, Any]]
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]],
@@ -461,13 +1116,25 @@ def _build_item_core_routes(
 
 
 def _migrate_output_schema(conn: sqlite3.Connection) -> None:
-    """Remove legacy duplicated snapshot JSON when appending to a v2 stats DB."""
+    """Apply additive migrations before appending a new immutable version."""
     columns = {
         str(row[1]) for row in conn.execute("PRAGMA table_info(final_compositions)")
     }
     for column in ("player_board_json", "skills_json"):
         if column in columns:
             conn.execute(f"ALTER TABLE final_compositions DROP COLUMN {column}")
+
+    daily_columns = {
+        str(row[1]) for row in conn.execute("PRAGMA table_info(daily_archetype_nodes)")
+    }
+    if daily_columns and "core_support_runs" not in daily_columns:
+        conn.execute(
+            "ALTER TABLE daily_archetype_nodes ADD COLUMN core_support_runs INTEGER NOT NULL DEFAULT 0"
+        )
+    if daily_columns and "core_support_rate" not in daily_columns:
+        conn.execute(
+            "ALTER TABLE daily_archetype_nodes ADD COLUMN core_support_rate REAL NOT NULL DEFAULT 0"
+        )
 
 
 def build_day_stats(
@@ -490,6 +1157,15 @@ def build_day_stats(
 
     built_at = built_at or datetime.now(timezone.utc).isoformat()
     metadata, facts = _read_source(source)
+    source_scopes = {
+        (int(fact["snapshot"]["season"]), str(fact["snapshot"]["phase"]))
+        for fact in facts
+    }
+    if len(source_scopes) != 1:
+        raise ValueError(
+            "one statistics version must contain exactly one season/phase; "
+            f"found {sorted(source_scopes)}"
+        )
     output.parent.mkdir(parents=True, exist_ok=True)
 
     conn = sqlite3.connect(output, timeout=30)
@@ -554,6 +1230,56 @@ def build_day_stats(
         )
         routes = _build_item_core_routes(cores, facts)
         route_nodes, route_edges, node_members, edge_members = routes
+        daily_nodes, daily_cards, daily_members, daily_edges, daily_edge_cards, daily_edge_members = _build_daily_archetype_routes(
+            version_id, facts
+        )
+        conn.executemany(
+            """INSERT INTO daily_archetype_nodes
+               (version_id, season, phase, hero, day, node_id, rank, run_count,
+                day_observable_runs, day_share, core_items, core_support_runs,
+                core_support_rate, representative_items)
+               VALUES (:version_id, :season, :phase, :hero, :day, :node_id, :rank,
+                       :run_count, :day_observable_runs, :day_share, :core_items,
+                       :core_support_runs, :core_support_rate, :representative_items)""",
+            daily_nodes,
+        )
+        conn.executemany(
+            """INSERT INTO daily_archetype_cards
+               (version_id, node_id, day, card_id, role, support_runs, support_rate)
+               VALUES (:version_id, :node_id, :day, :card_id, :role,
+                       :support_runs, :support_rate)""",
+            daily_cards,
+        )
+        conn.executemany(
+            """INSERT INTO daily_archetype_members
+               (version_id, node_id, day, run_id)
+               VALUES (:version_id, :node_id, :day, :run_id)""",
+            daily_members,
+        )
+        conn.executemany(
+            """INSERT INTO daily_archetype_edges
+               (version_id, edge_id, parent_day, parent_node_id, child_day,
+                child_node_id, run_count, parent_runs, parent_observable_runs,
+                continuation_rate, transition_rate, stage_gap)
+               VALUES (:version_id, :edge_id, :parent_day, :parent_node_id,
+                       :child_day, :child_node_id, :run_count, :parent_runs,
+                       :parent_observable_runs, :continuation_rate,
+                       :transition_rate, :stage_gap)""",
+            daily_edges,
+        )
+        conn.executemany(
+            """INSERT INTO daily_archetype_edge_members
+               (version_id, edge_id, run_id)
+               VALUES (:version_id, :edge_id, :run_id)""",
+            daily_edge_members,
+        )
+        conn.executemany(
+            """INSERT INTO daily_archetype_edge_cards
+               (version_id, edge_id, change_kind, card_id, run_count, change_rate)
+               VALUES (:version_id, :edge_id, :change_kind, :card_id,
+                       :run_count, :change_rate)""",
+            daily_edge_cards,
+        )
         conn.executemany(
             """INSERT INTO item_core_route_nodes
                (version_id, core_id, day, signature, run_count, observable_runs,

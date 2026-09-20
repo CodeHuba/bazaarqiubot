@@ -22,8 +22,14 @@ from flask import Flask, request, jsonify, send_from_directory, send_file, abort
 from werkzeug.middleware.proxy_fix import ProxyFix
 from analytics import FeatureEventWriter, init_analytics_db, overview as feature_overview
 
+_APP_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, '/opt/qiubot')
-import sys as _sys; _sys.path.insert(0, '/opt/qiubot/web_runs')
+import sys as _sys
+if _APP_DIR in _sys.path:
+    _sys.path.remove(_APP_DIR)
+_sys.path.insert(0, _APP_DIR)
+if '/opt/qiubot/web_runs' not in _sys.path:
+    _sys.path.append('/opt/qiubot/web_runs')
 from ocr_worker import start_worker, enqueue_run
 
 # 启动 OCR 后台线程
@@ -31,6 +37,10 @@ from ocr_worker import start_worker, enqueue_run
 
 from plugins.bazaar_plugin.runs_query import RunsQuery
 from plugins.bazaar_plugin.data_client import RUNS_SEASON_ID, CURRENT_PHASE
+from day_stats_builder import (
+    _build_daily_route_directions,
+    _build_daily_route_direction_details,
+)
 from web_runs.day_snapshot_store import DaySnapshotStore
 
 INGEST_TOKEN = os.getenv('BAZAAR_INGEST_TOKEN', '')
@@ -625,8 +635,13 @@ def _day_stats_context(conn):
     return metadata, None
 
 
+_DAY_STATS_HEROES = frozenset({
+    'Vanessa', 'Dooley', 'Mak', 'Pygmalien', 'Stelle', 'Jules', 'Karnok', 'The Dragons'
+})
+
+
 def _valid_day_stats_hero(hero):
-    return bool(hero and len(hero) <= 40 and re.fullmatch(r"[\w .'-]+", hero, re.UNICODE))
+    return hero in _DAY_STATS_HEROES
 
 
 def _valid_day_stats_core_id(core_id):
@@ -737,7 +752,7 @@ def after_request(response):
     if hasattr(g, 'start_time'):
         duration_ms = int((time.time() - g.start_time) * 1000)
         endpoint = request.endpoint
-        _user_api_paths = ('/api/runs', '/api/winrate', '/api/partner', '/api/heroes', '/api/suggestions', '/api/card_img', '/api/topcard', '/api/card-tier', '/api/feedback')
+        _user_api_paths = ('/api/runs', '/api/winrate', '/api/partner', '/api/heroes', '/api/suggestions', '/api/card_img', '/api/topcard', '/api/card-tier', '/api/feedback', '/api/routes')
         if endpoint and endpoint.startswith('api_') and request.path.startswith(_user_api_paths):
             _log_api_call(
                 endpoint=request.path,
@@ -758,6 +773,9 @@ def after_request(response):
         ('GET', '/api/comp'): ('comp_query', 'topcard'),
         ('GET', '/api/comp/card'): ('comp_card_query', 'runs'),
         ('GET', '/api/hero_overview'): ('hero_overview', 'topcard'),
+        ('GET', '/api/routes/latest'): ('routes_latest', 'routes'),
+        ('GET', '/api/routes/cores'): ('routes_cores', 'routes'),
+        ('GET', '/api/routes/cores/<core_id>'): ('routes_detail', 'routes'),
         ('POST', '/api/feedback'): ('feedback_submit', 'feedback'),
         ('POST', '/api/feedback/<int:fid>/like'): ('feedback_like', 'feedback'),
         ('POST', '/api/feedback/<int:fid>/comments'): ('feedback_comment', 'feedback'),
@@ -771,7 +789,7 @@ def after_request(response):
                 _track_feature(feature, page, outcome)
             break
     # 大型只读统计结果允许浏览器/CDN 短期复用；服务端统计缓存仍负责更长周期复用。
-    if request.method == 'GET' and request.path in ('/api/comp', '/api/comp/card') and response.status_code == 200:
+    if request.method == 'GET' and (request.path in ('/api/comp', '/api/comp/card') or request.path.startswith('/api/routes/')) and response.status_code == 200:
         response.cache_control.public = True
         response.cache_control.max_age = 60
         response.cache_control.stale_while_revalidate = 300
@@ -891,6 +909,34 @@ _init_stats_db()
 
 # ===== 限流：同一 IP 3秒内只能查一次 =====
 _rate_limit = defaultdict(float)
+_routes_rate_limit = defaultdict(list)
+_routes_rate_limit_lock = threading.Lock()
+
+
+def routes_rate_limit(f):
+    @wraps(f)
+    def wrapper(*args, **kwargs):
+        # ProxyFix already resolves the one trusted Caddy hop. Use the full
+        # client address for fairness; masking is only appropriate for logs.
+        raw_ip = request.remote_addr or ''
+        try:
+            ip = ipaddress.ip_address(raw_ip).compressed
+        except ValueError:
+            ip = raw_ip or 'unknown'
+        now = time.time()
+        with _routes_rate_limit_lock:
+            recent = [seen for seen in _routes_rate_limit.get(ip, ()) if now - seen < 10]
+            if len(recent) >= 30:
+                return jsonify({'error': '路线查询太频繁，请稍后再试'}), 429
+            recent.append(now)
+            _routes_rate_limit[ip] = recent
+            if len(_routes_rate_limit) > 4096:
+                stale = [key for key, values in _routes_rate_limit.items() if not values or now - values[-1] >= 10]
+                for key in stale[:1024]:
+                    _routes_rate_limit.pop(key, None)
+        return f(*args, **kwargs)
+    return wrapper
+
 
 def rate_limit(f):
     @wraps(f)
@@ -910,6 +956,10 @@ def rate_limit(f):
 @app.route('/api/day-stats/latest', methods=['GET'])
 @require_stats_auth
 def api_day_stats_latest():
+    return _day_stats_latest_response()
+
+
+def _day_stats_latest_response():
     metadata = _day_stats_cache_get(_day_stats_metadata_cache_key('latest'))
     if metadata is None:
         try:
@@ -930,6 +980,10 @@ def api_day_stats_latest():
 @app.route('/api/day-stats/cores', methods=['GET'])
 @require_stats_auth
 def api_day_stats_cores():
+    return _day_stats_cores_response()
+
+
+def _day_stats_cores_response():
     version = (request.args.get('version') or '').strip()
     if not version:
         return jsonify({'error': 'version is required'}), 400
@@ -983,6 +1037,10 @@ def api_day_stats_cores():
 @app.route('/api/day-stats/cores/<core_id>/route', methods=['GET'])
 @require_stats_auth
 def api_day_stats_core_route(core_id):
+    return _day_stats_core_route_response(core_id)
+
+
+def _day_stats_core_route_response(core_id):
     version = (request.args.get('version') or '').strip()
     if not version:
         return jsonify({'error': 'version is required'}), 400
@@ -1036,6 +1094,220 @@ def api_day_stats_core_route(core_id):
         return jsonify(payload)
     finally:
         conn.close()
+
+
+@app.route('/api/routes/daily', methods=['GET'])
+@routes_rate_limit
+def api_routes_daily():
+    return _day_stats_daily_response()
+
+
+def _day_stats_batched_rows(conn, sql_template, fixed_params, values, batch_size=900):
+    rows = []
+    for start in range(0, len(values), batch_size):
+        batch = values[start:start + batch_size]
+        placeholders = ','.join('?' for _ in batch)
+        rows.extend(conn.execute(
+            sql_template.format(placeholders=placeholders),
+            (*fixed_params, *batch),
+        ).fetchall())
+    return rows
+
+
+def _day_stats_daily_response():
+    version = (request.args.get('version') or 'latest').strip()
+    hero = request.args.get('hero', '').strip()
+    day_raw = request.args.get('day', '').strip()
+    if not _valid_day_stats_hero(hero):
+        return jsonify({'error': 'invalid hero'}), 400
+    if not day_raw.isdigit() or not 1 <= int(day_raw) <= 16:
+        return jsonify({'error': 'day must be between 1 and 16'}), 400
+    if not _valid_day_stats_version(version):
+        return _day_stats_invalid_version_response()
+    day = int(day_raw)
+    cache_key = _day_stats_result_cache_key(version, 'daily-v5', hero, day)
+    cached = _day_stats_cache_get(cache_key)
+    if cached is not None:
+        return jsonify(cached)
+    try:
+        conn = _day_stats_connection()
+    except (_sqlite3.Error, OSError):
+        return jsonify({'error': 'day stats database unavailable'}), 503
+    try:
+        metadata, error = _day_stats_context(conn)
+        if error:
+            return error
+        # Cache against the immutable resolved version so a fresh "latest"
+        # build cannot reuse a previous version's payload.
+        resolved_cache_key = _day_stats_result_cache_key(
+            metadata['version_id'], 'daily-v5', hero, day
+        )
+        cached = _day_stats_cache_get(resolved_cache_key)
+        if cached is not None:
+            return jsonify(cached)
+        nodes = [dict(row) for row in conn.execute('''SELECT node_id, rank, run_count,
+                    day_observable_runs, day_share, core_items, core_support_runs,
+                    core_support_rate, representative_items
+                    FROM daily_archetype_nodes
+                    WHERE version_id=? AND hero=? AND day=?
+                      AND core_items!='[]' AND core_support_rate>=0.5
+                    ORDER BY rank, node_id''', (metadata['version_id'], hero, day)).fetchall()]
+        for node in nodes:
+            node['core_items'] = json.loads(node['core_items'])
+            node['representative_items'] = json.loads(node['representative_items'])
+            node['cards'] = _day_stats_cards(node['core_items'])
+            node['representative_cards'] = _day_stats_cards(node['representative_items'])
+            node['card_stats'] = [dict(card) for card in conn.execute('''SELECT card_id, role, support_runs, support_rate
+                FROM daily_archetype_cards WHERE version_id=? AND node_id=? ORDER BY role, support_rate DESC''',
+                (metadata['version_id'], node['node_id'])).fetchall()]
+            for card in node['card_stats']:
+                card['display'] = _day_stats_cards([card['card_id']])[0]
+        node_ids = [node['node_id'] for node in nodes]
+        edges = []
+        if node_ids:
+            rows = conn.execute('''SELECT e.parent_day, e.parent_node_id, e.child_day,
+                    e.child_node_id, e.run_count, e.parent_runs,
+                    e.parent_observable_runs, e.continuation_rate,
+                    e.transition_rate, e.stage_gap, e.edge_id
+                    FROM daily_archetype_edges e
+                    JOIN daily_archetype_nodes child
+                      ON child.version_id=e.version_id AND child.node_id=e.child_node_id
+                    WHERE e.version_id=? AND e.parent_day=?
+                      AND child.core_items!='[]' AND child.core_support_rate>=0.5
+                    ORDER BY e.transition_rate DESC, e.run_count DESC''',
+                    (metadata['version_id'], day)).fetchall()
+            edges = [dict(row) for row in rows if row['parent_node_id'] in node_ids]
+            for edge in edges:
+                edge['changes'] = [dict(card) for card in conn.execute('''SELECT change_kind, card_id, run_count, change_rate
+                    FROM daily_archetype_edge_cards WHERE version_id=? AND edge_id=?
+                    ORDER BY change_kind, change_rate DESC''',
+                    (metadata['version_id'], edge['edge_id'])).fetchall()]
+                for card in edge['changes']:
+                    card['display'] = _day_stats_cards([card['card_id']])[0]
+        directions_by_parent = _build_daily_route_directions(
+            [
+                {"node_id": row["node_id"], "day": row["day"],
+                 "core_items": row["core_items"]}
+                for row in conn.execute('''SELECT node_id, day, core_items
+                    FROM daily_archetype_nodes WHERE version_id=? AND hero=?''',
+                    (metadata['version_id'], hero)).fetchall()
+            ],
+            edges,
+        )
+        edge_ids = [edge['edge_id'] for edge in edges]
+        edge_member_map = defaultdict(set)
+        if edge_ids:
+            for row in _day_stats_batched_rows(
+                conn,
+                '''SELECT edge_id, run_id FROM daily_archetype_edge_members
+                   WHERE version_id=? AND edge_id IN ({placeholders})''',
+                (metadata['version_id'],), edge_ids,
+            ):
+                edge_member_map[row['edge_id']].add(row['run_id'])
+        run_ids = sorted({run_id for runs in edge_member_map.values() for run_id in runs})
+        run_days = defaultdict(dict)
+        if run_ids:
+            for row in _day_stats_batched_rows(
+                conn,
+                '''SELECT run_id, day, item_signature FROM final_compositions
+                   WHERE version_id=? AND run_id IN ({placeholders})''',
+                (metadata['version_id'],), run_ids,
+            ):
+                run_days[row['run_id']][int(row['day'])] = frozenset(json.loads(row['item_signature']))
+        directions = directions_by_parent
+        for parent_directions in directions.values():
+            for direction in parent_directions:
+                for variant in direction['variants']:
+                    child = next((row for row in conn.execute(
+                        '''SELECT core_items FROM daily_archetype_nodes
+                           WHERE version_id=? AND node_id=?''',
+                        (metadata['version_id'], variant['child_node_id'])).fetchall()), None)
+                    variant['target_core_items'] = json.loads(child['core_items']) if child else []
+                    variant['target_cards'] = _day_stats_cards(variant['target_core_items'])
+                    variant['direction_share'] = (
+                        variant['run_count'] / direction['run_count']
+                        if direction['run_count'] else 0.0
+                    )
+                detail = _build_daily_route_direction_details(
+                    direction, edge_member_map, run_days
+                )
+                direction.update(detail)
+                direction['target_cards'] = _day_stats_cards(direction['target_core_items'])
+                direction['representative_cards'] = _day_stats_cards(direction['representative_items'])
+                for card in direction['associated_cards']:
+                    card['display'] = _day_stats_cards([card['card_id']])[0]
+        payload = _day_stats_envelope(
+            metadata, hero=hero, day=day, nodes=nodes, edges=edges,
+            directions=directions,
+        )
+        _day_stats_cache_set(resolved_cache_key, payload, _DAY_STATS_VERSION_TTL)
+        return jsonify(payload)
+    finally:
+        conn.close()
+
+
+@app.route('/api/routes/daily/summary', methods=['GET'])
+@routes_rate_limit
+def api_routes_daily_summary():
+    version = (request.args.get('version') or 'latest').strip()
+    hero = request.args.get('hero', '').strip()
+    if not _valid_day_stats_hero(hero):
+        return jsonify({'error': 'invalid hero'}), 400
+    if not _valid_day_stats_version(version):
+        return _day_stats_invalid_version_response()
+    cache_key = _day_stats_result_cache_key(version, 'daily-summary-v5', hero)
+    cached = _day_stats_cache_get(cache_key)
+    if cached is not None:
+        return jsonify(cached)
+    try:
+        conn = _day_stats_connection()
+    except (_sqlite3.Error, OSError):
+        return jsonify({'error': 'day stats database unavailable'}), 503
+    try:
+        metadata, error = _day_stats_context(conn)
+        if error:
+            return error
+        resolved_cache_key = _day_stats_result_cache_key(
+            metadata['version_id'], 'daily-summary-v5', hero
+        )
+        cached = _day_stats_cache_get(resolved_cache_key)
+        if cached is not None:
+            return jsonify(cached)
+        rows = [dict(row) for row in conn.execute('''SELECT day, node_id, rank, run_count,
+                    day_observable_runs, day_share, core_items, core_support_runs,
+                    core_support_rate, representative_items
+                    FROM daily_archetype_nodes
+                    WHERE version_id=? AND hero=?
+                      AND core_items!='[]' AND core_support_rate>=0.5
+                    ORDER BY day, rank''', (metadata['version_id'], hero)).fetchall()]
+        for row in rows:
+            row['core_items'] = json.loads(row['core_items'])
+            row['representative_items'] = json.loads(row['representative_items'])
+            row['cards'] = _day_stats_cards(row['core_items'])
+        payload = _day_stats_envelope(metadata, hero=hero, nodes=rows)
+        _day_stats_cache_set(resolved_cache_key, payload, _DAY_STATS_VERSION_TTL)
+        return jsonify(payload)
+    finally:
+        conn.close()
+
+
+@app.route('/api/routes/latest', methods=['GET'])
+@routes_rate_limit
+def api_routes_latest():
+    return _day_stats_latest_response()
+
+
+@app.route('/api/routes/cores', methods=['GET'])
+@routes_rate_limit
+def api_routes_cores():
+    return _day_stats_cores_response()
+
+
+@app.route('/api/routes/cores/<core_id>', methods=['GET'])
+@routes_rate_limit
+def api_routes_core(core_id):
+    return _day_stats_core_route_response(core_id)
+
 
 @app.route('/api/runs', methods=['GET'])
 @rate_limit
@@ -1907,6 +2179,10 @@ def partner_page():
 @app.route('/topcard')
 def topcard_page():
     return send_from_directory('static', 'topcard.html')
+
+@app.route('/routes')
+def routes_page():
+    return send_from_directory('static', 'routes.html')
 
 @app.route('/feedback')
 def feedback_page():
