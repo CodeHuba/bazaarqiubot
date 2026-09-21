@@ -53,6 +53,8 @@ def test_routes_canvas_canonicalizes_deduplicates_and_caps_complete_paths():
     assert "超过 ${fmt(MAX_PATHS)} 条安全上限，暂不继续展开" in js
     assert "if(uniqueCount>MAX_PATHS)" in js
     assert "paths:requestPaths" in js
+    assert "branch.path_indexes" in js
+    assert "parentPaths.filter" in js
     assert "run_id" not in js
 
 
@@ -75,6 +77,56 @@ def test_routes_canvas_usability_tweak_uses_ctrl_wheel_focus_and_larger_nodes():
     assert ".canvas-node{width:320px" in css
     assert ".canvas-node .route-cards{overflow:visible;flex-wrap:wrap" in css
     assert ".route-workspace.focused{position:fixed;inset:0" in css
+
+
+def test_routes_canvas_reflows_from_real_dom_heights_with_a_40px_gap():
+    js = source()
+    assert "function measureAndRelayout()" in js
+    assert "offsetHeight" in js
+    assert "NODE_GAP=40" in js
+    assert "requestAnimationFrame(measureAndRelayout)" in js
+    assert "i*300" not in js
+
+
+def test_routes_canvas_separates_detail_selection_from_expand_toggle():
+    js = source()
+    css = (ROOT / "web_runs" / "static" / "routes.css").read_text(encoding="utf-8")
+    assert 'class=\"node-expand\"' in js
+    assert "toggleNode(k)" in js
+    assert "collapseNode(k)" in js
+    assert "b.querySelector('.node-expand').onclick" in js
+    assert ".node-expand{" in css
+
+
+def test_routes_canvas_allows_only_one_expanded_node_per_day_and_prunes_descendants():
+    js = source()
+    assert "function collapseNode(k)" in js
+    assert "invalidateOutgoing(k)" in js
+    assert "state.expanded.delete(k)" in js
+    assert "function collapseExpandedOnDay(k)" in js
+    assert "other!==k&&node.day===current.day" in js
+
+
+def test_routes_canvas_labels_empty_cores_as_other_composition():
+    js = source()
+    assert "const nodeTitle=" in js
+    assert "'其他阵容'" in js
+    assert "nodeTitle(n)" in js
+
+
+def test_routes_canvas_places_branches_on_actual_day_and_marks_cross_day_edges():
+    js = source()
+    css = (ROOT / "web_runs" / "static" / "routes.css").read_text(encoding="utf-8")
+    assert "day:Number(branch.day||n.day)" in js
+    assert "const dayGap=b.day-a.day" in js
+    assert "cross-day" in js
+    assert "缺失 Day" in js and "跨 Day" in js
+    assert "${fmt(e.count)}/${fmt(e.observable)}局 · ${pct(e.rate)}" in js
+    assert ".route-edges .cross-day" in css
+    assert "d<=99" in js
+    assert "maxY=Math.max(...ns.map(n=>n.y+(n.measuredHeight||220)))" in js
+    assert "正在展开后续观测" in js
+    assert "暂无后续观测快照" in js
 
 
 def test_routes_javascript_syntax_is_valid():

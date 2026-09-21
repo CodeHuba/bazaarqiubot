@@ -748,8 +748,6 @@ def _build_daily_archetype_routes(
         for run, timeline in run_days.items():
             observed = sorted(day for day in timeline if (run, day) in assignment)
             for parent_day, child_day in zip(observed, observed[1:]):
-                if child_day != parent_day + 1:
-                    continue
                 edge_members[(parent_day, assignment[(run, parent_day)],
                               child_day, assignment[(run, child_day)])].add(run)
         node_counts = Counter((row["day"], row["node_id"]) for row in members)
@@ -1158,15 +1156,14 @@ def _build_item_core_routes(
 
         for key, members in sorted(edge_runs.items()):
             parent_day, parent_signature, child_day, child_signature = key
-            observable_runs = sum(
-                len(edge_member_ids)
+            observable_runs = len(set().union(*(
+                edge_member_ids
                 for (candidate_parent_day, candidate_parent_signature,
-                     candidate_child_day, _candidate_child_signature), edge_member_ids
+                     _candidate_child_day, _candidate_child_signature), edge_member_ids
                 in edge_runs.items()
                 if candidate_parent_day == parent_day
                 and candidate_parent_signature == parent_signature
-                and candidate_child_day == child_day
-            )
+            )))
             edges.append({
                 "version_id": version_id, "core_id": core_id,
                 "parent_day": parent_day, "parent_signature": parent_signature,

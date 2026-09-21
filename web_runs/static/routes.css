@@ -13,6 +13,10 @@
 .canvas-node .route-card-art,.canvas-node .route-card.size-Medium .route-card-art,.canvas-node .route-card.size-Large .route-card-art{height:94px}
 .canvas-node>strong{display:block;font-size:15px;line-height:1.45;margin-top:7px;white-space:normal;overflow:visible}
 .canvas-node .route-card small{white-space:normal;overflow:visible;text-overflow:clip;line-height:1.25}
+.node-expand{display:block;width:100%;margin-top:12px;padding:7px 10px;border:1px solid var(--cyan);border-radius:7px;color:var(--cyan);background:rgba(38,217,242,.1);font-weight:700;cursor:pointer}
+.node-expand:hover{background:rgba(38,217,242,.2)}
+.route-edges .cross-day path{stroke-dasharray:10 8;stroke:var(--gold)}
+.route-edges .cross-day text{fill:var(--gold)}
 .canvas-focus{overflow:hidden}
 .route-workspace.focused{position:fixed;inset:0;z-index:50;margin:0;border:0;border-radius:0;background:var(--bg)}
 .route-workspace.focused .canvas-toolbar{height:70px;padding-left:22px;padding-right:22px}

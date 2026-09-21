@@ -1129,12 +1129,12 @@ def _day_stats_daily_response():
     day_raw = request.args.get('day', '').strip()
     if not _valid_day_stats_hero(hero):
         return jsonify({'error': 'invalid hero'}), 400
-    if not day_raw.isdigit() or not 1 <= int(day_raw) <= 16:
-        return jsonify({'error': 'day must be between 1 and 16'}), 400
+    if not day_raw.isdigit() or not 1 <= int(day_raw) <= 99:
+        return jsonify({'error': 'day must be between 1 and 99'}), 400
     if not _valid_day_stats_version(version):
         return _day_stats_invalid_version_response()
     day = int(day_raw)
-    cache_key = _day_stats_result_cache_key(version, 'daily-v5', hero, day)
+    cache_key = _day_stats_result_cache_key(version, 'daily-v6', hero, day)
     cached = _day_stats_cache_get(cache_key)
     if cached is not None:
         return jsonify(cached)
@@ -1149,7 +1149,7 @@ def _day_stats_daily_response():
         # Cache against the immutable resolved version so a fresh "latest"
         # build cannot reuse a previous version's payload.
         resolved_cache_key = _day_stats_result_cache_key(
-            metadata['version_id'], 'daily-v5', hero, day
+            metadata['version_id'], 'daily-v6', hero, day
         )
         cached = _day_stats_cache_get(resolved_cache_key)
         if cached is not None:
@@ -1159,7 +1159,6 @@ def _day_stats_daily_response():
                     core_support_rate, representative_items
                     FROM daily_archetype_nodes
                     WHERE version_id=? AND hero=? AND day=?
-                      AND core_items!='[]' AND core_support_rate>=0.5
                     ORDER BY rank, node_id''', (metadata['version_id'], hero, day)).fetchall()]
         for node in nodes:
             node['core_items'] = json.loads(node['core_items'])
@@ -1182,7 +1181,6 @@ def _day_stats_daily_response():
                     JOIN daily_archetype_nodes child
                       ON child.version_id=e.version_id AND child.node_id=e.child_node_id
                     WHERE e.version_id=? AND e.parent_day=?
-                      AND child.core_items!='[]' AND child.core_support_rate>=0.5
                     ORDER BY e.transition_rate DESC, e.run_count DESC''',
                     (metadata['version_id'], day)).fetchall()
             edges = [dict(row) for row in rows if row['parent_node_id'] in node_ids]
@@ -1349,8 +1347,8 @@ def _daily_route_parse_paths(raw_paths, conn, version_id, hero):
                 day = candidates[0]
             if not _valid_day_stats_core_id(node_id) or (day, node_id) not in node_rows:
                 raise ValueError('path node not found')
-            if index and day != previous_day + 1:
-                raise ValueError('path days must be strictly consecutive')
+            if index and day <= previous_day:
+                raise ValueError('path days must be strictly increasing')
             path.append((day, node_id))
             previous_day = day
         endpoint = path[-1]
@@ -1369,11 +1367,19 @@ def _daily_route_parse_paths(raw_paths, conn, version_id, hero):
     return parsed, current
 
 
-def _daily_route_path_runs(member_map, path):
+def _daily_route_path_runs(member_map, observed_days, path):
     runs = None
-    for node_key in path:
+    for index, node_key in enumerate(path):
         node_runs = member_map.get(node_key, set())
         runs = set(node_runs) if runs is None else runs & node_runs
+        if index:
+            previous_day = path[index - 1][0]
+            target_day = node_key[0]
+            runs = {
+                run_id for run_id in runs
+                if next((day for day in observed_days.get(run_id, ()) if day > previous_day), None)
+                == target_day
+            }
     return runs or set()
 
 
@@ -1386,7 +1392,7 @@ def api_routes_daily_node(node_id=None):
     day_raw = request.args.get('day', '').strip()
     node_id = node_id or request.args.get('node_id', '').strip()
     if (not _valid_day_stats_version(version) or not _valid_day_stats_hero(hero)
-            or not day_raw.isdigit() or not 1 <= int(day_raw) <= 16
+            or not day_raw.isdigit() or not 1 <= int(day_raw) <= 99
             or not _valid_day_stats_core_id(node_id)):
         return jsonify({'error': 'invalid node detail request'}), 400
     day = int(day_raw)
@@ -1488,29 +1494,52 @@ def api_routes_daily_expand():
             conn, metadata['version_id'],
             (node_key for path in paths for node_key in path),
         )
+        candidate_runs = set().union(*member_map.values()) if member_map else set()
+        observed_days = defaultdict(list)
+        if candidate_runs:
+            for row in _day_stats_batched_rows(
+                conn,
+                '''SELECT run_id, day FROM daily_archetype_members
+                   WHERE version_id=? AND run_id IN ({placeholders})
+                   ORDER BY run_id, day''',
+                (metadata['version_id'],), sorted(candidate_runs),
+            ):
+                observed_days[row['run_id']].append(int(row['day']))
+        path_runs_by_index = []
         path_runs = set()
         for path in paths:
-            path_runs.update(_daily_route_path_runs(member_map, path))
-        next_day = current_day + 1
+            runs = _daily_route_path_runs(member_map, observed_days, path)
+            if len(path) > 1 and not runs:
+                return jsonify({'error': 'path transition is not a next observed Day'}), 400
+            path_runs_by_index.append(runs)
+            path_runs.update(runs)
         next_members = defaultdict(set)
         if path_runs:
             for row in _day_stats_batched_rows(
                 conn,
-                '''SELECT node_id, run_id FROM daily_archetype_members
-                   WHERE version_id=? AND day=? AND run_id IN ({placeholders})''',
-                (metadata['version_id'], next_day), sorted(path_runs),
+                '''SELECT m.node_id, m.day, m.run_id
+                   FROM daily_archetype_members m
+                   JOIN (
+                       SELECT version_id, run_id, MIN(day) AS next_day
+                       FROM daily_archetype_members
+                       WHERE version_id=? AND day>? AND run_id IN ({placeholders})
+                       GROUP BY version_id, run_id
+                   ) next ON next.run_id=m.run_id AND next.next_day=m.day
+                          AND m.version_id=next.version_id''',
+                (metadata['version_id'], current_day),
+                sorted(path_runs),
             ):
-                next_members[row['node_id']].add(row['run_id'])
+                next_members[(int(row['day']), row['node_id'])].add(row['run_id'])
         observable_runs = set().union(*next_members.values()) if next_members else set()
         observable = len(observable_runs)
         threshold = min(15, max(3, math.ceil(observable * 0.03)))
         branches = []
         visible_runs = set()
-        for child_node_id, runs in next_members.items():
+        for (target_day, child_node_id), runs in next_members.items():
             if len(runs) < threshold:
                 continue
             child = _daily_route_node_row(
-                conn, metadata['version_id'], hero, next_day, child_node_id
+                conn, metadata['version_id'], hero, target_day, child_node_id
             )
             if child is None:
                 continue
@@ -1520,12 +1549,21 @@ def api_routes_daily_expand():
             child['cards'] = _day_stats_cards(child['core_items'])
             count = len(runs)
             branches.append({
-                'node': child, 'node_id': child_node_id, 'day': next_day,
+                'node': child, 'node_id': child_node_id, 'day': target_day,
+                'target_day': target_day, 'day_gap': target_day - current_day,
+                'skipped_days': target_day - current_day - 1,
+                'is_gap': target_day > current_day + 1,
                 'path_run_count': count,
                 'transition_rate': count / observable if observable else 0.0,
+                'path_indexes': [
+                    index for index, path_runs_for_index in enumerate(path_runs_by_index)
+                    if path_runs_for_index & runs
+                ],
             })
             visible_runs.update(runs)
-        branches.sort(key=lambda row: (-row['path_run_count'], row['node_id']))
+        branches.sort(key=lambda row: (
+            -row['path_run_count'], row['target_day'], row['node_id']
+        ))
         payload = _day_stats_envelope(
             metadata, hero=hero, current_day=current_day,
             current_node_id=current_node_id, path_run_count=len(path_runs),
@@ -1547,7 +1585,7 @@ def api_routes_daily_summary():
         return jsonify({'error': 'invalid hero'}), 400
     if not _valid_day_stats_version(version):
         return _day_stats_invalid_version_response()
-    cache_key = _day_stats_result_cache_key(version, 'daily-summary-v5', hero)
+    cache_key = _day_stats_result_cache_key(version, 'daily-summary-v6', hero)
     cached = _day_stats_cache_get(cache_key)
     if cached is not None:
         return jsonify(cached)
@@ -1560,7 +1598,7 @@ def api_routes_daily_summary():
         if error:
             return error
         resolved_cache_key = _day_stats_result_cache_key(
-            metadata['version_id'], 'daily-summary-v5', hero
+            metadata['version_id'], 'daily-summary-v6', hero
         )
         cached = _day_stats_cache_get(resolved_cache_key)
         if cached is not None:
@@ -1570,7 +1608,6 @@ def api_routes_daily_summary():
                     core_support_rate, representative_items
                     FROM daily_archetype_nodes
                     WHERE version_id=? AND hero=?
-                      AND core_items!='[]' AND core_support_rate>=0.5
                     ORDER BY day, rank''', (metadata['version_id'], hero)).fetchall()]
         for row in rows:
             row['core_items'] = json.loads(row['core_items'])

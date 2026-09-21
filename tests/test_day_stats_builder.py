@@ -409,11 +409,11 @@ def test_core_routes_are_per_day_and_use_day_observable_denominators():
     }
     skipped = by_edge[(1, '["a","b"]', 3, "__OTHER__")]
     assert skipped["run_count"] == 1
-    assert skipped["observable_runs"] == 1
-    assert skipped["transition_rate"] == 1.0
+    assert skipped["observable_runs"] == 2
+    assert skipped["transition_rate"] == 0.5
     direct = by_edge[(1, '["a","b"]', 2, "__OTHER__")]
-    assert direct["observable_runs"] == 1
-    assert direct["transition_rate"] == 1.0
+    assert direct["observable_runs"] == 2
+    assert direct["transition_rate"] == 0.5
     assert {row["run_id"] for row in node_members} == {"r2", "r4", "r5"}
     assert edge_members == []
 
@@ -644,7 +644,7 @@ def test_daily_stats_schema_has_path_expansion_index(tmp_path):
     assert "idx_daily_archetype_members_day_run" in indexes
 
 
-def test_daily_routes_connect_only_strictly_adjacent_days():
+def test_daily_routes_connect_each_run_to_its_next_observed_day_across_gaps():
     from web_runs.day_stats_builder import _build_daily_archetype_routes
 
     facts = [
@@ -663,9 +663,9 @@ def test_daily_routes_connect_only_strictly_adjacent_days():
     )
 
     assert {(row["parent_day"], row["child_day"], row["stage_gap"], row["run_count"])
-            for row in edges} == {(3, 4, 0, 1)}
-    assert {row["parent_observable_runs"] for row in edges} == {1}
-    assert {row["transition_rate"] for row in edges} == {1.0}
+            for row in edges} == {(3, 4, 0, 1), (3, 5, 1, 1)}
+    assert {row["parent_observable_runs"] for row in edges} == {2}
+    assert {row["transition_rate"] for row in edges} == {0.5}
     assert sum(row["transition_rate"] for row in edges) == 1.0
 
 
@@ -826,7 +826,7 @@ def test_build_persists_versioned_core_route_nodes_edges_and_memberships(tmp_pat
                WHERE version_id='routes-db-v1' AND core_id=? ORDER BY child_day""",
             (core_id,),
         ).fetchall()
-        assert [tuple(row) for row in edges] == [(1, 2, 1, 1, 1.0), (1, 3, 1, 1, 1.0)]
+        assert [tuple(row) for row in edges] == [(1, 2, 1, 2, .5), (1, 3, 1, 2, .5)]
         assert conn.execute(
             "SELECT COUNT(*) FROM item_core_route_node_runs WHERE version_id='routes-db-v1' AND core_id=?",
             (core_id,),
