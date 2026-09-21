@@ -631,7 +631,20 @@ def test_daily_route_direction_details_choose_real_representative_and_rank_non_c
     assert all(row["card_id"] not in {"a", "b"} for row in detail["associated_cards"])
 
 
-def test_daily_routes_connect_next_observed_day_without_inventing_missing_days():
+def test_daily_stats_schema_has_path_expansion_index(tmp_path):
+    import sqlite3
+    from web_runs.day_stats_builder import _OUTPUT_SCHEMA
+
+    db_path = tmp_path / "indexed.db"
+    with sqlite3.connect(db_path) as conn:
+        conn.executescript(_OUTPUT_SCHEMA)
+        indexes = {row[0] for row in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='index'"
+        )}
+    assert "idx_daily_archetype_members_day_run" in indexes
+
+
+def test_daily_routes_connect_only_strictly_adjacent_days():
     from web_runs.day_stats_builder import _build_daily_archetype_routes
 
     facts = [
@@ -650,10 +663,39 @@ def test_daily_routes_connect_next_observed_day_without_inventing_missing_days()
     )
 
     assert {(row["parent_day"], row["child_day"], row["stage_gap"], row["run_count"])
-            for row in edges} == {(3, 4, 0, 1), (3, 5, 1, 1)}
-    assert {row["parent_observable_runs"] for row in edges} == {2}
-    assert {row["transition_rate"] for row in edges} == {0.5}
+            for row in edges} == {(3, 4, 0, 1)}
+    assert {row["parent_observable_runs"] for row in edges} == {1}
+    assert {row["transition_rate"] for row in edges} == {1.0}
     assert sum(row["transition_rate"] for row in edges) == 1.0
+
+
+def test_daily_node_rankings_use_real_full_compositions_and_representative_comparison():
+    from web_runs.day_stats_builder import _build_daily_node_rankings
+
+    snapshots = {
+        "r1": {"a", "b", "x", "y"},
+        "r2": {"a", "b", "x", "y"},
+        # Similar to the first representative and therefore joins its cluster.
+        "r3": {"a", "b", "x", "y", "z"},
+        # Similar to r3 but not to the first representative: no transitive merge.
+        "r4": {"a", "b", "y", "z"},
+        "r5": {"a", "x", "z"},  # Missing core b: association only.
+        "r6": {"a", "b", "p", "q"},
+    }
+
+    rankings = _build_daily_node_rankings(["a", "b"], snapshots)
+
+    assert rankings["node_global_runs"] == 6
+    assert [row["run_count"] for row in rankings["recommended_compositions"]] == [3, 1, 1]
+    assert rankings["recommended_compositions"][0]["items"] == ["a", "b", "x", "y"]
+    assert rankings["recommended_compositions"][0]["rate"] == 0.5
+    assert all(set(row["items"]) >= {"a", "b"}
+               for row in rankings["recommended_compositions"])
+    assert [row["card_id"] for row in rankings["associated_cards"][:3]] == ["x", "y", "z"]
+    assert all(row["card_id"] not in {"a", "b"} for row in rankings["associated_cards"])
+    assert rankings["associated_cards"][0] == {
+        "card_id": "x", "support_runs": 4, "support_rate": 4 / 6,
+    }
 
 
 def test_stage_archetypes_assign_each_run_once_and_build_real_paths():

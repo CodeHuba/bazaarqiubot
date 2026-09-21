@@ -10,6 +10,7 @@ import json
 import re
 import sqlite3 as _sqlite3
 import hashlib
+import math
 import threading
 import urllib.parse
 import urllib.request
@@ -38,6 +39,7 @@ from ocr_worker import start_worker, enqueue_run
 from plugins.bazaar_plugin.runs_query import RunsQuery
 from plugins.bazaar_plugin.data_client import RUNS_SEASON_ID, CURRENT_PHASE
 from day_stats_builder import (
+    _build_daily_node_rankings,
     _build_daily_route_directions,
     _build_daily_route_direction_details,
 )
@@ -776,6 +778,9 @@ def after_request(response):
         ('GET', '/api/comp/card'): ('comp_card_query', 'runs'),
         ('GET', '/api/hero_overview'): ('hero_overview', 'topcard'),
         ('GET', '/api/routes/daily'): ('routes_query', 'routes'),
+        ('GET', '/api/routes/daily/node'): ('routes_node_detail', 'routes'),
+        ('GET', '/api/routes/daily/nodes/<node_id>'): ('routes_node_detail', 'routes'),
+        ('POST', '/api/routes/daily/expand'): ('routes_expand', 'routes'),
         ('GET', '/api/routes/daily/summary'): ('routes_summary', 'routes'),
         ('GET', '/api/routes/latest'): ('routes_latest', 'routes'),
         ('GET', '/api/routes/cores'): ('routes_cores', 'routes'),
@@ -1245,6 +1250,200 @@ def _day_stats_daily_response():
             directions=directions,
         )
         _day_stats_cache_set(resolved_cache_key, payload, _DAY_STATS_VERSION_TTL)
+        return jsonify(payload)
+    finally:
+        conn.close()
+
+
+def _daily_route_node_row(conn, version_id, hero, day, node_id):
+    return conn.execute('''SELECT day, node_id, rank, run_count, day_observable_runs,
+            day_share, core_items, core_support_runs, core_support_rate, representative_items
+        FROM daily_archetype_nodes
+        WHERE version_id=? AND hero=? AND day=? AND node_id=?''',
+        (version_id, hero, day, node_id)).fetchone()
+
+
+def _daily_route_member_runs(conn, version_id, day, node_id):
+    return {row['run_id'] for row in conn.execute('''SELECT run_id
+        FROM daily_archetype_members WHERE version_id=? AND day=? AND node_id=?''',
+        (version_id, day, node_id)).fetchall()}
+
+
+def _daily_route_parse_paths(raw_paths, conn, version_id, hero):
+    if not isinstance(raw_paths, list) or not raw_paths:
+        raise ValueError('paths must be a non-empty array')
+    parsed = []
+    current = None
+    for raw_path in raw_paths:
+        if not isinstance(raw_path, list) or not raw_path:
+            raise ValueError('each path must be a non-empty array')
+        path = []
+        previous_day = None
+        for index, raw_node in enumerate(raw_path):
+            if isinstance(raw_node, dict):
+                node_id = str(raw_node.get('node_id') or '')
+                day = raw_node.get('day')
+                if not isinstance(day, int):
+                    raise ValueError('path node day must be an integer')
+                row = _daily_route_node_row(conn, version_id, hero, day, node_id)
+            else:
+                node_id = str(raw_node)
+                candidates = conn.execute('''SELECT day FROM daily_archetype_nodes
+                    WHERE version_id=? AND hero=? AND node_id=?''',
+                    (version_id, hero, node_id)).fetchall()
+                if len(candidates) != 1:
+                    raise ValueError('path node must resolve to exactly one day')
+                day = int(candidates[0]['day'])
+                row = _daily_route_node_row(conn, version_id, hero, day, node_id)
+            if row is None or not _valid_day_stats_core_id(node_id):
+                raise ValueError('path node not found')
+            if index and day != previous_day + 1:
+                raise ValueError('path days must be strictly consecutive')
+            path.append((day, node_id))
+            previous_day = day
+        endpoint = path[-1]
+        if current is None:
+            current = endpoint
+        elif endpoint != current:
+            raise ValueError('all paths must end at the same node')
+        parsed.append(path)
+    return parsed, current
+
+
+def _daily_route_path_runs(conn, version_id, path):
+    runs = None
+    for day, node_id in path:
+        members = _daily_route_member_runs(conn, version_id, day, node_id)
+        runs = members if runs is None else runs & members
+    return runs or set()
+
+
+@app.route('/api/routes/daily/node', methods=['GET'])
+@app.route('/api/routes/daily/nodes/<node_id>', methods=['GET'])
+@routes_rate_limit
+def api_routes_daily_node(node_id=None):
+    version = (request.args.get('version') or 'latest').strip()
+    hero = request.args.get('hero', '').strip()
+    day_raw = request.args.get('day', '').strip()
+    node_id = node_id or request.args.get('node_id', '').strip()
+    if (not _valid_day_stats_version(version) or not _valid_day_stats_hero(hero)
+            or not day_raw.isdigit() or not 1 <= int(day_raw) <= 16
+            or not _valid_day_stats_core_id(node_id)):
+        return jsonify({'error': 'invalid node detail request'}), 400
+    conn = _day_stats_connection()
+    try:
+        metadata = _day_stats_cached_metadata(conn, version)
+        if metadata is None:
+            return jsonify({'error': 'version not found'}), 404
+        day = int(day_raw)
+        row = _daily_route_node_row(conn, metadata['version_id'], hero, day, node_id)
+        if row is None:
+            return jsonify({'error': 'node not found'}), 404
+        node = dict(row)
+        node['core_items'] = json.loads(node['core_items'])
+        node['representative_items'] = json.loads(node['representative_items'])
+        member_runs = _daily_route_member_runs(conn, metadata['version_id'], day, node_id)
+        snapshots = {}
+        if member_runs:
+            for snapshot in _day_stats_batched_rows(
+                conn,
+                '''SELECT run_id, item_signature FROM final_compositions
+                   WHERE version_id=? AND day=? AND run_id IN ({placeholders})''',
+                (metadata['version_id'], day), sorted(member_runs),
+            ):
+                snapshots[snapshot['run_id']] = frozenset(json.loads(snapshot['item_signature']))
+        rankings = _build_daily_node_rankings(node['core_items'], snapshots)
+        node['global_run_count'] = rankings['node_global_runs']
+        node['cards'] = _day_stats_cards(node['core_items'])
+        recommendations = []
+        for item in rankings['recommended_compositions']:
+            recommendations.append({
+                'item_ids': item['items'], 'cards': _day_stats_cards(item['items']),
+                'run_count': item['run_count'], 'rate': item['rate'],
+            })
+        associated = rankings['associated_cards']
+        for card in associated:
+            card['display'] = _day_stats_cards([card['card_id']])[0]
+        return jsonify(_day_stats_envelope(
+            metadata, hero=hero, day=day, node=node,
+            recommended_compositions=recommendations, associated_cards=associated,
+        ))
+    finally:
+        conn.close()
+
+
+@app.route('/api/routes/daily/expand', methods=['GET', 'POST'])
+@routes_rate_limit
+def api_routes_daily_expand():
+    data = request.get_json(silent=True) if request.method == 'POST' else None
+    data = data if isinstance(data, dict) else request.args
+    version = str(data.get('version') or 'latest').strip()
+    hero = str(data.get('hero') or '').strip()
+    raw_paths = data.get('paths')
+    if isinstance(raw_paths, str):
+        try:
+            raw_paths = json.loads(raw_paths)
+        except ValueError:
+            return jsonify({'error': 'paths must be valid JSON'}), 400
+    if not _valid_day_stats_version(version) or not _valid_day_stats_hero(hero):
+        return jsonify({'error': 'invalid path expansion request'}), 400
+    conn = _day_stats_connection()
+    try:
+        metadata = _day_stats_cached_metadata(conn, version)
+        if metadata is None:
+            return jsonify({'error': 'version not found'}), 404
+        try:
+            paths, current = _daily_route_parse_paths(
+                raw_paths, conn, metadata['version_id'], hero
+            )
+        except ValueError as exc:
+            return jsonify({'error': str(exc)}), 400
+        current_day, current_node_id = current
+        path_runs = set()
+        for path in paths:
+            path_runs.update(_daily_route_path_runs(conn, metadata['version_id'], path))
+        next_day = current_day + 1
+        next_members = defaultdict(set)
+        if path_runs:
+            for row in _day_stats_batched_rows(
+                conn,
+                '''SELECT node_id, run_id FROM daily_archetype_members
+                   WHERE version_id=? AND day=? AND run_id IN ({placeholders})''',
+                (metadata['version_id'], next_day), sorted(path_runs),
+            ):
+                next_members[row['node_id']].add(row['run_id'])
+        observable_runs = set().union(*next_members.values()) if next_members else set()
+        observable = len(observable_runs)
+        threshold = min(15, max(3, math.ceil(observable * 0.03)))
+        branches = []
+        visible_runs = set()
+        for child_node_id, runs in next_members.items():
+            if len(runs) < threshold:
+                continue
+            child = _daily_route_node_row(
+                conn, metadata['version_id'], hero, next_day, child_node_id
+            )
+            if child is None:
+                continue
+            child = dict(child)
+            child['core_items'] = json.loads(child['core_items'])
+            child['representative_items'] = json.loads(child['representative_items'])
+            child['cards'] = _day_stats_cards(child['core_items'])
+            count = len(runs)
+            branches.append({
+                'node': child, 'node_id': child_node_id, 'day': next_day,
+                'path_run_count': count,
+                'transition_rate': count / observable if observable else 0.0,
+            })
+            visible_runs.update(runs)
+        branches.sort(key=lambda row: (-row['path_run_count'], row['node_id']))
+        payload = _day_stats_envelope(
+            metadata, hero=hero, current_day=current_day,
+            current_node_id=current_node_id, path_run_count=len(path_runs),
+            path_observable_runs=observable, display_threshold=threshold,
+            branches=branches, hidden_run_count=observable - len(visible_runs),
+            visible_coverage_rate=len(visible_runs) / observable if observable else 0.0,
+        )
         return jsonify(payload)
     finally:
         conn.close()

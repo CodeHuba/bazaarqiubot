@@ -69,6 +69,11 @@ def stats_db(tmp_path):
                 version_id TEXT NOT NULL, edge_id TEXT NOT NULL, run_id TEXT NOT NULL,
                 PRIMARY KEY (version_id, edge_id, run_id)
             );
+            CREATE TABLE daily_archetype_members (
+                version_id TEXT NOT NULL, node_id TEXT NOT NULL, day INTEGER NOT NULL,
+                run_id TEXT NOT NULL,
+                PRIMARY KEY (version_id, node_id, day, run_id)
+            );
             CREATE TABLE final_compositions (
                 version_id TEXT NOT NULL, run_id TEXT NOT NULL, event_id TEXT NOT NULL,
                 season INTEGER NOT NULL, phase TEXT NOT NULL, hero TEXT,
@@ -137,12 +142,13 @@ def _client(monkeypatch, stats_db):
     monkeypatch.setenv("STATS_PASSWORD", "test-password")
     import importlib
     import sys
-    app_path = "/mnt/d/PJ/QiuBot-github/QiuBot/web_runs"
-    repo_path = "/mnt/d/PJ/QiuBot-github/QiuBot"
+    import types
+    from pathlib import Path
+    repo_path = str(Path(__file__).resolve().parents[1])
+    app_path = str(Path(repo_path) / "web_runs")
     for path in (repo_path, app_path):
         if path not in sys.path:
             sys.path.insert(0, path)
-    import types
     bazaar_stub = types.ModuleType("plugins.bazaar_plugin")
     bazaar_stub.__path__ = [repo_path + "/plugins/bazaar_plugin"]
     monkeypatch.setitem(sys.modules, "plugins.bazaar_plugin", bazaar_stub)
@@ -174,6 +180,8 @@ def _client(monkeypatch, stats_db):
             path = str(stats_db.parent / ('stats.db' if path.endswith('stats.db') else 'compat.db'))
         return original_connect(path, *args, **kwargs)
     monkeypatch.setattr(sqlite_module, "connect", connect_redirect)
+    for module_name in ("app", "day_stats_builder"):
+        sys.modules.pop(module_name, None)
     web_app = importlib.import_module("app")
     monkeypatch.setattr(sqlite_module, "connect", original_connect)
     monkeypatch.setattr(web_app, "DAY_STATS_DB_PATH", str(stats_db), raising=False)
@@ -328,6 +336,88 @@ def test_public_daily_routes_summary_groups_all_days(monkeypatch, stats_db):
     )
     assert response.status_code == 200
     assert [row["day"] for row in response.get_json()["nodes"]] == [3, 4]
+
+
+def test_public_daily_node_detail_uses_global_members_for_rankings(monkeypatch, stats_db):
+    snapshots = {
+        "detail-1": ["a", "b", "x", "y"],
+        "detail-2": ["a", "b", "x", "y"],
+        "detail-3": ["a", "b", "x", "y", "z"],
+        "detail-4": ["a", "b", "y", "z"],
+        "detail-5": ["a", "x", "z"],
+        "detail-6": ["a", "b", "p", "q"],
+    }
+    with sqlite3.connect(stats_db) as conn:
+        for index, (run_id, items) in enumerate(snapshots.items()):
+            conn.execute("INSERT INTO daily_archetype_members VALUES (?, ?, ?, ?)",
+                         ("v2", "daily-a", 3, run_id))
+            conn.execute("INSERT INTO final_compositions VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                         ("v2", run_id, f"detail-event-{index}", 18, "18.2", "Vanessa",
+                          "Legendary", 3, "early", None, None, "2026-09-20", None,
+                          None, None, None, None, json.dumps(items)))
+
+    client = _client(monkeypatch, stats_db).web_app.app.test_client()
+    response = client.get(
+        "/api/routes/daily/node?version=v2&hero=Vanessa&day=3&node_id=daily-a"
+    )
+
+    assert response.status_code == 200
+    body = response.get_json()
+    assert body["node"]["node_id"] == "daily-a"
+    assert body["node"]["global_run_count"] == 6
+    assert [row["run_count"] for row in body["recommended_compositions"]] == [3, 1, 1]
+    assert body["recommended_compositions"][0]["item_ids"] == ["a", "b", "x", "y"]
+    assert [row["card_id"] for row in body["associated_cards"][:3]] == ["x", "y", "z"]
+    assert "run_id" not in json.dumps(body)
+
+
+def test_public_daily_path_expansion_unions_converged_paths_and_returns_all_qualified_branches(
+        monkeypatch, stats_db):
+    with sqlite3.connect(stats_db) as conn:
+        conn.execute("INSERT INTO daily_archetype_nodes VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                     ("v2", 18, "18.2", "Vanessa", 3, "daily-x", 2, 6, 20, .3,
+                      '[\"x\"]', 6, 1.0, '[\"x\"]'))
+        for child_index in range(4):
+            child_id = f"daily-c{child_index}"
+            core = f"c{child_index}"
+            conn.execute("INSERT INTO daily_archetype_nodes VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                         ("v2", 18, "18.2", "Vanessa", 5, child_id, child_index + 1,
+                          3, 12, .25, json.dumps([core]), 3, 1.0, json.dumps([core])))
+        for number in range(12):
+            run_id = f"expand-{number}"
+            start_node = "daily-a" if number < 6 else "daily-x"
+            child_id = f"daily-c{number // 3}"
+            conn.executemany("INSERT INTO daily_archetype_members VALUES (?, ?, ?, ?)", [
+                ("v2", start_node, 3, run_id),
+                ("v2", "daily-b", 4, run_id),
+                ("v2", child_id, 5, run_id),
+            ])
+
+    client = _client(monkeypatch, stats_db).web_app.app.test_client()
+    response = client.post("/api/routes/daily/expand", json={
+        "version": "v2",
+        "hero": "Vanessa",
+        "paths": [
+            [{"day": 3, "node_id": "daily-a"}, {"day": 4, "node_id": "daily-b"}],
+            [{"day": 3, "node_id": "daily-x"}, {"day": 4, "node_id": "daily-b"}],
+            [{"day": 3, "node_id": "daily-a"}, {"day": 4, "node_id": "daily-b"}],
+        ],
+    })
+
+    assert response.status_code == 200
+    body = response.get_json()
+    assert body["current_node_id"] == "daily-b"
+    assert body["current_day"] == 4
+    assert body["path_run_count"] == 12
+    assert body["path_observable_runs"] == 12
+    assert body["display_threshold"] == 3
+    assert len(body["branches"]) == 4
+    assert [row["path_run_count"] for row in body["branches"]] == [3, 3, 3, 3]
+    assert body["visible_coverage_rate"] == 1.0
+    assert body["hidden_run_count"] == 0
+    assert "run_id" not in json.dumps(body)
+
+
 def test_public_routes_page_and_api_do_not_require_basic_auth(monkeypatch, stats_db):
     client = _client(monkeypatch, stats_db)
     raw_client = client.web_app.app.test_client()
@@ -382,7 +472,7 @@ def test_routes_page_contains_page_view_tracking_contract(monkeypatch, stats_db)
     page = client.web_app.app.test_client().get("/routes")
 
     assert page.status_code == 200
-    assert b"/api/track/pv" in page.data
+    assert b"api/track/pv" in page.data
     assert b"routes" in page.data
 
 
@@ -440,24 +530,22 @@ def test_public_routes_page_contract_and_navigation(monkeypatch, stats_db):
     css = raw_client.get("/static/routes.css").get_data(as_text=True)
 
     assert '<meta name="robots" content="index, follow">' in html
-    assert 'href="/static/routes.css?v=20260921a"' in html
-    assert 'src="/static/routes.js?v=20260921a"' in html
+    assert 'href="static/routes.css?v=20260921b"' in html
+    assert 'src="static/routes.js?v=20260921b"' in html
+    assert "fetch('api/track/pv'" in html
     assert 'href="/routes" class="nav-tab active"' in html
-    assert "每天的主流阵容" in html and "真实对局" in html
-    assert "/api/routes/daily" in js and "/api/routes/daily/summary" in js
-    assert "转型概率" not in js or "transition_rate" in js
-    assert "parent_observable_runs" in js and "core_support_rate" in js
-    assert "新增核心" in js and "退出核心" in js
-    assert "directions" in js and "associated_cards" in js
-    assert "最多展示三个差异方向" in html
-    assert "真实代表阵容" in js and "关联牌推荐" in js and "常见变体" in js
-    assert "route-detail" in css
-    assert "/runs?" in js and "查询相似真实阵容" in js
-    assert "URLSearchParams" in js and "history.replaceState" in js
-    assert "AbortController" in js
-    assert "allowedHosts" in js and "s.bazaardb.gg" in js
+    assert "可拖拽阵容路线画布" in html and "严格相邻 Day" in html
+    assert "/api/routes/daily/expand" in js and "/api/routes/daily/node" in js
+    assert "function apiPath(path)" in js
+    assert "location.pathname" in js
+    assert "paths:state.paths.get" in js
+    assert "state.nodes.has" in js and "state.paths.set" in js
+    assert "pointerdown" in js and "wheel" in js and "fitView" in js
+    assert "推荐阵容 Top 3" in js and "关联牌 Top 8" in js
+    assert "查询相似真实阵容" not in js and "/runs?" not in js
+    assert "canvas-viewport" in css and "node-detail" in css
     assert "object-fit:contain" in css.replace(" ", "")
-    assert "@media(max-width:760px)" in css.replace(" ", "")
+    assert "@media(max-width:650px)" in css.replace(" ", "")
 
 
 def test_route_v2_cache_namespace_is_v5():

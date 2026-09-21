@@ -229,6 +229,8 @@ CREATE INDEX IF NOT EXISTS idx_daily_archetype_nodes_scope
     ON daily_archetype_nodes(version_id, hero, day, rank);
 CREATE INDEX IF NOT EXISTS idx_daily_archetype_edges_parent
     ON daily_archetype_edges(version_id, parent_day, parent_node_id, child_day);
+CREATE INDEX IF NOT EXISTS idx_daily_archetype_members_day_run
+    ON daily_archetype_members(version_id, day, run_id, node_id);
 
 CREATE TABLE IF NOT EXISTS item_core_route_node_runs (
     version_id TEXT NOT NULL,
@@ -452,6 +454,65 @@ def _build_daily_route_direction_details(
         "representative_day": representative[1] if representative else None,
         "representative_items": sorted(representative[2]) if representative else [],
         "associated_cards": associated,
+    }
+
+
+def _build_daily_node_rankings(
+    core_items: list[str], snapshots: dict[str, frozenset[str] | set[str]]
+) -> dict[str, Any]:
+    """Rank real node-member snapshots without allowing similarity chain merges."""
+    core = frozenset(core_items)
+    total = len(snapshots)
+    signature_runs: dict[frozenset[str], set[str]] = defaultdict(set)
+    for run_id, raw_items in snapshots.items():
+        items = frozenset(raw_items)
+        if core.issubset(items):
+            signature_runs[items].add(run_id)
+    ordered = sorted(signature_runs, key=lambda items: (
+        -len(signature_runs[items]), len(items - core), tuple(sorted(items))
+    ))
+    clusters: list[dict[str, Any]] = []
+    for items in ordered:
+        non_core = items - core
+        target = None
+        for cluster in clusters:
+            representative = cluster["representative"] - core
+            union = non_core | representative
+            similarity = len(non_core & representative) / len(union) if union else 1.0
+            if similarity >= 0.60:
+                target = cluster
+                break
+        if target is None:
+            target = {"representative": items, "runs": set(), "signatures": []}
+            clusters.append(target)
+        target["runs"].update(signature_runs[items])
+        target["signatures"].append(items)
+
+    recommendations = []
+    for cluster in clusters:
+        representative = min(
+            cluster["signatures"],
+            key=lambda items: (-len(signature_runs[items]), tuple(sorted(items))),
+        )
+        run_count = len(cluster["runs"])
+        recommendations.append({
+            "items": sorted(representative), "run_count": run_count,
+            "rate": run_count / total if total else 0.0,
+        })
+    recommendations.sort(key=lambda row: (-row["run_count"], tuple(row["items"])))
+
+    association_counts = Counter(
+        card for items in snapshots.values() for card in set(items) - core
+    )
+    associated = [
+        {"card_id": card, "support_runs": count,
+         "support_rate": count / total if total else 0.0}
+        for card, count in sorted(association_counts.items(), key=lambda row: (-row[1], row[0]))
+    ]
+    return {
+        "node_global_runs": total,
+        "recommended_compositions": recommendations[:3],
+        "associated_cards": associated[:8],
     }
 
 
@@ -687,6 +748,8 @@ def _build_daily_archetype_routes(
         for run, timeline in run_days.items():
             observed = sorted(day for day in timeline if (run, day) in assignment)
             for parent_day, child_day in zip(observed, observed[1:]):
+                if child_day != parent_day + 1:
+                    continue
                 edge_members[(parent_day, assignment[(run, parent_day)],
                               child_day, assignment[(run, child_day)])].add(run)
         node_counts = Counter((row["day"], row["node_id"]) for row in members)
