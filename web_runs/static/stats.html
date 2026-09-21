@@ -103,10 +103,17 @@ const API_NAMES = {
   '/api/runs':'阵容查询','/api/winrate':'胜率查询','/api/partner':'最佳搭档',
   '/api/topcard':'职业榜单','/api/feedback':'意见反馈','/api/track/pv':'页面埋点','/api/ingest':'数据采集'
 };
+const MODULE_NAMES = {
+  runs:'阵容查询', winrate:'胜率查询', partner:'最佳搭档', topcard:'职业榜单',
+  routes:'阵容路线', feedback:'意见反馈', trivia:'冷知识', support:'支持',
+  stats:'数据看板'
+};
 const FEATURE_NAMES = {
   runs_query:'阵容查询', winrate_query:'胜率查询', partner_query:'最佳搭档',
   topcard_query:'职业榜单', comp_query:'阵容分析', comp_card_query:'以卡找阵容',
-  hero_overview:'职业概览', feedback_submit:'提交反馈', feedback_like:'反馈点赞',
+  hero_overview:'职业概览', routes_query:'阵容路线查询', routes_summary:'阵容路线概览加载', routes_latest:'阵容路线版本加载',
+  routes_cores:'阵容路线核心列表', routes_detail:'阵容路线详情',
+  feedback_submit:'提交反馈', feedback_like:'反馈点赞',
   feedback_comment:'反馈评论', trivia_submit:'提交冷知识', trivia_vote:'冷知识投票',
   support_page_view:'支持页访问', donation_qr_open:'打开赞赏码', trivia_share:'分享冷知识'
 };
@@ -212,7 +219,7 @@ function renderStats(d) {
         <div class="chart-wrap"><canvas id="trend-chart"></canvas></div>
       </div>
       <div class="chart-card">
-        <div class="chart-title">🍩 功能使用分布</div>
+        <div class="chart-title">🍩 模块使用分布</div>
         <div class="chart-wrap"><canvas id="api-chart"></canvas></div>
       </div>
     </div>
@@ -269,14 +276,14 @@ function renderStats(d) {
       }}
   });
 
-  // 功能分布饼图（排除埋点类 API）
-  const userApis = apiDist.filter(a => !['/api/track/pv','/api/ingest','/api/stats/overview'].includes(a.endpoint));
+  // 模块使用分布：只统计核心功能事件，并按 page/module 合并，排除页面访问、后台刷新和辅助 API。
+  const moduleUsage = d.module_usage || [];
   if (_apiChart) _apiChart.destroy();
   _apiChart = new Chart(document.getElementById('api-chart').getContext('2d'), {
     type: 'doughnut',
     data: {
-      labels: userApis.map(a => API_NAMES[a.endpoint] || a.endpoint),
-      datasets: [{data: userApis.map(a=>a.cnt), backgroundColor:['#f59e0b','#60a5fa','#a78bfa','#34d399','#f87171','#fb923c','#e879f9']}]
+      labels: moduleUsage.map(item => MODULE_NAMES[item.module] || item.module),
+      datasets: [{data: moduleUsage.map(item => item.uses), backgroundColor:['#f59e0b','#60a5fa','#a78bfa','#34d399','#f87171','#fb923c','#e879f9','#22d3ee']}]
     },
     options: {responsive:true, maintainAspectRatio:false,
       plugins:{legend:{position:'right', labels:{color:'#9ca3af',font:{size:11},padding:10}}}}
@@ -295,11 +302,9 @@ function renderStats(d) {
 
   // 热门卡牌
   const hotCards = d.hot_cards || [];
-  document.getElementById('hot-cards-body').innerHTML = hotCards.length ? hotCards.slice(0,8).map((c,i) => {
-    let name = c.cards;
-    try { const arr = JSON.parse(c.cards); name = Array.isArray(arr) ? arr.join(' + ') : c.cards; } catch(e){}
-    return `<tr><td>${['🥇','🥈','🥉'][i]||i+1}</td><td>${name||'-'}</td><td>${c.cnt}</td></tr>`;
-  }).join('') : '<tr><td colspan="3" style="color:#6b7280;text-align:center;padding:20px">暂无数据</td></tr>';
+  document.getElementById('hot-cards-body').innerHTML = hotCards.length ? hotCards.map((c,i) =>
+    `<tr><td>${['🥇','🥈','🥉'][i]||i+1}</td><td>${escapeHtml(c.card||'-')}</td><td>${c.cnt}</td></tr>`
+  ).join('') : '<tr><td colspan="3" style="color:#6b7280;text-align:center;padding:20px">暂无数据</td></tr>';
 
   // API 详情
   document.getElementById('api-detail-body').innerHTML = apiDist.map(a => {

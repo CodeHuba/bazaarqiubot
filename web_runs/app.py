@@ -20,7 +20,7 @@ load_dotenv("/opt/qiubot/.env")
 from functools import wraps
 from flask import Flask, request, jsonify, send_from_directory, send_file, abort, Response
 from werkzeug.middleware.proxy_fix import ProxyFix
-from analytics import FeatureEventWriter, init_analytics_db, overview as feature_overview
+from analytics import FeatureEventWriter, aggregate_hot_card_queries, init_analytics_db, overview as feature_overview
 
 _APP_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, '/opt/qiubot')
@@ -739,6 +739,8 @@ def _feature_outcome(response):
         return 'empty'
     if request.path == '/api/hero_overview' and not data.get('heroes'):
         return 'empty'
+    if request.path == '/api/routes/daily' and not data.get('nodes'):
+        return 'empty'
     return 'success'
 
 
@@ -773,6 +775,8 @@ def after_request(response):
         ('GET', '/api/comp'): ('comp_query', 'topcard'),
         ('GET', '/api/comp/card'): ('comp_card_query', 'runs'),
         ('GET', '/api/hero_overview'): ('hero_overview', 'topcard'),
+        ('GET', '/api/routes/daily'): ('routes_query', 'routes'),
+        ('GET', '/api/routes/daily/summary'): ('routes_summary', 'routes'),
         ('GET', '/api/routes/latest'): ('routes_latest', 'routes'),
         ('GET', '/api/routes/cores'): ('routes_cores', 'routes'),
         ('GET', '/api/routes/cores/<core_id>'): ('routes_detail', 'routes'),
@@ -2129,25 +2133,29 @@ def api_stats_overview():
 
         conn.close()
 
-        # 热门查询卡牌（从旧库）
-        # winrate 写入的是 params.cards（数组），partner 写入的是 params.card（单值），
-        # 两种 query_type 的 key 不同，需分别取值再合并统计，否则 partner 记录会被
-        # json_extract('$.cards') 取成 NULL，聚合出一条计数最高的空分组，显示为 "-"
+        # 热门查询卡牌：统计所有用户主动输入卡牌条件的核心功能。
+        # 每次查询内同一张卡只计一次；多卡组合拆成单卡；英文官方名归一为官方中文名。
         old_conn = _sl.connect('/opt/qiubot/data/query_stats.db')
-        hot_cards = [{'cards': r[0], 'cnt': r[1]} for r in old_conn.execute(
-            """SELECT TRIM(REPLACE(REPLACE(REPLACE(
-                 COALESCE(json_extract(params_json,'$.cards'), json_extract(params_json,'$.card')),
-               '[',''), ']',''), '"','')) as cards, COUNT(*) as cnt
-               FROM query_log WHERE created_at >= ? AND query_type IN ('winrate','partner') AND success=1
-               AND cards IS NOT NULL
-               GROUP BY cards ORDER BY cnt DESC LIMIT 10""", (cutoff,)
-        ).fetchall()]
+        hot_card_rows = old_conn.execute(
+            """SELECT query_type, params_json, result_count
+               FROM query_log
+               WHERE created_at >= ?
+                 AND query_type IN ('runs','winrate','partner','comp_card')
+                 AND success=1""",
+            (cutoff,),
+        ).fetchall()
         old_conn.close()
+        try:
+            from plugins.bazaar_plugin.translations import get_zh
+            canonicalize_card = lambda name: get_zh(name) or name
+        except Exception:
+            canonicalize_card = None
+        hot_cards = aggregate_hot_card_queries(hot_card_rows, canonicalize=canonicalize_card, limit=10)
 
         try:
             feature_stats = feature_overview(STATS_DB, days)
         except Exception:
-            feature_stats = {'feature_total': 0, 'feature_usage': [], 'feature_daily': []}
+            feature_stats = {'feature_total': 0, 'feature_usage': [], 'feature_daily': [], 'module_usage': []}
         return jsonify({
             'period_days': days,
             'total_calls': total_calls,

@@ -338,12 +338,52 @@ def test_public_routes_page_and_api_do_not_require_basic_auth(monkeypatch, stats
     route = raw_client.get("/api/routes/cores/core-1?version=v2")
 
     assert page.status_code == 200
+    assert b"routes.js" in page.data
     assert latest.status_code == 200
     assert cores.status_code == 200
     assert route.status_code == 200
     assert latest.get_json()["version_id"] == "v2"
     assert cores.get_json()["cores"][0]["core_id"] == "core-1"
     assert route.get_json()["edges"][0]["transition_rate"] == .6
+
+
+def test_public_routes_daily_query_is_recorded_as_feature_usage(monkeypatch, stats_db):
+    client = _client(monkeypatch, stats_db)
+    web_app = client.web_app
+    web_app._event_rate.clear()
+    events = []
+    monkeypatch.setattr(web_app, "_track_feature", lambda feature, page, outcome: events.append((feature, page, outcome)))
+
+    test_client = web_app.app.test_client()
+    summary = test_client.get("/api/routes/daily/summary?version=v2&hero=Vanessa")
+    response = test_client.get("/api/routes/daily?version=v2&hero=Vanessa&day=3")
+
+    assert summary.status_code == 200
+    assert response.status_code == 200
+    assert ("routes_summary", "routes", "success") in events
+    assert ("routes_query", "routes", "success") in events
+
+
+def test_public_routes_daily_empty_result_is_recorded_as_empty(monkeypatch, stats_db):
+    client = _client(monkeypatch, stats_db)
+    web_app = client.web_app
+    web_app._event_rate.clear()
+    events = []
+    monkeypatch.setattr(web_app, "_track_feature", lambda feature, page, outcome: events.append((feature, page, outcome)))
+
+    response = web_app.app.test_client().get("/api/routes/daily?version=v2&hero=Mak&day=3")
+
+    assert response.status_code == 200
+    assert ("routes_query", "routes", "empty") in events
+
+
+def test_routes_page_contains_page_view_tracking_contract(monkeypatch, stats_db):
+    client = _client(monkeypatch, stats_db)
+    page = client.web_app.app.test_client().get("/routes")
+
+    assert page.status_code == 200
+    assert b"/api/track/pv" in page.data
+    assert b"routes" in page.data
 
 
 @pytest.mark.parametrize("url", [

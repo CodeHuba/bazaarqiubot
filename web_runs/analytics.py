@@ -1,7 +1,9 @@
 """Privacy-preserving product analytics for the BazaarQiuBot web app."""
+import json
 import queue
 import sqlite3
 import threading
+from collections import Counter
 from datetime import datetime, timedelta, timezone
 
 
@@ -91,6 +93,47 @@ class FeatureEventWriter:
                 self.queue.task_done()
 
 
+def aggregate_hot_card_queries(rows, canonicalize=None, limit: int = 10) -> list[dict]:
+    """按单张卡聚合所有含卡牌条件的核心查询；同一次查询内重复卡只计一次。"""
+    canonicalize = canonicalize or (lambda name: name)
+    counts = Counter()
+    for query_type, params_json, _result_count in rows:
+        try:
+            params = json.loads(params_json or '{}')
+        except (TypeError, ValueError):
+            continue
+        if query_type in {'runs', 'winrate'}:
+            values = params.get('cards') or []
+        elif query_type in {'partner', 'comp_card'}:
+            values = [params.get('card')]
+        else:
+            continue
+        if isinstance(values, str):
+            values = [values]
+        cards = set()
+        for value in values:
+            for raw_name in str(value or '').split('+'):
+                name = raw_name.strip()
+                if not name:
+                    continue
+                canonical = str(canonicalize(name) or name).strip()
+                if canonical:
+                    cards.add(canonical)
+        counts.update(cards)
+    return [
+        {'card': card, 'cnt': count}
+        for card, count in sorted(counts.items(), key=lambda item: (-item[1], item[0]))[:limit]
+    ]
+
+
+CORE_MODULE_FEATURES = {
+    'runs_query', 'winrate_query', 'partner_query', 'topcard_query',
+    'card_tier_query', 'comp_query', 'comp_card_query', 'hero_overview',
+    'routes_query', 'feedback_submit', 'feedback_like', 'feedback_comment',
+    'trivia_submit', 'trivia_vote', 'trivia_share', 'donation_qr_open',
+}
+
+
 def overview(db_path: str, days: int, now: datetime | None = None) -> dict:
     days = max(1, min(int(days), 90))
     now = now or datetime.now(timezone.utc).replace(tzinfo=None)
@@ -112,6 +155,14 @@ def overview(db_path: str, days: int, now: datetime | None = None) -> dict:
             FROM feature_event WHERE created_at >= ?
             GROUP BY DATE(created_at, '+8 hours'), feature ORDER BY 1, 2
         """, (cutoff,)).fetchall()
+        placeholders = ','.join('?' for _ in CORE_MODULE_FEATURES)
+        modules = conn.execute(f"""
+            SELECT page, COUNT(*),
+                   COUNT(DISTINCT COALESCE(NULLIF(fingerprint,''), ip))
+            FROM feature_event
+            WHERE created_at >= ? AND feature IN ({placeholders})
+            GROUP BY page ORDER BY COUNT(*) DESC, page
+        """, (cutoff, *sorted(CORE_MODULE_FEATURES))).fetchall()
     finally:
         conn.close()
     return {
@@ -122,4 +173,5 @@ def overview(db_path: str, days: int, now: datetime | None = None) -> dict:
             for row in rows
         ],
         "feature_daily": [{"day": row[0], "feature": row[1], "count": row[2]} for row in daily],
+        "module_usage": [{"module": row[0], "uses": row[1], "uv": row[2] or 0} for row in modules],
     }

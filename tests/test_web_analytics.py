@@ -7,7 +7,13 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from web_runs.analytics import FeatureEventWriter, init_analytics_db, log_feature_event, overview
+from web_runs.analytics import (
+    FeatureEventWriter,
+    aggregate_hot_card_queries,
+    init_analytics_db,
+    log_feature_event,
+    overview,
+)
 
 
 def test_feature_event_overview_counts_uses_success_and_unique_visitors(tmp_path: Path):
@@ -30,6 +36,46 @@ def test_feature_event_overview_counts_uses_success_and_unique_visitors(tmp_path
         "uv": 2,
     }
     assert data["feature_total"] == 3
+
+
+def test_feature_event_overview_aggregates_pie_data_by_module(tmp_path: Path):
+    db_path = tmp_path / "stats.db"
+    init_analytics_db(str(db_path))
+
+    log_feature_event(str(db_path), "runs_query", "runs", "success", "fp-a", "1.2.*.*")
+    log_feature_event(str(db_path), "comp_card_query", "runs", "success", "fp-b", "1.2.*.*")
+    log_feature_event(str(db_path), "routes_query", "routes", "empty", "fp-c", "3.4.*.*")
+    log_feature_event(str(db_path), "routes_latest", "routes", "success", "fp-c", "3.4.*.*")
+    log_feature_event(str(db_path), "support_page_view", "support", "success", "fp-d", "5.6.*.*")
+
+    data = overview(str(db_path), days=7, now=datetime.now(timezone.utc).replace(tzinfo=None))
+
+    assert data["module_usage"] == [
+        {"module": "runs", "uses": 2, "uv": 2},
+        {"module": "routes", "uses": 1, "uv": 1},
+    ]
+
+
+def test_hot_card_queries_include_all_card_search_modules_and_split_each_card():
+    rows = [
+        ("runs", '{"cards":["太空激光","匕翼","太空激光"]}', 1),
+        ("winrate", '{"cards":["太空激光+破坏铁球","私人喷气机"]}', 1),
+        ("partner", '{"card":"Private Runabout"}', 1),
+        ("comp_card", '{"card":"匕翼"}', 1),
+        ("topcard", '{"hero":"Stelle"}', 1),
+        ("runs", '{"cards":["无结果卡"]}', 0),
+    ]
+    aliases = {"Private Runabout": "私人喷气机"}
+
+    result = aggregate_hot_card_queries(rows, canonicalize=lambda name: aliases.get(name, name))
+
+    assert {row["card"]: row["cnt"] for row in result} == {
+        "太空激光": 2,
+        "匕翼": 2,
+        "私人喷气机": 2,
+        "破坏铁球": 1,
+        "无结果卡": 1,
+    }
 
 
 def test_feature_event_overview_excludes_rows_before_beijing_calendar_cutoff(tmp_path: Path):
