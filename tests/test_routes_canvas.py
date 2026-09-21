@@ -114,6 +114,18 @@ def test_routes_canvas_labels_empty_cores_as_other_composition():
     assert "nodeTitle(n)" in js
 
 
+def test_routes_canvas_shows_representative_cards_without_empty_placeholder():
+    js = source()
+    css = (ROOT / "web_runs" / "static" / "routes.css").read_text(encoding="utf-8")
+    assert "function nodeCards(n)" in js
+    assert "function nodeCardsHtml(n" in js
+    assert "代表卡牌" in js
+    assert "signature_cards" in js
+    assert "代表卡牌用于识别该分散阵容" in js
+    assert "representative-card-list" in css
+    assert "cardsHtml(nodeCards(n),true)" not in js
+
+
 def test_routes_canvas_places_branches_on_actual_day_and_marks_cross_day_edges():
     js = source()
     css = (ROOT / "web_runs" / "static" / "routes.css").read_text(encoding="utf-8")
@@ -127,6 +139,88 @@ def test_routes_canvas_places_branches_on_actual_day_and_marks_cross_day_edges()
     assert "maxY=Math.max(...ns.map(n=>n.y+(n.measuredHeight||220)))" in js
     assert "正在展开后续观测" in js
     assert "暂无后续观测快照" in js
+
+
+def test_routes_canvas_can_expand_again_after_collapsing():
+    js = source()
+    harness = r'''
+renderGraph=()=>{};layoutGraph=()=>{};setStatus=()=>{};
+globalThis.fetch=async()=>({ok:true,json:async()=>({path_run_count:5,path_observable_runs:5,display_threshold:3,branches:[]})});
+const key='3:root';
+state.version='v';state.hero='Vanessa';state.root=key;
+state.nodes.set(key,{day:3,node_id:'root',run_count:5,path_run_count:5});
+state.paths.set(key,[[{day:3,node_id:'root'}]]);state.pathRevision.set(key,0);
+await expandNode(key);
+if(!state.expanded.has(key))throw new Error('first expand failed');
+collapseNode(key);
+if(state.expanded.has(key))throw new Error('collapse failed');
+await expandNode(key);
+if(!state.expanded.has(key))throw new Error('second expand failed');
+console.log('EXPAND_COLLAPSE_EXPAND_OK');
+'''
+    executable = js.replace("init();\n})();", "(async()=>{" + harness + "})().catch(e=>{console.error(e);process.exitCode=1});\n})();")
+    result = subprocess.run(["node", "-e", executable], capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+    assert "EXPAND_COLLAPSE_EXPAND_OK" in result.stdout
+
+
+def test_routes_canvas_can_reopen_while_aborted_expand_is_finishing():
+    js = source()
+    harness = r'''
+renderGraph=()=>{};layoutGraph=()=>{};setStatus=()=>{};
+let calls=0;
+globalThis.fetch=(url,options)=>new Promise((resolve,reject)=>{
+  calls++;
+  const timer=setTimeout(()=>resolve({ok:true,json:async()=>({path_run_count:5,path_observable_runs:5,display_threshold:3,branches:[]})}),calls===1?30:0);
+  options.signal.addEventListener('abort',()=>{clearTimeout(timer);const e=new Error('aborted');e.name='AbortError';reject(e)});
+});
+const key='3:root';
+state.version='v';state.hero='Vanessa';state.root=key;
+state.nodes.set(key,{day:3,node_id:'root',run_count:5,path_run_count:5});
+state.paths.set(key,[[{day:3,node_id:'root'}]]);state.pathRevision.set(key,0);
+const first=expandNode(key);
+collapseNode(key);
+const second=expandNode(key);
+await Promise.allSettled([first,second]);
+if(calls!==2)throw new Error(`expected 2 requests, got ${calls}`);
+if(!state.expanded.has(key))throw new Error('reopen after abort failed');
+console.log('ABORT_REOPEN_OK');
+'''
+    executable = js.replace("init();\n})();", "(async()=>{" + harness + "})().catch(e=>{console.error(e);process.exitCode=1});\n})();")
+    result = subprocess.run(["node", "-e", executable], capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+    assert "ABORT_REOPEN_OK" in result.stdout
+
+
+def test_routes_canvas_ignores_late_response_after_collapse_then_reopens():
+    js = source()
+    harness = r'''
+renderGraph=()=>{};layoutGraph=()=>{};setStatus=()=>{};
+let calls=0,releaseFirst;
+globalThis.fetch=async()=>{
+  calls++;
+  if(calls===1)return {ok:true,json:()=>new Promise(resolve=>{releaseFirst=()=>resolve({path_run_count:5,path_observable_runs:5,display_threshold:3,branches:[]})})};
+  return {ok:true,json:async()=>({path_run_count:5,path_observable_runs:5,display_threshold:3,branches:[]})};
+};
+const key='3:root';
+state.version='v';state.hero='Vanessa';state.root=key;
+state.nodes.set(key,{day:3,node_id:'root',run_count:5,path_run_count:5});
+state.paths.set(key,[[{day:3,node_id:'root'}]]);state.pathRevision.set(key,0);
+const first=expandNode(key);
+await new Promise(resolve=>setTimeout(resolve,0));
+collapseNode(key);
+releaseFirst();
+await first;
+if(state.expanded.has(key))throw new Error('late response reopened collapsed node');
+await expandNode(key);
+if(calls!==2)throw new Error(`expected 2 requests, got ${calls}`);
+if(!state.expanded.has(key))throw new Error('reopen after late response failed');
+console.log('LATE_RESPONSE_REOPEN_OK');
+'''
+    executable = js.replace("init();\n})();", "(async()=>{" + harness + "})().catch(e=>{console.error(e);process.exitCode=1});\n})();")
+    result = subprocess.run(["node", "-e", executable], capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+    assert "LATE_RESPONSE_REOPEN_OK" in result.stdout
 
 
 def test_routes_javascript_syntax_is_valid():

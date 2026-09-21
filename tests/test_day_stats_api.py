@@ -117,6 +117,11 @@ def stats_db(tmp_path):
                      ("v2", "daily-a", 3, "a", "core", 10, 1.0))
         conn.execute("INSERT INTO daily_archetype_cards VALUES (?, ?, ?, ?, ?, ?, ?)",
                      ("v2", "daily-b", 4, "c", "core", 6, 1.0))
+        conn.executemany("INSERT INTO daily_archetype_cards VALUES (?, ?, ?, ?, ?, ?, ?)", [
+            ("v2", "daily-dispersed", 4, "z", "common", 3, .75),
+            ("v2", "daily-dispersed", 4, "y", "common", 2, .50),
+            ("v2", "daily-dispersed", 4, "x", "variant", 1, .25),
+        ])
         conn.execute("INSERT INTO daily_archetype_edges VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                      ("v2", "edge-daily", 3, "daily-a", 4, "daily-b", 6, 10, 8, .8, .75, 0))
         conn.execute("INSERT INTO daily_archetype_edges VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -331,6 +336,27 @@ def test_public_daily_routes_keeps_empty_core_nodes_in_summary(monkeypatch, stat
     assert "daily-dispersed" in [row["node_id"] for row in response.get_json()["nodes"]]
 
 
+def test_empty_core_node_returns_dynamic_signature_cards_without_changing_representative_cards(
+        monkeypatch, stats_db):
+    raw_client = _client(monkeypatch, stats_db).web_app.app.test_client()
+    daily = raw_client.get("/api/routes/daily?version=v2&hero=Vanessa&day=4")
+    detail = raw_client.get(
+        "/api/routes/daily/node?version=v2&hero=Vanessa&day=4&node_id=daily-dispersed"
+    )
+
+    assert daily.status_code == 200
+    node = next(row for row in daily.get_json()["nodes"] if row["node_id"] == "daily-dispersed")
+    assert [row["cardId"] for row in node["representative_cards"]] == ["z"]
+    assert [row["card_id"] for row in node["signature_cards"]] == ["z", "y"]
+    assert node["signature_cards"][0]["support_runs"] == 3
+    assert node["signature_cards"][0]["support_rate"] == .75
+    assert node["signature_cards"][0]["display"]["name"] == "中文-z"
+
+    assert detail.status_code == 200
+    detail_node = detail.get_json()["node"]
+    assert [row["card_id"] for row in detail_node["signature_cards"]] == ["z", "y"]
+
+
 def test_public_daily_routes_summary_groups_all_days(monkeypatch, stats_db):
     client = _client(monkeypatch, stats_db)
     response = client.web_app.app.test_client().get(
@@ -383,7 +409,7 @@ def test_public_daily_node_detail_cache_uses_resolved_version_for_latest(monkeyp
     assert first.status_code == 200
     assert first.get_json()["version_id"] == "v2"
     expected_key = web_app._day_stats_result_cache_key(
-        "v2", "daily-node-v1", "Vanessa", 3, "daily-a"
+        "v2", "daily-node-v2", "Vanessa", 3, "daily-a"
     )
     assert web_app._day_stats_cache_get(expected_key) == first.get_json()
 
@@ -745,8 +771,8 @@ def test_public_routes_page_contract_and_navigation(monkeypatch, stats_db):
     css = raw_client.get("/static/routes.css").get_data(as_text=True)
 
     assert '<meta name="robots" content="index, follow">' in html
-    assert 'href="static/routes.css?v=20260921d"' in html
-    assert 'src="static/routes.js?v=20260921d"' in html
+    assert 'href="static/routes.css?v=20260921e"' in html
+    assert 'src="static/routes.js?v=20260921e"' in html
     assert "fetch('api/track/pv'" in html
     assert 'href="/routes" class="nav-tab active"' in html
     assert "可拖拽阵容路线画布" in html and "下一次真实观测 Day" in html
@@ -763,12 +789,12 @@ def test_public_routes_page_contract_and_navigation(monkeypatch, stats_db):
     assert "@media(max-width:650px)" in css.replace(" ", "")
 
 
-def test_route_v2_cache_namespace_is_v7():
+def test_route_v2_cache_namespace_is_v8():
     from pathlib import Path
     source = (Path(__file__).parents[1] / "web_runs" / "app.py").read_text(encoding="utf-8")
-    assert "'daily-v7'" in source
+    assert "'daily-v8'" in source
     assert "'daily-summary-v6'" in source
-    assert "'daily-v6'" not in source
+    assert "'daily-v7'" not in source
     assert "'daily-summary-v5'" not in source
 
 

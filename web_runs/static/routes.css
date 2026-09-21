@@ -15,6 +15,10 @@
 .canvas-node .route-card small{white-space:normal;overflow:visible;text-overflow:clip;line-height:1.25}
 .node-expand{display:block;width:100%;margin-top:12px;padding:7px 10px;border:1px solid var(--cyan);border-radius:7px;color:var(--cyan);background:rgba(38,217,242,.1);font-weight:700;cursor:pointer}
 .node-expand:hover{background:rgba(38,217,242,.2)}
+.representative-label{display:block;margin:7px 0 3px;color:var(--gold);font-weight:800;letter-spacing:.05em}
+.representative-card-list{list-style:none;margin:12px 0;padding:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px}
+.representative-card-list li{display:flex;align-items:center;gap:10px;padding:10px;border:1px solid rgba(245,199,106,.32);border-radius:9px;background:rgba(245,199,106,.07)}
+.representative-card-list .route-card{flex:none}.representative-card-list li>div:last-child{display:flex;flex-direction:column}.representative-card-list small{color:var(--muted)}
 .route-edges .cross-day path{stroke-dasharray:10 8;stroke:var(--gold)}
 .route-edges .cross-day text{fill:var(--gold)}
 .canvas-focus{overflow:hidden}

@@ -1134,7 +1134,7 @@ def _day_stats_daily_response():
     if not _valid_day_stats_version(version):
         return _day_stats_invalid_version_response()
     day = int(day_raw)
-    cache_key = _day_stats_result_cache_key(version, 'daily-v7', hero, day)
+    cache_key = _day_stats_result_cache_key(version, 'daily-v8', hero, day)
     cached = _day_stats_cache_get(cache_key)
     if cached is not None:
         return jsonify(cached)
@@ -1149,7 +1149,7 @@ def _day_stats_daily_response():
         # Cache against the immutable resolved version so a fresh "latest"
         # build cannot reuse a previous version's payload.
         resolved_cache_key = _day_stats_result_cache_key(
-            metadata['version_id'], 'daily-v7', hero, day
+            metadata['version_id'], 'daily-v8', hero, day
         )
         cached = _day_stats_cache_get(resolved_cache_key)
         if cached is not None:
@@ -1170,6 +1170,9 @@ def _day_stats_daily_response():
                 (metadata['version_id'], node['node_id'])).fetchall()]
             for card in node['card_stats']:
                 card['display'] = _day_stats_cards([card['card_id']])[0]
+            node['signature_cards'] = _daily_route_representative_cards(
+                conn, metadata['version_id'], node['node_id'], node['run_count'], node['core_items']
+            )
         node_ids = [node['node_id'] for node in nodes]
         edges = []
         if node_ids:
@@ -1259,6 +1262,37 @@ def _daily_route_node_row(conn, version_id, hero, day, node_id):
         FROM daily_archetype_nodes
         WHERE version_id=? AND hero=? AND day=? AND node_id=?''',
         (version_id, hero, day, node_id)).fetchone()
+
+
+def _daily_route_representative_cards(conn, version_id, node_id, run_count, core_items):
+    """Choose 1-3 stable high-frequency cards for nodes without a formal core."""
+    if core_items or not run_count:
+        return []
+    rows = [dict(row) for row in conn.execute('''SELECT card_id, support_runs, support_rate
+        FROM daily_archetype_cards
+        WHERE version_id=? AND node_id=? AND role!='core'
+        ORDER BY support_rate DESC, support_runs DESC, card_id''',
+        (version_id, node_id)).fetchall()]
+    minimum_support = max(2, math.ceil(math.sqrt(run_count)))
+    ranked = []
+    z = 1.28
+    for row in rows:
+        support = int(row['support_runs'])
+        if support < minimum_support:
+            continue
+        rate = float(row['support_rate'])
+        denominator = 1 + z * z / run_count
+        centre = rate + z * z / (2 * run_count)
+        margin = z * math.sqrt((rate * (1 - rate) + z * z / (4 * run_count)) / run_count)
+        row['stability_score'] = (centre - margin) / denominator
+        ranked.append(row)
+    if not ranked:
+        return []
+    threshold = max(0.08, ranked[0]['stability_score'] * 0.5)
+    selected = [row for row in ranked if row['stability_score'] >= threshold][:3]
+    for row in selected:
+        row['display'] = _day_stats_cards([row['card_id']])[0]
+    return selected
 
 
 def _daily_route_member_runs(conn, version_id, day, node_id):
@@ -1399,7 +1433,7 @@ def api_routes_daily_node(node_id=None):
     metadata = _day_stats_cache_get(_day_stats_metadata_cache_key(version))
     if metadata is not None:
         cache_key = _day_stats_result_cache_key(
-            metadata['version_id'], 'daily-node-v1', hero, day, node_id
+            metadata['version_id'], 'daily-node-v2', hero, day, node_id
         )
         cached = _day_stats_cache_get(cache_key)
         if cached is not None:
@@ -1413,7 +1447,7 @@ def api_routes_daily_node(node_id=None):
         if metadata is None:
             return jsonify({'error': 'version not found'}), 404
         cache_key = _day_stats_result_cache_key(
-            metadata['version_id'], 'daily-node-v1', hero, day, node_id
+            metadata['version_id'], 'daily-node-v2', hero, day, node_id
         )
         cached = _day_stats_cache_get(cache_key)
         if cached is not None:
@@ -1437,6 +1471,9 @@ def api_routes_daily_node(node_id=None):
         rankings = _build_daily_node_rankings(node['core_items'], snapshots)
         node['global_run_count'] = rankings['node_global_runs']
         node['cards'] = _day_stats_cards(node['core_items'])
+        node['signature_cards'] = _daily_route_representative_cards(
+            conn, metadata['version_id'], node_id, node['run_count'], node['core_items']
+        )
         recommendations = []
         for item in rankings['recommended_compositions']:
             recommendations.append({
@@ -1547,6 +1584,9 @@ def api_routes_daily_expand():
             child['core_items'] = json.loads(child['core_items'])
             child['representative_items'] = json.loads(child['representative_items'])
             child['cards'] = _day_stats_cards(child['core_items'])
+            child['signature_cards'] = _daily_route_representative_cards(
+                conn, metadata['version_id'], child_node_id, child['run_count'], child['core_items']
+            )
             count = len(runs)
             branches.append({
                 'node': child, 'node_id': child_node_id, 'day': target_day,
