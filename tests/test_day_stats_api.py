@@ -626,8 +626,8 @@ def test_public_routes_page_contract_and_navigation(monkeypatch, stats_db):
     css = raw_client.get("/static/routes.css").get_data(as_text=True)
 
     assert '<meta name="robots" content="index, follow">' in html
-    assert 'href="static/routes.css?v=20260921b"' in html
-    assert 'src="static/routes.js?v=20260921b"' in html
+    assert 'href="static/routes.css?v=20260921c"' in html
+    assert 'src="static/routes.js?v=20260921c"' in html
     assert "fetch('api/track/pv'" in html
     assert 'href="/routes" class="nav-tab active"' in html
     assert "可拖拽阵容路线画布" in html and "严格相邻 Day" in html

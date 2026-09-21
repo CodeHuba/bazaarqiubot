@@ -8,7 +8,7 @@
   <meta name="robots" content="index, follow">
   <link rel="canonical" href="https://bazaarqiubot.com/routes">
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐉</text></svg>">
-  <link rel="stylesheet" href="static/routes.css?v=20260921b">
+  <link rel="stylesheet" href="static/routes.css?v=20260921c">
 </head>
 <body>
 <nav class="navbar">
@@ -34,7 +34,7 @@
   <div id="status" class="status visible" aria-live="polite">正在载入路线数据…</div>
   <section class="day-overview"><div class="section-heading"><div><span class="eyebrow">START POINT</span><h2>选择起始 Day 与核心阵容</h2></div><p>选择后画布默认展开严格下一 Day；点击任意节点继续向后。</p></div><div id="day-tabs" class="day-tabs"></div><div id="archetype-list" class="archetype-list"></div></section>
   <section id="route-workspace" class="route-workspace is-empty">
-    <div class="canvas-toolbar"><div><strong id="canvas-title">路线画布</strong><span id="canvas-summary">请选择起点</span></div><div class="canvas-actions"><button id="zoom-out" type="button" title="缩小">−</button><button id="zoom-in" type="button" title="放大">＋</button><button id="fit-view" type="button">适配视图</button><button id="reset-view" type="button">回到起点</button></div></div>
+    <div class="canvas-toolbar"><div><strong id="canvas-title">路线画布</strong><span id="canvas-summary">请选择起点</span></div><div class="canvas-actions"><button id="zoom-out" type="button" title="缩小">−</button><button id="zoom-in" type="button" title="放大">＋</button><button id="fit-view" type="button">适配视图</button><button id="reset-view" type="button">回到起点</button><button id="focus-view" type="button" aria-pressed="false">聚焦画板</button></div></div>
     <div id="canvas-viewport" class="canvas-viewport" tabindex="0" aria-label="可拖拽阵容路线画布">
       <div id="canvas-world" class="canvas-world"><svg id="route-edges" class="route-edges" aria-hidden="true"></svg><div id="route-nodes" class="route-nodes"></div></div>
       <div id="canvas-empty" class="canvas-empty"><strong>先选择一套当天核心阵容</strong><span>画布会从起点开始绘制连续的逐日分支。</span></div>
@@ -44,6 +44,6 @@
 <aside id="node-detail" class="node-detail" aria-hidden="true"><button id="detail-close" class="detail-close" type="button" aria-label="关闭详情">×</button><div id="detail-content"></div></aside><div id="detail-backdrop" class="detail-backdrop" hidden></div>
 <footer><a href="/static/privacy.html" target="_blank">隐私政策</a><span>© 2026 BazaarQiuBot</span></footer>
 <script>window.addEventListener('DOMContentLoaded',()=>{fetch('api/track/pv',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tab:'routes'})}).catch(()=>{});});</script>
-<script src="static/routes.js?v=20260921b" defer></script>
+<script src="static/routes.js?v=20260921c" defer></script>
 </body>
 </html>

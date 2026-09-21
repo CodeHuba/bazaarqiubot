@@ -64,6 +64,19 @@ def test_routes_canvas_has_pan_zoom_fit_and_node_rankings_without_runs_jump():
     assert "/runs?" not in js
 
 
+def test_routes_canvas_usability_tweak_uses_ctrl_wheel_focus_and_larger_nodes():
+    js = source()
+    html = (ROOT / "web_runs" / "static" / "routes.html").read_text(encoding="utf-8")
+    css = (ROOT / "web_runs" / "static" / "routes.css").read_text(encoding="utf-8")
+    assert "if(!e.ctrlKey)return" in js
+    assert "function setFocusMode(on)" in js
+    assert "focus-view" in html and "聚焦画板" in html
+    assert "width:clamp(520px,45vw,720px)" in css
+    assert ".canvas-node{width:320px" in css
+    assert ".canvas-node .route-cards{overflow:visible;flex-wrap:wrap" in css
+    assert ".route-workspace.focused{position:fixed;inset:0" in css
+
+
 def test_routes_javascript_syntax_is_valid():
     result = subprocess.run(["node", "--check", str(JS)], capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
