@@ -371,9 +371,104 @@ def test_public_daily_node_detail_uses_global_members_for_rankings(monkeypatch, 
     assert "run_id" not in json.dumps(body)
 
 
+def test_public_daily_node_detail_cache_uses_resolved_version_for_latest(monkeypatch, stats_db):
+    client = _client(monkeypatch, stats_db)
+    web_app = client.web_app
+    raw_client = web_app.app.test_client()
+    url = "/api/routes/daily/node?version=latest&hero=Vanessa&day=3&node_id=daily-a"
+
+    first = raw_client.get(url)
+    assert first.status_code == 200
+    assert first.get_json()["version_id"] == "v2"
+    expected_key = web_app._day_stats_result_cache_key(
+        "v2", "daily-node-v1", "Vanessa", 3, "daily-a"
+    )
+    assert web_app._day_stats_cache_get(expected_key) == first.get_json()
+
+    monkeypatch.setattr(
+        web_app, "_day_stats_connection",
+        lambda: (_ for _ in ()).throw(AssertionError("cache hit must avoid sqlite")),
+    )
+    second = raw_client.get(url)
+    assert second.status_code == 200
+    assert second.get_json() == first.get_json()
+
+
+@pytest.mark.parametrize("paths,error", [
+    ([[{"day": 3, "node_id": "daily-a"}]] * 65, "paths may contain at most 64 paths"),
+    ([[{"day": day, "node_id": "daily-a"} for day in range(1, 18)]],
+     "each path may contain at most 16 nodes"),
+    ([[{"day": 3, "node_id": "daily-a"}] * 5 for _ in range(52)],
+     "paths may contain at most 256 total nodes"),
+])
+def test_public_daily_path_expansion_rejects_cost_limits_before_database(
+        monkeypatch, stats_db, paths, error):
+    client = _client(monkeypatch, stats_db)
+    monkeypatch.setattr(
+        client.web_app, "_day_stats_connection",
+        lambda: (_ for _ in ()).throw(AssertionError("oversized input must be rejected before sqlite")),
+    )
+
+    response = client.web_app.app.test_client().post("/api/routes/daily/expand", json={
+        "version": "v2", "hero": "Vanessa", "paths": paths,
+    })
+
+    assert response.status_code == 400
+    assert response.get_json() == {"error": error}
+
+
+def test_public_daily_path_expansion_normalizes_and_deduplicates_paths(monkeypatch, stats_db):
+    with sqlite3.connect(stats_db) as conn:
+        conn.executemany("INSERT INTO daily_archetype_members VALUES (?, ?, ?, ?)", [
+            ("v2", "daily-a", 3, "dedup-run"),
+            ("v2", "daily-b", 4, "dedup-run"),
+        ])
+
+    client = _client(monkeypatch, stats_db)
+    web_app = client.web_app
+    original_member_runs = web_app._daily_route_member_runs
+    calls = 0
+
+    def counted_member_runs(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        return original_member_runs(*args, **kwargs)
+
+    monkeypatch.setattr(web_app, "_daily_route_member_runs", counted_member_runs)
+    response = web_app.app.test_client().post("/api/routes/daily/expand", json={
+        "version": "v2", "hero": "Vanessa",
+        "paths": [
+            [{"day": 3, "node_id": " daily-a "}, {"day": 4, "node_id": "daily-b"}],
+            [{"day": 3, "node_id": "daily-a"}, {"day": 4, "node_id": "daily-b"}],
+        ],
+    })
+
+    assert response.status_code == 200
+    assert response.get_json()["current_node_id"] == "daily-b"
+    assert response.get_json()["path_run_count"] == 1
+    # Expansion loads all distinct node memberships in one batch rather than
+    # issuing one membership query for every node in every path.
+    assert calls == 0
+
+
+def test_public_daily_path_expansion_rejects_mixed_origins(monkeypatch, stats_db):
+    client = _client(monkeypatch, stats_db).web_app.app.test_client()
+    response = client.post("/api/routes/daily/expand", json={
+        "version": "v2", "hero": "Vanessa", "paths": [
+            [{"day": 3, "node_id": "daily-a"}, {"day": 4, "node_id": "daily-b"}],
+            [{"day": 4, "node_id": "daily-b"}],
+        ],
+    })
+    assert response.status_code == 400
+    assert response.get_json() == {"error": "all paths must start at the same node"}
+
+
 def test_public_daily_path_expansion_unions_converged_paths_and_returns_all_qualified_branches(
         monkeypatch, stats_db):
     with sqlite3.connect(stats_db) as conn:
+        conn.execute("INSERT INTO daily_archetype_nodes VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                     ("v2", 18, "18.2", "Vanessa", 2, "daily-root", 1, 12, 20, .6,
+                      '["root"]', 12, 1.0, '["root"]'))
         conn.execute("INSERT INTO daily_archetype_nodes VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                      ("v2", 18, "18.2", "Vanessa", 3, "daily-x", 2, 6, 20, .3,
                       '[\"x\"]', 6, 1.0, '[\"x\"]'))
@@ -388,6 +483,7 @@ def test_public_daily_path_expansion_unions_converged_paths_and_returns_all_qual
             start_node = "daily-a" if number < 6 else "daily-x"
             child_id = f"daily-c{number // 3}"
             conn.executemany("INSERT INTO daily_archetype_members VALUES (?, ?, ?, ?)", [
+                ("v2", "daily-root", 2, run_id),
                 ("v2", start_node, 3, run_id),
                 ("v2", "daily-b", 4, run_id),
                 ("v2", child_id, 5, run_id),
@@ -398,9 +494,9 @@ def test_public_daily_path_expansion_unions_converged_paths_and_returns_all_qual
         "version": "v2",
         "hero": "Vanessa",
         "paths": [
-            [{"day": 3, "node_id": "daily-a"}, {"day": 4, "node_id": "daily-b"}],
-            [{"day": 3, "node_id": "daily-x"}, {"day": 4, "node_id": "daily-b"}],
-            [{"day": 3, "node_id": "daily-a"}, {"day": 4, "node_id": "daily-b"}],
+            [{"day": 2, "node_id": "daily-root"}, {"day": 3, "node_id": "daily-a"}, {"day": 4, "node_id": "daily-b"}],
+            [{"day": 2, "node_id": "daily-root"}, {"day": 3, "node_id": "daily-x"}, {"day": 4, "node_id": "daily-b"}],
+            [{"day": 2, "node_id": "daily-root"}, {"day": 3, "node_id": "daily-a"}, {"day": 4, "node_id": "daily-b"}],
         ],
     })
 
@@ -538,7 +634,7 @@ def test_public_routes_page_contract_and_navigation(monkeypatch, stats_db):
     assert "/api/routes/daily/expand" in js and "/api/routes/daily/node" in js
     assert "function apiPath(path)" in js
     assert "location.pathname" in js
-    assert "paths:state.paths.get" in js
+    assert "paths:requestPaths" in js
     assert "state.nodes.has" in js and "state.paths.set" in js
     assert "pointerdown" in js and "wheel" in js and "fitView" in js
     assert "推荐阵容 Top 3" in js and "关联牌 Top 8" in js
