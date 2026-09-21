@@ -493,7 +493,7 @@ def test_runs_page_restores_route_link_filters_and_can_auto_query():
     html = (Path(__file__).parents[1] / "web_runs" / "static" / "runs.html").read_text(encoding="utf-8")
     assert "new URLSearchParams(location.search)" in html
     assert "params.get('hero')" in html
-    assert "params.get('cards')" in html
+    assert "readLegacyCardsParam(location.search)" in html
     assert "params.get('auto') === '1'" in html
     assert "queryRuns(1)" in html
 

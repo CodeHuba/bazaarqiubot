@@ -256,6 +256,12 @@ body::before {
   gap: 5px;
 }
 
+.page-runs #panel-runs > .form-card > .form-row { display:grid; grid-template-columns:minmax(130px,.8fr) minmax(280px,2fr) minmax(90px,.65fr) minmax(110px,.75fr) minmax(82px,auto); gap:12px; align-items:start; }
+.page-runs #panel-runs > .form-card > .form-row > .form-group { min-width:0; }
+.page-runs #panel-runs > .form-card > .form-row > .form-group > input,
+.page-runs #panel-runs > .form-card > .form-row > .form-group > select { width:100%; min-width:0; height:40px; }
+.page-runs #panel-runs > .form-card > .form-row > .btn { width:100%; min-width:0; height:40px; margin-top:21px; justify-content:center; white-space:nowrap; }
+
 .form-group label {
   font-size: 11px;
   color: var(--text-secondary);
@@ -291,6 +297,26 @@ input:focus, select:focus {
 input::placeholder {
   color: rgba(181, 179, 215, 0.4);
 }
+
+/* 阵容查询：可连续添加多张卡牌的联想标签输入框 */
+.runs-card-picker { position:relative; min-width:0; max-width:none; }
+.runs-card-picker-box { height:40px; min-height:40px; padding:5px 9px; display:flex; align-items:center; flex-wrap:nowrap; gap:6px; overflow-x:auto; overflow-y:hidden; background:rgba(9,10,42,.8); border:1px solid rgba(138,77,255,.3); border-radius:6px; cursor:text; transition:.2s; scrollbar-width:thin; }
+.runs-card-picker-box:focus-within { border-color:var(--neon-cyan); box-shadow:0 0 0 2px rgba(38,217,242,.15); }
+.runs-card-tags { display:flex; align-items:center; gap:6px; flex:none; }
+.runs-card-tag { display:inline-flex; align-items:center; gap:5px; padding:4px 7px; border:1px solid rgba(38,217,242,.45); border-radius:5px; color:var(--text-primary); background:rgba(38,217,242,.1); font-size:13px; line-height:1; white-space:nowrap; flex:none; }
+.runs-card-tag button { border:0; background:transparent; color:var(--text-secondary); cursor:pointer; font-size:16px; line-height:1; padding:0; }
+.runs-card-tag button:hover { color:var(--neon-coral); }
+#runs-card-search { flex:1 1 130px; min-width:120px; width:auto; padding:4px 2px; border:0; box-shadow:none; background:transparent; }
+#runs-card-search:focus { border:0; box-shadow:none; background:transparent; }
+.runs-card-suggestions { display:none; position:absolute; z-index:120; left:0; right:0; top:calc(100% + 5px); max-height:330px; overflow:auto; padding:5px; border:1px solid rgba(38,217,242,.45); border-radius:8px; background:#100c35; box-shadow:0 14px 32px rgba(0,0,0,.45); }
+.runs-card-suggestions.open { display:block; }
+.runs-card-option { width:100%; padding:8px 10px; border:0; border-radius:6px; background:transparent; color:var(--text-primary); cursor:pointer; display:flex; align-items:center; gap:9px; text-align:left; }
+.runs-card-option:hover,.runs-card-option.active { background:rgba(38,217,242,.13); }
+.runs-card-option img { width:42px; height:42px; object-fit:contain; flex:none; }
+.runs-card-option-text { min-width:0; display:flex; flex-direction:column; }
+.runs-card-option-text small { color:var(--text-secondary); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.runs-card-empty { padding:13px; text-align:center; color:var(--text-secondary); font-size:13px; }
+.runs-card-help,.runs-filter-help { color:var(--text-secondary); font-size:11px; min-height:14px; }
 
 /* select 选项颜色 */
 select option {
@@ -1518,7 +1544,8 @@ input[type="file"] {
 .comp-link-btn{display:inline-flex;padding:4px 10px;border:1px solid rgba(38,217,242,.35);border-radius:4px;color:var(--neon-cyan);text-decoration:none;font-size:11px;background:transparent;cursor:pointer;font-family:inherit;}
 .comp-note{font-size:11px;color:var(--text-secondary);margin-top:6px;}
 .comp-system-toggle{margin-top:16px;border-top:1px solid rgba(138,77,255,.2);padding-top:12px;}
-@media(max-width:700px){.comp-summary{grid-template-columns:repeat(2,minmax(0,1fr));}.comp-idea-head{flex-direction:column}.comp-metrics{text-align:left}.comp-toolbar{align-items:flex-start;flex-direction:column}}
+@media(max-width:900px){.page-runs #panel-runs > .form-card > .form-row{grid-template-columns:repeat(2,minmax(0,1fr));}.page-runs #panel-runs > .form-card > .form-row .runs-card-picker{grid-column:span 2;}.page-runs #panel-runs > .form-card > .form-row > .btn{margin-top:0;}}
+@media(max-width:700px){.page-runs #panel-runs > .form-card > .form-row{grid-template-columns:1fr;}.page-runs #panel-runs > .form-card > .form-row .runs-card-picker{grid-column:auto;}.runs-card-picker{min-width:0;max-width:100%;}.comp-summary{grid-template-columns:repeat(2,minmax(0,1fr));}.comp-idea-head{flex-direction:column}.comp-metrics{text-align:left}.comp-toolbar{align-items:flex-start;flex-direction:column}}
 .comp-group{background:rgba(23,16,71,.7);border:1px solid rgba(138,77,255,.3);border-radius:8px;margin-bottom:14px;overflow:hidden;transition:all .2s;position:relative;}
 .comp-group::before{content:'';position:absolute;top:-1px;right:-1px;width:12px;height:12px;background:var(--neon-violet,#8a4dff);clip-path:polygon(100% 0,0 0,100% 100%);border-radius:0 8px 0 0;}
 .comp-group:hover{border-color:rgba(138,77,255,.55);box-shadow:0 0 16px rgba(138,77,255,.2);}
@@ -1594,34 +1621,20 @@ input[type="file"] {
           <option value="双龙">双龙</option>
         </select>
       </div>
-      <div class="form-group">
-        <label>卡牌（+分隔多张）</label>
-        <input id="runs-cards" type="text" placeholder="如：火炮阵列+赛博铁尺">
+      <div class="form-group runs-card-picker" id="runs-card-picker">
+        <label>卡牌（可添加多张）</label>
+        <div class="runs-card-picker-box" id="runs-card-picker-box" onclick="document.getElementById('runs-card-search').focus()">
+          <div class="runs-card-tags" id="runs-card-tags"></div>
+          <input id="runs-card-search" type="text" autocomplete="off" placeholder="输入部分卡名后选择">
+        </div>
+        <input id="runs-cards" type="hidden" value="">
+        <div class="runs-card-suggestions" id="runs-card-suggestions" role="listbox"></div>
+        <div class="runs-card-help">选择后可继续输入下一张；阵容分析一次只支持一张核心卡</div>
       </div>
       <div class="form-group">
-        <label>最低胜场</label>
-        <select id="runs-wins">
-          <option value="10">10胜</option>
-          <option value="9">9胜</option>
-          <option value="8">8胜</option>
-          <option value="7">7胜</option>
-          <option value="1">全部</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <label>天数</label>
-        <input id="runs-days" type="number" placeholder="不限" min="1" style="width:90px">
-      </div>
-      <div class="form-group">
-        <label>游戏 Day</label>
-        <select id="runs-day">
-          <option value="">不限</option>
-          <option value="1">Day 1</option><option value="2">Day 2</option>
-          <option value="3">Day 3</option><option value="4">Day 4</option>
-          <option value="5">Day 5</option><option value="6">Day 6</option>
-          <option value="7">Day 7</option><option value="8">Day 8</option>
-          <option value="9">Day 9</option><option value="10">Day 10</option>
-        </select>
+        <label>最近天数</label>
+        <input id="runs-days" type="number" placeholder="不限（全部时间）" min="1" inputmode="numeric" style="width:90px">
+        <div class="runs-filter-help">填写 N 表示只看最近 N 天</div>
       </div>
       <div class="form-group">
         <label>段位</label>
@@ -1647,16 +1660,134 @@ const HEROES = {瓦内莎:'Vanessa',杜利:'Dooley',马克:'Mak',皮格马利翁
 let lastQuery = 0;
 let activeRunsController = null;
 let activeRunsRequestId = 0;
+let selectedRunCards = [];
+let runCardSuggestions = [];
+let runCardActiveIndex = -1;
+let cardSearchTimer = null;
+let cardSearchController = null;
+let cardSearchRequestId = 0;
+
+function escapeRunCardText(value) {
+  return String(value || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+function syncRunCards() {
+  document.getElementById('runs-cards').value = selectedRunCards.join('+');
+  document.getElementById('runs-card-tags').innerHTML = selectedRunCards.map((name, index) =>
+    `<span class="runs-card-tag">${escapeRunCardText(name)}<button type="button" aria-label="删除 ${escapeRunCardText(name)}" onclick="event.stopPropagation();removeRunCard(${index})">×</button></span>`
+  ).join('');
+}
+function addRunCard(name) {
+  name = String(name || '').trim();
+  if (!name || selectedRunCards.includes(name)) return;
+  selectedRunCards.push(name);
+  syncRunCards();
+}
+function removeRunCard(index) {
+  selectedRunCards.splice(index, 1);
+  syncRunCards();
+  document.getElementById('runs-card-search').focus();
+}
+function readLegacyCardsParam(search) {
+  const raw = String(search || '').replace(/^\?/, '').split('&').find(part => part.split('=')[0] === 'cards');
+  if (!raw) return new URLSearchParams(search).get('cards') || '';
+  try { return decodeURIComponent(raw.replace(/\+/g, '%2B').slice(raw.indexOf('=') + 1)); }
+  catch (_) { return new URLSearchParams(search).get('cards') || ''; }
+}
+function restoreRunCards(value) {
+  selectedRunCards = [];
+  String(value || '').split('+').map(v => v.trim()).filter(Boolean).forEach(addRunCard);
+  syncRunCards();
+}
+function closeRunCardSuggestions() {
+  clearTimeout(cardSearchTimer);
+  cardSearchRequestId += 1;
+  if (cardSearchController) {
+    cardSearchController.abort();
+    cardSearchController = null;
+  }
+  runCardSuggestions = [];
+  runCardActiveIndex = -1;
+  const menu = document.getElementById('runs-card-suggestions');
+  menu.classList.remove('open');
+  menu.innerHTML = '';
+}
+function renderRunCardSuggestions() {
+  const menu = document.getElementById('runs-card-suggestions');
+  if (!runCardSuggestions.length) {
+    menu.innerHTML = '<div class="runs-card-empty">没有找到相关卡牌</div>';
+  } else {
+    menu.innerHTML = runCardSuggestions.map((card, index) => {
+      const image = card.img ? `<img src="${escapeRunCardText(card.img)}" alt="" loading="lazy">` : '';
+      const english = card.en && card.en !== card.zh ? `<small>${escapeRunCardText(card.en)}</small>` : '';
+      return `<button type="button" class="runs-card-option${index === runCardActiveIndex ? ' active' : ''}" role="option" onmousedown="event.preventDefault()" onclick="selectRunCardSuggestion(${index})">${image}<span class="runs-card-option-text"><strong>${escapeRunCardText(card.zh)}</strong>${english}</span></button>`;
+    }).join('');
+  }
+  menu.classList.add('open');
+  menu.querySelector('.active')?.scrollIntoView({block:'nearest'});
+}
+function selectRunCardSuggestion(index) {
+  const card = runCardSuggestions[index];
+  if (!card) return;
+  addRunCard(card.zh || card.en);
+  document.getElementById('runs-card-search').value = '';
+  closeRunCardSuggestions();
+  document.getElementById('runs-card-search').focus();
+}
+async function searchRunCards(query) {
+  if (cardSearchController) cardSearchController.abort();
+  const requestId = ++cardSearchRequestId;
+  cardSearchController = new AbortController();
+  const input = document.getElementById('runs-card-search');
+  try {
+    const res = await fetch('/api/card_search?q=' + encodeURIComponent(query), {signal:cardSearchController.signal});
+    const rows = await res.json();
+    if (requestId !== cardSearchRequestId || input.value.trim() !== query) return;
+    runCardSuggestions = (Array.isArray(rows) ? rows : []).filter(card => !selectedRunCards.includes(card.zh || card.en));
+    runCardActiveIndex = runCardSuggestions.length ? 0 : -1;
+    renderRunCardSuggestions();
+  } catch (error) {
+    if (error.name !== 'AbortError') closeRunCardSuggestions();
+  }
+}
+function scheduleRunCardSearch() {
+  clearTimeout(cardSearchTimer);
+  const input = document.getElementById('runs-card-search');
+  const query = input.value.trim();
+  if (!query) { closeRunCardSuggestions(); return; }
+  cardSearchTimer = setTimeout(() => searchRunCards(query), 180);
+}
+function handleRunCardKeydown(event) {
+  if (event.key === 'ArrowDown' && runCardSuggestions.length) {
+    event.preventDefault(); runCardActiveIndex = (runCardActiveIndex + 1) % runCardSuggestions.length; renderRunCardSuggestions();
+  } else if (event.key === 'ArrowUp' && runCardSuggestions.length) {
+    event.preventDefault(); runCardActiveIndex = (runCardActiveIndex - 1 + runCardSuggestions.length) % runCardSuggestions.length; renderRunCardSuggestions();
+  } else if (event.key === 'Enter' && runCardSuggestions.length && runCardActiveIndex >= 0) {
+    event.preventDefault(); selectRunCardSuggestion(runCardActiveIndex);
+  } else if (event.key === 'Escape') {
+    closeRunCardSuggestions();
+  } else if (event.key === 'Backspace' && !event.currentTarget.value && selectedRunCards.length) {
+    removeRunCard(selectedRunCards.length - 1);
+  }
+}
+function initRunCardPicker() {
+  const input = document.getElementById('runs-card-search');
+  input.addEventListener('input', scheduleRunCardSearch);
+  input.addEventListener('keydown', handleRunCardKeydown);
+  document.addEventListener('click', event => {
+    if (!document.getElementById('runs-card-picker').contains(event.target)) closeRunCardSuggestions();
+  });
+}
 // 初始化视图状态
 document.addEventListener('DOMContentLoaded', () => {
+  initRunCardPicker();
   document.getElementById('comp-result').style.display = 'none';
   document.getElementById('comp-result').innerHTML = '<div class="result-card"><div class="empty">输入卡牌名称后点击查询，即可查看阵容分析</div></div>';
   const params = new URLSearchParams(location.search);
   const hero = params.get('hero');
-  const cards = params.get('cards');
+  const cards = readLegacyCardsParam(location.search);
   const rank = params.get('rank');
   if (hero) document.getElementById('runs-hero').value = hero;
-  if (cards) document.getElementById('runs-cards').value = cards;
+  if (cards) restoreRunCards(cards);
   if (rank && document.querySelector(`#runs-rank option[value="${CSS.escape(rank)}"]`)) {
     document.getElementById('runs-rank').value = rank;
   }
@@ -1707,9 +1838,8 @@ async function queryRuns(page) {
   showError('runs-error', '');
   const hero = document.getElementById('runs-hero').value;
   const cards = document.getElementById('runs-cards').value.trim();
-  const wins = document.getElementById('runs-wins').value;
+  const wins = '10';
   const days = document.getElementById('runs-days').value;
-  const day = document.getElementById('runs-day').value;
   const rank = document.getElementById('runs-rank').value;
   // 阵容分析模式
   if (_viewMode === 'comp') {
@@ -1752,7 +1882,6 @@ async function queryRuns(page) {
   if (hero) params.set('hero', hero);
   if (cards) params.set('cards', cards);
   if (days) params.set('days', days);
-  if (day) params.set('day', day);
   const timeoutId = setTimeout(() => controller.abort(), 30000);
   try {
     const res = await fetch('/api/runs?' + params, {signal: controller.signal});
@@ -1773,7 +1902,7 @@ async function queryRuns(page) {
     await new Promise(resolve => setTimeout(resolve, 300));
     if (requestId !== activeRunsRequestId) return;
     if (data.error) { showError('runs-error', data.error); _runsEl.innerHTML=''; return; }
-    renderRuns(data, page, {hero, cards, wins, days, day});
+    renderRuns(data, page, {hero, cards, wins, days});
   } catch(e) {
     if (requestId !== activeRunsRequestId) return;
     const message = e.name === 'AbortError'
@@ -1944,6 +2073,8 @@ function renderPartner(data) {
 
 // Enter 键触发查询
 document.addEventListener('keydown', e => {
+  if (e.defaultPrevented) return;
+  if (e.target.closest('button, a, select')) return;
   if (e.key !== 'Enter') return;
   const active = document.querySelector('.panel.active').id;
   if (active === 'panel-runs') queryRuns(1);
@@ -1977,9 +2108,12 @@ function applySuggestion(type, val) {
     const sel = document.getElementById(selId);
     if (sel) Array.from(sel.options).forEach(o => { if (o.text === val) sel.value = o.value; });
   } else {
-    const inpId = isRuns ? 'runs-cards' : isWinrate ? 'winrate-cards' : 'partner-card';
-    const inp = document.getElementById(inpId);
-    if (inp) inp.value = val;
+    if (isRuns) addRunCard(val);
+    else {
+      const inpId = isWinrate ? 'winrate-cards' : 'partner-card';
+      const inp = document.getElementById(inpId);
+      if (inp) inp.value = val;
+    }
   }
 }
 const TC_HEROES = [
@@ -2315,7 +2449,11 @@ function rateColorComp(r) {
 const HERO_ZH_COMP = {Vanessa:'瓦内莎',Dooley:'杜利',Mak:'马克',Pygmalien:'皮格马利翁',Stelle:'斯黛尔',Jules:'朱尔斯',Karnok:'卡诺克','The Dragons':'双龙'};
 
 async function queryComp() {
-  const card = document.getElementById('runs-cards').value.trim().split('+')[0].trim();
+  if (selectedRunCards.length !== 1) {
+    document.getElementById('comp-result').innerHTML = '<div class="result-card"><div class="empty">阵容分析一次只能选择一张核心卡，请保留一张卡牌后再查询</div></div>';
+    return;
+  }
+  const card = selectedRunCards[0];
   const hero = document.getElementById('runs-hero').value;
   const rank = document.getElementById('runs-rank').value;
   if (!card) {
