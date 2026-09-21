@@ -622,7 +622,6 @@ def test_daily_route_direction_details_choose_real_representative_and_rank_non_c
 
     detail = _build_daily_route_direction_details(direction, edge_members, run_days)
 
-    assert detail["representative_run_id"] in {"r1", "r5"}
     assert detail["representative_day"] in {4, 5}
     assert set(detail["representative_items"]) == {"a", "b", "x", "y"}
     assert detail["associated_cards"][0] == {

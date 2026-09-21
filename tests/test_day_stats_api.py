@@ -313,7 +313,7 @@ def test_public_daily_routes_api_returns_nodes_edges_and_changes(monkeypatch, st
     assert directions[0]["run_count"] == 6
     assert directions[0]["target_core_items"] == ["a", "c"]
     assert directions[0]["variants"][0]["target_core_items"] == ["a", "c"]
-    assert directions[0]["representative_run_id"].startswith("route-")
+    assert "run_id" not in json.dumps(body)
     assert directions[0]["associated_cards"][0]["card_id"] == "x"
     assert directions[0]["associated_cards"][0]["support_rate"] == pytest.approx(5 / 6)
     assert len(directions) <= 3
@@ -763,12 +763,12 @@ def test_public_routes_page_contract_and_navigation(monkeypatch, stats_db):
     assert "@media(max-width:650px)" in css.replace(" ", "")
 
 
-def test_route_v2_cache_namespace_is_v6():
+def test_route_v2_cache_namespace_is_v7():
     from pathlib import Path
     source = (Path(__file__).parents[1] / "web_runs" / "app.py").read_text(encoding="utf-8")
-    assert "'daily-v6'" in source
+    assert "'daily-v7'" in source
     assert "'daily-summary-v6'" in source
-    assert "'daily-v5'" not in source
+    assert "'daily-v6'" not in source
     assert "'daily-summary-v5'" not in source
 
 

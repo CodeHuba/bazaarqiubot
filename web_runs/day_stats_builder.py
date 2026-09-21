@@ -450,7 +450,6 @@ def _build_daily_route_direction_details(
             ),
         )
     return {
-        "representative_run_id": representative[0] if representative else None,
         "representative_day": representative[1] if representative else None,
         "representative_items": sorted(representative[2]) if representative else [],
         "associated_cards": associated,

@@ -1134,7 +1134,7 @@ def _day_stats_daily_response():
     if not _valid_day_stats_version(version):
         return _day_stats_invalid_version_response()
     day = int(day_raw)
-    cache_key = _day_stats_result_cache_key(version, 'daily-v6', hero, day)
+    cache_key = _day_stats_result_cache_key(version, 'daily-v7', hero, day)
     cached = _day_stats_cache_get(cache_key)
     if cached is not None:
         return jsonify(cached)
@@ -1149,7 +1149,7 @@ def _day_stats_daily_response():
         # Cache against the immutable resolved version so a fresh "latest"
         # build cannot reuse a previous version's payload.
         resolved_cache_key = _day_stats_result_cache_key(
-            metadata['version_id'], 'daily-v6', hero, day
+            metadata['version_id'], 'daily-v7', hero, day
         )
         cached = _day_stats_cache_get(resolved_cache_key)
         if cached is not None:
