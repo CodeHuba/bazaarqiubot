@@ -74,7 +74,8 @@ body{font-family:'Inter','PingFang SC','Microsoft YaHei',sans-serif;background:#
     <button class="day-btn active" onclick="setDays(7)">近 7 天</button>
     <button class="day-btn" onclick="setDays(30)">近 30 天</button>
     <button class="day-btn" onclick="setDays(90)">近 90 天</button>
-    <button class="day-btn" style="margin-left:auto;background:#8A4DFF;color:#fff;border-color:#8A4DFF" onclick="openSupportersModal()">赞赏者管理</button>
+    <button class="day-btn" style="margin-left:auto;background:#0ea5e9;color:#fff;border-color:#0ea5e9" onclick="openFeedbackAdminModal()">意见反馈管理</button>
+    <button class="day-btn" style="background:#8A4DFF;color:#fff;border-color:#8A4DFF" onclick="openSupportersModal()">赞赏者管理</button>
     <button class="day-btn" style="background:#F5C76A;color:#0a0e1a;border-color:#F5C76A" onclick="openTriviaModal()">冷知识管理</button>
     <button class="day-btn" style="background:#34d399;color:#0a0e1a;border-color:#34d399" onclick="openAnnouncementModal()">公告管理</button>
   </div>
@@ -327,6 +328,153 @@ loadStats();
 setInterval(() => {
   loadStats();
 }, 1800000);
+</script>
+
+<!-- 意见反馈管理模态框 -->
+<div class="modal-overlay" id="feedback-admin-modal" role="dialog" aria-modal="true" aria-labelledby="feedback-admin-title">
+  <div class="modal" style="max-width:920px">
+    <div class="modal-header">
+      <h3 id="feedback-admin-title">意见反馈管理</h3>
+      <button class="modal-close" onclick="closeFeedbackAdminModal()" aria-label="关闭">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="feedback-admin-toolbar">
+        <input id="feedback-admin-search" class="feedback-admin-search" placeholder="搜索反馈内容、联系方式或备注" onkeydown="if(event.key==='Enter') loadFeedbackAdmin(1)">
+        <button class="btn-primary" style="background:#0ea5e9;color:#fff" onclick="loadFeedbackAdmin(1)">搜索</button>
+        <div class="feedback-admin-filters">
+          <button class="btn-secondary feedback-filter-active" id="faf-all" onclick="setFeedbackAdminStatus('all')">全部</button>
+          <button class="btn-secondary" id="faf-open" onclick="setFeedbackAdminStatus('open')">待处理</button>
+          <button class="btn-secondary" id="faf-in_progress" onclick="setFeedbackAdminStatus('in_progress')">处理中</button>
+          <button class="btn-secondary" id="faf-resolved" onclick="setFeedbackAdminStatus('resolved')">已解决</button>
+          <button class="btn-secondary" id="faf-hidden" onclick="setFeedbackAdminStatus('hidden')">已隐藏</button>
+        </div>
+        <span id="feedback-admin-count" class="feedback-admin-count">-</span>
+      </div>
+      <div id="feedback-admin-list"><div class="loading">加载中...</div></div>
+      <div id="feedback-admin-pages" class="feedback-admin-pages"></div>
+    </div>
+  </div>
+</div>
+
+<style>
+.feedback-admin-toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:16px}
+.feedback-admin-search{min-width:240px;flex:1;padding:9px 12px;background:#0a0e1a;border:1px solid #374151;border-radius:6px;color:#e2e8f0;font-size:13px}
+.feedback-admin-search:focus{outline:none;border-color:#0ea5e9;box-shadow:0 0 0 2px rgba(14,165,233,.14)}
+.feedback-admin-filters{display:flex;gap:6px;flex-wrap:wrap}
+.feedback-filter-active{border-color:#0ea5e9!important;color:#38bdf8!important;background:rgba(14,165,233,.1)!important}
+.feedback-admin-count{font-size:12px;color:#6b7280;margin-left:auto}
+.feedback-admin-item{background:#111827;border:1px solid #1f2937;border-radius:10px;padding:15px;margin-bottom:10px}
+.feedback-admin-item:hover{border-color:#374151}
+.feedback-admin-head{display:flex;gap:10px;align-items:flex-start;margin-bottom:8px}
+.feedback-admin-content{flex:1;white-space:pre-wrap;line-height:1.6;color:#e2e8f0;font-size:14px;word-break:break-word}
+.feedback-status{padding:3px 9px;border-radius:999px;font-size:11px;font-weight:700;white-space:nowrap}
+.feedback-status-open{background:#422006;color:#fbbf24}.feedback-status-in_progress{background:#0c4a6e;color:#7dd3fc}.feedback-status-resolved{background:#064e3b;color:#6ee7b7}.feedback-status-hidden{background:#3f3f46;color:#d4d4d8}
+.feedback-admin-meta{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:#6b7280;margin-bottom:10px}
+.feedback-admin-image{display:block;max-width:180px;max-height:120px;object-fit:contain;border-radius:6px;border:1px solid #374151;margin:8px 0}
+.feedback-admin-actions{display:grid;grid-template-columns:150px 1fr auto auto;gap:8px;align-items:start}
+.feedback-admin-actions select,.feedback-admin-note{padding:8px;background:#0a0e1a;border:1px solid #374151;border-radius:5px;color:#e2e8f0;font-size:13px}
+.feedback-admin-note{min-height:38px;resize:vertical}
+.feedback-admin-pages{display:flex;justify-content:center;align-items:center;gap:8px;margin-top:14px}
+@media(max-width:760px){.feedback-admin-actions{grid-template-columns:1fr}.feedback-admin-filters{width:100%}.feedback-admin-count{margin-left:0}}
+</style>
+
+<script>
+let feedbackAdminStatus = 'all';
+let feedbackAdminPage = 1;
+let feedbackAdminItems = [];
+
+function openFeedbackAdminModal() {
+  document.getElementById('feedback-admin-modal').classList.add('open');
+  document.body.style.overflow = 'hidden';
+  loadFeedbackAdmin(1);
+}
+function closeFeedbackAdminModal() {
+  document.getElementById('feedback-admin-modal').classList.remove('open');
+  document.body.style.overflow = '';
+}
+function setFeedbackAdminStatus(status) {
+  feedbackAdminStatus = status;
+  ['all','open','in_progress','resolved','hidden'].forEach(key => {
+    const el = document.getElementById('faf-' + key);
+    if (el) el.className = 'btn-secondary' + (key === status ? ' feedback-filter-active' : '');
+  });
+  loadFeedbackAdmin(1);
+}
+async function loadFeedbackAdmin(page = 1) {
+  feedbackAdminPage = page;
+  const list = document.getElementById('feedback-admin-list');
+  list.innerHTML = '<div class="loading">加载中...</div>';
+  const q = document.getElementById('feedback-admin-search').value.trim();
+  const params = new URLSearchParams({page: String(page), status: feedbackAdminStatus});
+  if (q) params.set('q', q);
+  try {
+    const resp = await fetch('/api/admin/feedback?' + params.toString());
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || '加载失败');
+    feedbackAdminItems = data.items || [];
+    renderFeedbackAdmin(data);
+  } catch (e) {
+    list.innerHTML = '<div class="error-msg">加载失败：' + escapeHtml(e.message) + '</div>';
+  }
+}
+function renderFeedbackAdmin(data) {
+  const list = document.getElementById('feedback-admin-list');
+  const labels = {open:'待处理',in_progress:'处理中',resolved:'已解决',hidden:'已隐藏'};
+  document.getElementById('feedback-admin-count').textContent = `共 ${data.total || 0} 条`;
+  if (!feedbackAdminItems.length) {
+    list.innerHTML = '<div style="color:#6b7280;text-align:center;padding:40px">暂无反馈</div>';
+  } else {
+    list.innerHTML = feedbackAdminItems.map(item => `
+      <div class="feedback-admin-item" id="feedback-admin-${item.id}">
+        <div class="feedback-admin-head">
+          <div class="feedback-admin-content">${escapeHtml(item.content)}</div>
+          <span class="feedback-status feedback-status-${item.status}">${labels[item.status] || item.status}</span>
+        </div>
+        ${item.image_path ? `<a href="${escapeHtml(item.image_path)}" target="_blank" rel="noopener"><img class="feedback-admin-image" src="${escapeHtml(item.image_path)}" alt="反馈截图"></a>` : ''}
+        <div class="feedback-admin-meta">
+          <span>#${item.id}</span><span>❤️ ${item.likes || 0}</span><span>💬 ${item.comment_count || 0}</span>
+          <span>提交：${escapeHtml(item.created_at || '')}</span>
+          ${item.contact ? `<span>联系：${escapeHtml(item.contact)}</span>` : '<span>未留联系方式</span>'}
+        </div>
+        <div class="feedback-admin-actions">
+          <select id="feedback-status-${item.id}">
+            ${Object.entries(labels).map(([value,label]) => `<option value="${value}" ${item.status===value?'selected':''}>${label}</option>`).join('')}
+          </select>
+          <textarea class="feedback-admin-note" id="feedback-note-${item.id}" placeholder="管理员备注（仅后台可见）">${escapeHtml(item.admin_note || '')}</textarea>
+          <button class="btn-primary" style="background:#0ea5e9;color:#fff" onclick="saveFeedbackAdmin(${item.id})">保存</button>
+          <button class="btn-icon danger" onclick="deleteFeedbackAdmin(${item.id})" title="永久删除">🗑️</button>
+        </div>
+      </div>`).join('');
+  }
+  const pages = Math.max(1, data.pages || 1);
+  document.getElementById('feedback-admin-pages').innerHTML = `
+    <button class="btn-secondary" ${data.page<=1?'disabled':''} onclick="loadFeedbackAdmin(${data.page-1})">上一页</button>
+    <span style="font-size:12px;color:#9ca3af">${data.page || 1} / ${pages}</span>
+    <button class="btn-secondary" ${data.page>=pages?'disabled':''} onclick="loadFeedbackAdmin(${data.page+1})">下一页</button>`;
+}
+async function saveFeedbackAdmin(id) {
+  const payload = {
+    status: document.getElementById('feedback-status-' + id).value,
+    adminNote: document.getElementById('feedback-note-' + id).value.trim()
+  };
+  const resp = await fetch('/api/admin/feedback/' + id, {
+    method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)
+  });
+  const data = await resp.json();
+  if (!resp.ok) { alert(data.error || '保存失败'); return; }
+  loadFeedbackAdmin(feedbackAdminPage);
+}
+async function deleteFeedbackAdmin(id) {
+  const item = feedbackAdminItems.find(x => x.id === id);
+  if (!item || !confirm(`确认永久删除反馈 #${id}？相关评论和截图也会删除，此操作不可恢复。`)) return;
+  const resp = await fetch('/api/admin/feedback/' + id, {method:'DELETE'});
+  const data = await resp.json();
+  if (!resp.ok) { alert(data.error || '删除失败'); return; }
+  loadFeedbackAdmin(feedbackAdminPage);
+}
+document.addEventListener('keydown', event => {
+  if (event.key === 'Escape' && document.getElementById('feedback-admin-modal').classList.contains('open')) closeFeedbackAdminModal();
+});
 </script>
 
 <!-- 赞赏者管理模态框 -->

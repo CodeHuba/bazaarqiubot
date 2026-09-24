@@ -31,6 +31,13 @@ _sys.path.insert(0, _APP_DIR)
 if '/opt/qiubot/web_runs' not in _sys.path:
     _sys.path.append('/opt/qiubot/web_runs')
 from feedback_utils import parse_feedback_page
+from feedback_admin import (
+    delete_feedback,
+    list_feedback,
+    migrate_feedback_schema,
+    remove_feedback_image,
+    update_feedback,
+)
 from ocr_worker import start_worker, enqueue_run
 
 # 启动 OCR 后台线程
@@ -1941,10 +1948,16 @@ def api_comp_card():
         return jsonify({'error': str(e)}), 500
 
 # ===== Feedback API =====
-FEEDBACK_DB = '/opt/qiubot/data/feedback.db'
+FEEDBACK_DB = os.getenv('FEEDBACK_DB_PATH', '/opt/qiubot/data/feedback.db')
 UPLOAD_DIR = os.path.join(os.path.dirname(__file__), 'static', 'uploads')
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 ALLOWED_EXT = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
+
+try:
+    migrate_feedback_schema(FEEDBACK_DB)
+except Exception as _feedback_schema_error:
+    print(f'[feedback] schema migration failed: {_feedback_schema_error}', flush=True)
+
 
 def _fb_conn():
     import sqlite3 as _sl
@@ -1986,10 +1999,14 @@ def api_feedback_list():
     try:
         conn = _fb_conn()
         rows = conn.execute(
-            'SELECT * FROM feedback ORDER BY likes DESC, created_at DESC LIMIT ? OFFSET ?',
+            "SELECT id, content, image_path, contact, likes, created_at "
+            "FROM feedback WHERE COALESCE(status, 'open') != 'hidden' "
+            "ORDER BY likes DESC, created_at DESC LIMIT ? OFFSET ?",
             (per, offset)
         ).fetchall()
-        total = conn.execute('SELECT COUNT(*) FROM feedback').fetchone()[0]
+        total = conn.execute(
+            "SELECT COUNT(*) FROM feedback WHERE COALESCE(status, 'open') != 'hidden'"
+        ).fetchone()[0]
         conn.close()
         return jsonify({
             'items': [dict(r) for r in rows],
@@ -2032,6 +2049,55 @@ def api_feedback_post():
         return jsonify(dict(row)), 201
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+@app.route('/api/admin/feedback', methods=['GET'])
+@require_stats_auth
+def admin_feedback_list():
+    try:
+        page = parse_feedback_page(request.args.get('page', '1'))
+        status = (request.args.get('status') or 'all').strip()
+        search = (request.args.get('q') or '').strip()
+        if len(search) > 100:
+            return jsonify({'error': 'search is too long'}), 400
+        return jsonify(list_feedback(
+            FEEDBACK_DB, status=status, search=search, page=page, per_page=20
+        ))
+    except ValueError as exc:
+        return jsonify({'error': str(exc)}), 400
+    except Exception as exc:
+        return jsonify({'error': str(exc)}), 500
+
+
+@app.route('/api/admin/feedback/<int:fid>', methods=['PUT'])
+@require_stats_auth
+def admin_feedback_update(fid):
+    data = request.get_json(silent=True) or {}
+    status = (data.get('status') or '').strip()
+    admin_note = (data.get('adminNote') or '').strip()
+    try:
+        return jsonify(update_feedback(
+            FEEDBACK_DB, fid, status=status, admin_note=admin_note
+        ))
+    except ValueError as exc:
+        return jsonify({'error': str(exc)}), 400
+    except LookupError:
+        return jsonify({'error': 'feedback not found'}), 404
+    except Exception as exc:
+        return jsonify({'error': str(exc)}), 500
+
+
+@app.route('/api/admin/feedback/<int:fid>', methods=['DELETE'])
+@require_stats_auth
+def admin_feedback_delete(fid):
+    try:
+        deleted = delete_feedback(FEEDBACK_DB, fid)
+        remove_feedback_image(deleted.get('image_path'), UPLOAD_DIR)
+        return jsonify({'ok': True})
+    except LookupError:
+        return jsonify({'error': 'feedback not found'}), 404
+    except Exception as exc:
+        return jsonify({'error': str(exc)}), 500
+
 
 @app.route('/api/feedback/<int:fid>/like', methods=['POST'])
 def api_feedback_like(fid):
