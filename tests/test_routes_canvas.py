@@ -249,6 +249,10 @@ def test_route_share_links_preserve_preview_prefix():
     assert "location.href.split('#')[0]" in share_html
     assert "share-public-url" in share_html
     assert "hidden id=\"share-route\"" in (ROOT / "web_runs" / "static" / "routes.html").read_text(encoding="utf-8")
+    assert "id=\"share-status\"" not in share_html
+    assert "share-card-items" in share_html
+    assert "flex-wrap:nowrap" in css
+    assert "share-data-region" in css
 
 
 def test_routes_javascript_syntax_is_valid():
