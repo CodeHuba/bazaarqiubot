@@ -37,7 +37,9 @@ def test_tier_share_only_includes_first_two_levels():
     html = WINRATE_HTML.parent.joinpath("topcard.html").read_text(encoding="utf-8")
     share_fn = html[html.index("async function shareTierTable()"):html.index("// ── 阵容榜 ──")]
     assert "(data.tiers||[]).slice(0,2)" in share_fn
-    assert "完整 T 表仍保留在页面中" in share_fn
+    assert "const shareGroupsData=(data.tiers||[]).slice(0,2)" in share_fn
+    assert "const shareCardCount=shareGroupsData.reduce" in share_fn
+    assert "正在加载卡图 0/'+shareCardCount" in share_fn
 
 
 def _share_function():

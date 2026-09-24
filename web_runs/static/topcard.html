@@ -2315,18 +2315,20 @@ async function shareTierTable(){
   if(!_lastTierData){return;}
   if(typeof html2canvas==='undefined'){alert('分享组件加载失败，请刷新页面后重试。');return;}
   const data=_lastTierData, node=document.createElement('div'); node.className='tier-share-card';
+  const shareGroupsData=(data.tiers||[]).slice(0,2);
+  const shareCardCount=shareGroupsData.reduce((total,group)=>total+(group.cards||[]).length,0);
   const shareButton=document.getElementById('tier-share-button');
   // 分享图只展示前两个级别，完整 T 表仍保留在页面中。
   const oldShareLabel=shareButton?.textContent;
   const progress=document.createElement('div');
   progress.className='tier-share-progress';
-  progress.innerHTML='<div class="tier-share-progress-box"><div class="tier-share-progress-title">正在准备分享图</div><div class="tier-share-progress-track"><div class="tier-share-progress-bar"></div></div><div class="tier-share-progress-text">正在加载卡图 0/0</div></div>';
+  progress.innerHTML='<div class="tier-share-progress-box"><div class="tier-share-progress-title">正在准备分享图</div><div class="tier-share-progress-track"><div class="tier-share-progress-bar"></div></div><div class="tier-share-progress-text">正在加载卡图 0/'+shareCardCount+'</div></div>';
   document.body.appendChild(progress);
   const progressBar=progress.querySelector('.tier-share-progress-bar');
   const progressText=progress.querySelector('.tier-share-progress-text');
   const progressTitle=progress.querySelector('.tier-share-progress-title');
   if(shareButton){shareButton.disabled=true;shareButton.textContent='生成中…';}
-  const shareGroups=(data.tiers||[]).slice(0,2).map(group=>{
+  const shareGroups=shareGroupsData.map(group=>{
     const color=TIER_META[group.name]?.[0]||'#B5B3D7';
     const cards=group.cards.map(card=>{
       const image=tierShareImageUrl(card.img);
