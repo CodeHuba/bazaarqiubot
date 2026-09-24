@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>分享的阵容路线 | 巴扎丘Bot</title>
+<link rel="stylesheet" href="/share-static/routes.css?v=20260924-share2">
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+</head>
+<body>
+<nav class="navbar"><a href="../../routes" class="logo">巴扎丘Bot</a><div class="nav-tabs"><a href="../../routes" class="nav-tab active">阵容路线</a></div></nav>
+<main class="main share-page">
+<header class="hero"><div><span class="eyebrow">SHARED ROUTE</span><h1 id="share-title">分享的阵容节点</h1><p id="share-subtitle">正在加载固定版本快照…</p></div></header>
+<div id="share-status" class="status visible" aria-live="polite">正在加载分享内容…</div>
+<section id="share-content" class="share-content"></section>
+<p><a class="share-back-link" href="../../routes">打开完整路线画布 →</a></p>
+</main>
+<footer><span>© 2026 BazaarQiuBot</span></footer>
+<script>
+(() => {
+'use strict';
+const HERO_ZH={Vanessa:'瓦内莎',Dooley:'杜利',Mak:'马克',Pygmalien:'皮格马利翁',Stelle:'斯黛尔',Jules:'朱尔斯',Karnok:'卡诺克','The Dragons':'双龙'};
+const $=id=>document.getElementById(id);
+const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const id=location.pathname.split('/').filter(Boolean).pop();
+const api=async path=>{const r=await fetch(path,{headers:{Accept:'application/json'}});const d=await r.json();if(!r.ok)throw new Error(d.error||`请求失败（${r.status}）`);return d};
+const cardName=c=>c?.name||c?.name_en||c?.cardId||'未知卡牌';
+function shareCardImage(c){const raw=c?.img||c?.image||c?.art||'';if(!raw)return'';try{const u=new URL(raw,location.origin);if(u.protocol!=='https:'||u.hostname!=='s.bazaardb.gg'||!u.pathname.startsWith('/v1/'))return'';return `/api/card_art_proxy?url=${encodeURIComponent(u.href)}`}catch{return''}}
+function preloadShareImages(root){return Promise.all([...root.querySelectorAll('img[data-src]')].map(img=>new Promise(resolve=>{let done=false;const finish=()=>{if(done)return;done=true;img.removeEventListener('load',finish);img.removeEventListener('error',finish);resolve()};img.addEventListener('load',finish);img.addEventListener('error',finish);img.src=img.dataset.src;if(img.complete)finish()})))}
+const cardSize=c=>['Small','Medium','Large'].includes(c?.size)?c.size:'Small';
+const cardHtml=c=>{const image=shareCardImage(c),size=cardSize(c);return `<span class="share-card-item">${image?`<img class="share-card-art size-${size}" data-src="${esc(image)}" src="" alt="${esc(cardName(c))}" loading="lazy" referrerpolicy="no-referrer">`:''}<span>${esc(cardName(c))}</span></span>`};
+const pathHtml=paths=>`<ol class="share-path-list">${paths.map(path=>`<li>${path.map(item=>`Day ${esc(item.day)} · ${esc(item.node_id)}`).join(' → ')}</li>`).join('')}</ol>`;
+function event(shareId,eventType){return fetch(`../../api/routes/share/${encodeURIComponent(shareId)}/event`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({event_type:eventType})}).catch(()=>{})}
+function continueHref(share){return `../../routes?hero=${encodeURIComponent(share.hero)}&day=${encodeURIComponent(share.start_day??share.day)}&version=${encodeURIComponent(share.version_id)}&node_id=${encodeURIComponent(share.node_id||'')}&share_id=${encodeURIComponent(share.share_id)}`}
+const pct=v=>`${(Number(v||0)*100).toFixed(1)}%`;
+const sharePublicUrl=()=>location.href.split('#')[0].split('?')[0];
+const nodeStatsHtml=node=>`<div class="share-node-stats"><span><b>当天占比</b>${pct(node.day_share)}</span><span><b>核心共现</b>${pct(node.core_support_rate)}</span><span><b>节点样本</b>${Number(node.global_run_count||node.run_count||0).toLocaleString('zh-CN')} 局</span><span><b>当天可观测</b>${Number(node.day_observable_runs||0).toLocaleString('zh-CN')} 局</span></div>`;
+const associationHtml=(title,items)=>`<section class="share-ranking"><h3>${title}</h3><ol>${(items||[]).slice(0,8).map((item,i)=>`<li><span class="share-rank">${i+1}</span>${cardHtml(item.display||item)}<span class="share-rank-stat"><b>${pct(item.support_rate)}</b><small>${Number(item.support_runs||0).toLocaleString('zh-CN')} 局</small></span></li>`).join('')||'<li class="muted">暂无数据</li>'}</ol></section>`;
+async function makeImage(share,node,paths){const button=$('share-image');if(!button||typeof html2canvas==='undefined')return;button.disabled=true;button.textContent='生成中…';try{const card=document.createElement('div');card.className='route-share-image';const title=share.share_type==='node'?((node?.cards||[]).map(cardName).join(' + ')||'其他阵容'):'已展开路线';const recs=(node?.recommended_compositions||[]).slice(0,3);const publicUrl=sharePublicUrl();card.innerHTML=`<div class="eyebrow">BAZAARQIUBOT NODE SHARE</div><h2>${esc(share.hero_zh||HERO_ZH[share.hero]||share.hero)} · Day ${esc(share.day)}</h2><div class="route-share-image-meta">${esc(title)} · 数据版本 ${esc(share.version_id)}</div>${nodeStatsHtml(node)}<h3>真实代表阵容</h3><div class="share-compositions">${recs.map((r,i)=>`<div><b>Top ${i+1}</b><div class="share-card-items">${(r.cards||[]).map(cardHtml).join('')}</div><small>${Number(r.run_count||0).toLocaleString('zh-CN')} 局</small></div>`).join('')||'<span>暂无推荐阵容</span>'}</div><div class="share-ranking-grid">${associationHtml('关联牌榜单',node.associated_cards)}${associationHtml('关联技能榜单',node.associated_skills)}</div><div class="route-share-image-footer"><strong>查看完整节点与后续路线</strong><span class="share-public-url">${esc(publicUrl)}</span></div>`;document.body.appendChild(card);await preloadShareImages(card);const canvas=await html2canvas(card,{backgroundColor:'#090A2A',scale:2,logging:false,useCORS:true});card.remove();const url=canvas.toDataURL('image/png');await event(share.share_id,'image_generated');const overlay=document.createElement('div');overlay.className='route-share-overlay';overlay.innerHTML=`<div class="route-share-modal"><h3>分享图已生成</h3><img src="${url}" alt="分享图"><div><button type="button" class="share-close">关闭</button><a class="share-download" download="bazaarqiubot-node.png" href="${url}">下载图片</a></div></div>`;overlay.querySelector('.share-close').onclick=()=>overlay.remove();overlay.querySelector('.share-download').onclick=()=>event(share.share_id,'image_downloaded');overlay.onclick=e=>{if(e.target===overlay)overlay.remove()};document.body.appendChild(overlay);button.disabled=false;button.textContent='重新生成分享图'}catch(e){button.disabled=false;button.textContent='生成失败';console.error(e)}}
+async function load(){try{const share=await api(`../../api/routes/share/${encodeURIComponent(id)}`);if(share.share_type!=='node')throw new Error('路线分享暂未开放');const detail=await api(`../../api/routes/daily/node?${new URLSearchParams({version:share.version_id,hero:share.hero,day:String(share.day),node_id:share.node_id})}`);const node={...(detail.node||{}),recommended_compositions:detail.recommended_compositions||[],associated_cards:detail.associated_cards||[],associated_skills:detail.associated_skills||[]};const shareHero=share.hero_zh||HERO_ZH[share.hero]||share.hero;const publicUrl=sharePublicUrl();$('share-subtitle').textContent=`固定数据版本：${share.version_id} · 分享链接长期有效`;const title=(node.cards||[]).map(cardName).join(' + ')||'其他阵容';$('share-content').innerHTML=`<div class="share-card"><div class="share-card-heading"><span class="eyebrow">NODE DETAIL</span><h2>${esc(title)}</h2></div><div class="share-meta"><span><b>职业</b>${esc(shareHero)}</span><span><b>Day</b>${esc(share.day)}</span><span><b>数据版本</b>${esc(share.version_id)}</span></div>${nodeStatsHtml(node)}<h3>真实代表阵容</h3><div class="share-compositions">${(node.recommended_compositions||[]).slice(0,3).map((r,i)=>`<div><b>Top ${i+1}</b><div class="share-card-items">${(r.cards||[]).map(cardHtml).join('')}</div><small>${Number(r.run_count||0).toLocaleString('zh-CN')} 局</small></div>`).join('')||'<span>暂无推荐阵容</span>'}</div><div class="share-ranking-grid">${associationHtml('关联牌榜单',node.associated_cards)}${associationHtml('关联技能榜单',node.associated_skills)}</div><div class="share-public-link"><b>分享页地址</b><a class="share-public-url" href="${esc(publicUrl)}">${esc(publicUrl)}</a></div><p>这是固定版本的节点详情分享。你可以继续展开后续真实观测分支。</p><div class="share-actions"><button type="button" class="share-action-button" id="share-image">生成分享图</button><a class="share-action-button" id="continue-route" href="${continueHref(share)}">继续展开路线</a></div></div>`;$('share-status').hidden=true;await preloadShareImages($('share-content'));$('continue-route').onclick=()=>event(share.share_id,'route_expanded');$('share-image').onclick=()=>makeImage(share,node,[])}catch(e){$('share-status').textContent=`分享加载失败：${e.message}`;$('share-status').className='status visible error'}}
+load();
+})();
+</script>
+</body>
+</html>

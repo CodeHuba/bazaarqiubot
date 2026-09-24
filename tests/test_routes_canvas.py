@@ -223,6 +223,34 @@ console.log('LATE_RESPONSE_REOPEN_OK');
     assert "LATE_RESPONSE_REOPEN_OK" in result.stdout
 
 
+def test_route_share_links_preserve_preview_prefix():
+    js = source()
+    share_html = (ROOT / "web_runs" / "static" / "routes-share.html").read_text(encoding="utf-8")
+    css = (ROOT / "web_runs" / "static" / "routes.css").read_text(encoding="utf-8")
+    assert "function shareBasePath()" in js
+    assert "${shareBasePath()}share/routes/" in js
+    assert 'href="/share-static/routes.css' in share_html
+    assert "../../api/routes/share/" in share_html
+    assert "../../routes?hero=" in share_html
+    assert "recommended_compositions:detail.recommended_compositions||[]" in share_html
+    assert "function shareCardImage" in share_html
+    assert "shareCardImage(c)" in share_html
+    assert "shareHero=share.hero_zh||HERO_ZH[share.hero]||share.hero" in share_html
+    assert "share-action-button" in share_html
+    assert "preloadShareImages" in share_html
+    assert "share-card-art size-${size}" in share_html
+    assert "share-card-art.size-Small" in css
+    assert "当天占比" in share_html
+    assert "核心共现" in share_html
+    assert "associated_cards:detail.associated_cards||[]" in share_html
+    assert "associated_skills:detail.associated_skills||[]" in share_html
+    assert "关联牌榜单" in share_html
+    assert "关联技能榜单" in share_html
+    assert "location.href.split('#')[0]" in share_html
+    assert "share-public-url" in share_html
+    assert "hidden id=\"share-route\"" in (ROOT / "web_runs" / "static" / "routes.html").read_text(encoding="utf-8")
+
+
 def test_routes_javascript_syntax_is_valid():
     result = subprocess.run(["node", "--check", str(JS)], capture_output=True, text=True)
     assert result.returncode == 0, result.stderr

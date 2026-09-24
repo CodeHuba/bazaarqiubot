@@ -58,6 +58,9 @@ def _create_source(path):
             ("success-run", "middle", 4, 1, "2026-09-18T11:00:00", "2026-09-18T11:01:00"),
             ("success-run", "late", 8, 1, "2026-09-18T12:00:00", "2026-09-18T12:01:00"),
             ("success-run", "very-late", 12, 1, "2026-09-18T13:00:00", "2026-09-18T13:01:00"),
+            # A successful fetch with no item cards is invalid composition data and
+            # must remain in the source count but not enter final compositions.
+            ("success-run", "empty-board", 13, 1, "2026-09-18T14:00:00", "2026-09-18T14:01:00"),
             ("unfinished-run", "ignored", 2, 9, "2026-09-18T14:00:00", "2026-09-18T14:01:00"),
         ]
         for run_id, event_id, day, hour, captured_at, fetched_at in snapshots:
@@ -80,6 +83,7 @@ def _create_source(path):
             ("success-run", "middle", "middle-item", "item", None, None, 0),
             ("success-run", "late", "late-item", "item", None, None, 0),
             ("success-run", "very-late", "very-late-item", "item", None, None, 0),
+            # empty-board intentionally has no item card
             ("unfinished-run", "ignored", "ignored-item", "item", None, None, 0),
         ])
 
@@ -114,9 +118,9 @@ def test_build_versioned_final_composition_facts(tmp_path):
 
     assert result == {
         "version_id": "test-v1",
-        "source_cutoff": "2026-09-18T13:01:00",
+        "source_cutoff": "2026-09-18T14:01:00",
         "source_success_run_count": 1,
-        "source_snapshot_count": 6,
+        "source_snapshot_count": 7,
         "final_composition_count": 4,
     }
     with sqlite3.connect(output) as conn:
@@ -126,9 +130,9 @@ def test_build_versioned_final_composition_facts(tmp_path):
         ).fetchone())
         assert metadata["built_at"] == "2026-09-19T00:00:00+00:00"
         assert metadata["schema_version"] == 5
-        assert metadata["source_cutoff"] == "2026-09-18T13:01:00"
+        assert metadata["source_cutoff"] == "2026-09-18T14:01:00"
         assert metadata["source_success_run_count"] == 1
-        assert metadata["source_snapshot_count"] == 6
+        assert metadata["source_snapshot_count"] == 7
         assert metadata["final_composition_count"] == 4
 
         facts = conn.execute(
@@ -485,6 +489,35 @@ def test_core_route_node_count_has_a_fixed_per_day_ceiling():
     assert max(sum(row["day"] == day for row in nodes) for day in (1, 2)) <= 13
 
 
+def test_daily_archetypes_exclude_empty_and_single_card_cores():
+    from web_runs.day_stats_builder import _build_daily_archetype_routes
+
+    facts = []
+    for number in range(12):
+        facts.append({"snapshot": {"run_id": f"pair-{number}", "season": 18,
+                                    "phase": "18.2", "hero": "Vanessa", "day": 10},
+                      "item_signature": '["a","b"]'})
+    for number in range(20):
+        facts.append({"snapshot": {"run_id": f"single-{number}", "season": 18,
+                                    "phase": "18.2", "hero": "Vanessa", "day": 10},
+                      "item_signature": '["x"]'})
+    for number in range(8):
+        facts.append({"snapshot": {"run_id": f"empty-{number}", "season": 18,
+                                    "phase": "18.2", "hero": "Vanessa", "day": 10},
+                      "item_signature": '[]'})
+
+    nodes, _cards, members, _edges, _edge_cards, _edge_members = _build_daily_archetype_routes(
+        "core-min-v1", facts
+    )
+
+    assert nodes
+    assert all(len(json.loads(row["core_items"])) >= 2 for row in nodes)
+    assert [row["rank"] for row in sorted(nodes, key=lambda row: row["rank"])] == list(
+        range(1, len(nodes) + 1)
+    )
+    assert all(row["run_id"].startswith("pair-") for row in members)
+
+
 def test_daily_archetypes_assign_each_run_once_per_day_and_ignore_temporary_cards():
     from web_runs.day_stats_builder import _build_daily_archetype_routes
 
@@ -530,7 +563,205 @@ def test_daily_archetypes_assign_each_run_once_per_day_and_ignore_temporary_card
                for row in edge_cards)
 
 
-def test_daily_route_directions_merge_similar_cores_filter_noise_and_limit_to_three():
+def test_complete_composition_clustering_separates_shared_shell_archetypes():
+    from web_runs.day_stats_builder import _cluster_daily_compositions
+
+    shared = {"common-a", "common-b", "common-c"}
+    archetypes = [
+        {"water-core", "water-payoff"},
+        {"burn-core", "burn-payoff"},
+        {"weapon-core", "weapon-payoff"},
+        {"shield-core", "shield-payoff"},
+    ]
+    snapshots = {}
+    for archetype_index, identity in enumerate(archetypes):
+        for copy in range(12):
+            # Every complete board has 6 cards: three shared shell cards,
+            # two archetype-defining cards, and one low-frequency flex card.
+            snapshots[f"a{archetype_index}-{copy}"] = frozenset(
+                shared | identity | {f"flex-{archetype_index}-{copy % 3}"}
+            )
+
+    clusters = _cluster_daily_compositions(snapshots)
+
+    assert len(clusters) == 4
+    assert sorted(len(cluster["runs"]) for cluster in clusters) == [12, 12, 12, 12]
+    cores = [set(cluster["core_items"]) for cluster in clusters]
+    assert all(2 <= len(core) <= 4 for core in cores)
+    for identity in archetypes:
+        assert any(identity <= core for core in cores)
+    assert all(len(core & shared) <= 1 for core in cores)
+    assert max(
+        len(left & right) / len(left | right)
+        for index, left in enumerate(cores)
+        for right in cores[index + 1:]
+    ) < 0.65
+
+
+def test_complete_composition_clustering_does_not_split_flex_variants():
+    from web_runs.day_stats_builder import _cluster_daily_compositions
+
+    snapshots = {
+        f"run-{index}": frozenset({
+            "identity-a", "identity-b", "shell-a", "shell-b", "shell-c",
+            f"flex-{index % 4}",
+        })
+        for index in range(24)
+    }
+
+    clusters = _cluster_daily_compositions(snapshots)
+
+    assert len(clusters) == 1
+    assert set(clusters[0]["runs"]) == set(snapshots)
+    assert 2 <= len(clusters[0]["core_items"]) <= 4
+
+
+def test_complete_composition_clustering_keeps_low_count_variant_with_nearby_major_family():
+    from web_runs.day_stats_builder import _cluster_daily_compositions
+
+    snapshots = {}
+    for index in range(20):
+        snapshots[f"major-{index}"] = frozenset({
+            "common-a", "common-b", "identity-a", "identity-b", "shell-a",
+            f"flex-{index % 3}",
+        })
+    for index in range(3):
+        snapshots[f"variant-{index}"] = frozenset({
+            "common-a", "common-b", "identity-a", "identity-b", "shell-b",
+            f"variant-flex-{index}",
+        })
+
+    clusters = _cluster_daily_compositions(snapshots)
+
+    assert len(clusters) == 1
+    assert len(clusters[0]["runs"]) == 23
+    assert {"identity-a", "identity-b"} <= set(clusters[0]["core_items"])
+
+
+def test_complete_composition_clustering_merges_duplicate_core_families():
+    from web_runs.day_stats_builder import _cluster_daily_compositions
+
+    snapshots = {}
+    for index in range(12):
+        snapshots[f"left-{index}"] = frozenset({
+            "shared-a", "shared-b", "left-payoff", "shell-a",
+            f"left-flex-{index % 2}",
+        })
+    for index in range(10):
+        snapshots[f"right-{index}"] = frozenset({
+            "shared-a", "shared-b", "right-payoff", "shell-a",
+            f"right-flex-{index % 2}",
+        })
+
+    clusters = _cluster_daily_compositions(snapshots)
+
+    assert len(clusters) == 2
+    cores = [set(row["core_items"]) for row in clusters]
+    assert any("left-payoff" in core for core in cores)
+    assert any("right-payoff" in core for core in cores)
+
+
+def test_complete_composition_clustering_applies_sample_based_node_cap():
+    from web_runs.day_stats_builder import _cluster_daily_compositions
+
+    snapshots = {
+        f"run-{index}": frozenset({
+            f"identity-{index}", f"payoff-{index}", "shell-a",
+            "shell-b", "shell-c", "shell-d",
+        })
+        for index in range(120)
+    }
+
+    clusters = _cluster_daily_compositions(snapshots)
+
+    assert len(clusters) <= 10
+
+
+def test_diverse_cluster_cap_does_not_reassign_unrelated_runs():
+    from web_runs.day_stats_builder import _select_diverse_clusters
+
+    clusters = [
+        {
+            "runs": [f"run-{index}"],
+            "core_items": [f"identity-{index}-a", f"identity-{index}-b"],
+            "core_support_runs": 1,
+            "core_support_run_ids": [f"run-{index}"],
+            "representative_items": [f"identity-{index}-a", f"identity-{index}-b"],
+        }
+        for index in range(12)
+    ]
+
+    selected = _select_diverse_clusters(clusters, 1000)
+
+    assert len(selected) == 10
+    selected_runs = {run_id for cluster in selected for run_id in cluster["runs"]}
+    assert len(selected_runs) == 10
+    assert all(cluster["core_support_runs"] == len(cluster["runs"]) for cluster in selected)
+
+
+def test_complete_composition_clustering_recovers_filtered_nearby_runs():
+    from web_runs.day_stats_builder import _cluster_daily_compositions
+
+    snapshots = {
+        **{
+            f"major-{index}": frozenset({
+                "identity-a", "identity-b", "shell-a", "shell-b", "shell-c",
+                f"flex-{index % 2}",
+            })
+            for index in range(8)
+        },
+        **{
+            f"tail-{index}": frozenset({
+                "identity-a", "identity-b", "shell-a", f"tail-{index}-a",
+                f"tail-{index}-b", f"tail-{index}-c",
+            })
+            for index in range(2)
+        },
+    }
+
+    clusters = _cluster_daily_compositions(snapshots)
+
+    assert len(clusters) == 1
+    assert len(clusters[0]["runs"]) == 10
+
+
+def test_daily_archetypes_use_complete_board_clusters_for_diverse_cores():
+    from web_runs.day_stats_builder import _build_daily_archetype_routes
+
+    shared = {"common-a", "common-b", "common-c"}
+    archetypes = [
+        {"water-core", "water-payoff"},
+        {"burn-core", "burn-payoff"},
+        {"weapon-core", "weapon-payoff"},
+        {"shield-core", "shield-payoff"},
+    ]
+    facts = []
+    for archetype_index, identity in enumerate(archetypes):
+        for copy in range(12):
+            facts.append({
+                "snapshot": {
+                    "run_id": f"a{archetype_index}-{copy}", "season": 18,
+                    "phase": "18.2", "hero": "Vanessa", "day": 8,
+                },
+                "item_signature": json.dumps(sorted(
+                    shared | identity | {f"flex-{archetype_index}-{copy % 3}"}
+                )),
+            })
+
+    nodes, _cards, members, _edges, _edge_cards, _edge_members = (
+        _build_daily_archetype_routes("complete-board-v1", facts)
+    )
+
+    assert len(nodes) == 4
+    assert [row["rank"] for row in nodes] == [1, 2, 3, 4]
+    cores = [set(json.loads(row["core_items"])) for row in nodes]
+    for identity in archetypes:
+        assert any(identity <= core for core in cores)
+    assert len({row["run_id"] for row in members}) == 48
+    assert len(members) == 48
+
+
+def test_daily_route_directions_merge_similar_cores_filter_noise_keep_all_qualified():
     from web_runs.day_stats_builder import _build_daily_route_directions
 
     nodes = [
@@ -565,7 +796,7 @@ def test_daily_route_directions_merge_similar_cores_filter_noise_and_limit_to_th
     result = _build_daily_route_directions(nodes, edges)
     directions = result["parent"]
 
-    assert len(directions) == 3
+    assert len(directions) == 4
     assert directions[0]["run_count"] == 50
     assert directions[0]["target_core_items"] == ["a", "b"]
     assert directions[0]["variant_count"] == 2
@@ -575,7 +806,7 @@ def test_daily_route_directions_merge_similar_cores_filter_noise_and_limit_to_th
     ]
     assert directions[0]["transition_rate"] == 0.5
     assert directions[0]["display_threshold"] == 3
-    assert directions[0]["coverage_rate"] == 0.83
+    assert directions[0]["coverage_rate"] == 0.97
     assert all(direction["run_count"] >= 3 for direction in directions)
     assert not any("n" in direction["target_core_items"] for direction in directions)
 
@@ -641,6 +872,7 @@ def test_daily_stats_schema_has_path_expansion_index(tmp_path):
             "SELECT name FROM sqlite_master WHERE type='index'"
         )}
     assert "idx_daily_archetype_members_day_run" in indexes
+    assert "idx_daily_archetype_members_run_day" in indexes
 
 
 def test_daily_routes_connect_each_run_to_its_next_observed_day_across_gaps():
@@ -648,11 +880,11 @@ def test_daily_routes_connect_each_run_to_its_next_observed_day_across_gaps():
 
     facts = [
         {"snapshot": {"run_id": "r1", "season": 18, "phase": "18.2",
-                      "hero": "Vanessa", "day": 3}, "item_signature": '["a"]'},
+                      "hero": "Vanessa", "day": 3}, "item_signature": '["a","c"]'},
         {"snapshot": {"run_id": "r1", "season": 18, "phase": "18.2",
                       "hero": "Vanessa", "day": 5}, "item_signature": '["a","b"]'},
         {"snapshot": {"run_id": "r2", "season": 18, "phase": "18.2",
-                      "hero": "Vanessa", "day": 3}, "item_signature": '["a"]'},
+                      "hero": "Vanessa", "day": 3}, "item_signature": '["a","c"]'},
         {"snapshot": {"run_id": "r2", "season": 18, "phase": "18.2",
                       "hero": "Vanessa", "day": 4}, "item_signature": '["a","b"]'},
     ]
@@ -687,6 +919,7 @@ def test_daily_node_rankings_use_real_full_compositions_and_representative_compa
     assert rankings["node_global_runs"] == 6
     assert [row["run_count"] for row in rankings["recommended_compositions"]] == [3, 1, 1]
     assert rankings["recommended_compositions"][0]["items"] == ["a", "b", "x", "y"]
+    assert rankings["recommended_compositions"][0]["representative_run"] == "r1"
     assert rankings["recommended_compositions"][0]["rate"] == 0.5
     assert all(set(row["items"]) >= {"a", "b"}
                for row in rankings["recommended_compositions"])

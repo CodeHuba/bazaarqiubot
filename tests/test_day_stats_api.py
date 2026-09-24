@@ -83,6 +83,12 @@ def stats_db(tmp_path):
                 opponent_hero TEXT, opponent_name TEXT, item_signature TEXT NOT NULL,
                 PRIMARY KEY (version_id, run_id, day)
             );
+            CREATE TABLE final_composition_cards (
+                version_id TEXT NOT NULL, run_id TEXT NOT NULL, day INTEGER NOT NULL,
+                event_id TEXT NOT NULL, card_id TEXT NOT NULL, card_kind TEXT NOT NULL,
+                tier TEXT, enchantment TEXT, slot_position INTEGER NOT NULL,
+                PRIMARY KEY (version_id, run_id, day, card_id, card_kind, slot_position)
+            );
             CREATE TABLE daily_archetype_edge_cards (
                 version_id TEXT NOT NULL, edge_id TEXT NOT NULL, change_kind TEXT NOT NULL,
                 card_id TEXT NOT NULL, run_count INTEGER NOT NULL, change_rate REAL NOT NULL,
@@ -200,12 +206,81 @@ def _client(monkeypatch, stats_db):
         def get(self, *args, **kwargs):
             kwargs.setdefault("headers", {}).update(_auth())
             return raw_client.get(*args, **kwargs)
+
+        def post(self, *args, **kwargs):
+            kwargs.setdefault("headers", {}).update(_auth())
+            return raw_client.post(*args, **kwargs)
     return AuthClient(web_app)
 
 
 def _auth():
     import base64
     return {"Authorization": "Basic " + base64.b64encode(b"tester:test-password").decode()}
+
+
+
+def test_node_share_create_and_read_is_version_pinned(monkeypatch, stats_db):
+    client = _client(monkeypatch, stats_db)
+    created = client.post("/api/routes/share", json={
+        "share_type": "node", "version": "v2", "hero": "Vanessa", "day": 3, "node_id": "daily-a"
+    })
+    assert created.status_code == 201
+    result = created.get_json()
+    assert result["share_type"] == "node"
+    assert result["version_id"] == "v2"
+    detail = client.get("/api/routes/share/" + result["share_id"])
+    assert detail.status_code == 200
+    data = detail.get_json()
+    assert data["version_id"] == "v2"
+    assert data["hero"] == "Vanessa"
+    assert data["node_id"] == "daily-a"
+    assert "run_id" not in detail.get_data(as_text=True)
+    with sqlite3.connect(stats_db.parent / "stats.db") as conn:
+        assert conn.execute("SELECT open_count FROM route_shares WHERE share_id=?", (result["share_id"],)).fetchone()[0] == 1
+
+
+def test_node_share_rejects_unknown_node(monkeypatch, stats_db):
+    client = _client(monkeypatch, stats_db)
+    response = client.post("/api/routes/share", json={
+        "share_type": "node", "version": "v2", "hero": "Vanessa", "day": 3, "node_id": "missing"
+    })
+    assert response.status_code == 404
+
+
+def test_route_share_preserves_paths_and_tracks_expand(monkeypatch, stats_db):
+    client = _client(monkeypatch, stats_db)
+    paths = [[{"day": 3, "node_id": "daily-a"}, {"day": 4, "node_id": "daily-b"}]]
+    created = client.post("/api/routes/share", json={
+        "share_type": "route", "version": "v2", "hero": "Vanessa",
+        "start_day": 3, "node_id": "daily-a", "paths": paths,
+    })
+    assert created.status_code == 201
+    share = created.get_json()
+    assert share["share_type"] == "route"
+    read = client.get("/api/routes/share/" + share["share_id"])
+    assert read.status_code == 200
+    body = read.get_json()
+    assert body["version_id"] == "v2"
+    assert body["paths"] == paths
+    assert "run_id" not in read.get_data(as_text=True)
+    event = client.post("/api/routes/share/" + share["share_id"] + "/event",
+                        json={"event_type": "route_expanded"})
+    assert event.status_code == 201
+    with sqlite3.connect(stats_db.parent / "stats.db") as conn:
+        row = conn.execute("SELECT open_count, expand_count FROM route_shares WHERE share_id=?",
+                           (share["share_id"],)).fetchone()
+        assert row == (1, 1)
+        assert conn.execute("SELECT COUNT(*) FROM route_share_events WHERE share_id=?",
+                            (share["share_id"],)).fetchone()[0] == 1
+
+
+def test_route_share_rejects_unknown_path_node(monkeypatch, stats_db):
+    client = _client(monkeypatch, stats_db)
+    response = client.post("/api/routes/share", json={
+        "share_type": "route", "version": "v2", "hero": "Vanessa", "start_day": 3,
+        "paths": [[{"day": 3, "node_id": "daily-a"}, {"day": 4, "node_id": "missing"}]],
+    })
+    assert response.status_code == 404
 
 
 def test_day_stats_latest_returns_version_metadata(monkeypatch, stats_db):
@@ -383,6 +458,23 @@ def test_public_daily_node_detail_uses_global_members_for_rankings(monkeypatch, 
                          ("v2", run_id, f"detail-event-{index}", 18, "18.2", "Vanessa",
                           "Legendary", 3, "early", None, None, "2026-09-20", None,
                           None, None, None, None, json.dumps(items)))
+        conn.executemany(
+            "INSERT INTO final_composition_cards VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            [
+                ("v2", run_id, 3, f"detail-event-{index}", skill, "skill", None, None, -1)
+                for index, run_id in enumerate(snapshots)
+                for skill in (["skill-a", "skill-b"] if index < 3 else (["skill-a"] if index < 5 else ["skill-c"]))
+            ],
+        )
+        conn.executemany(
+            "INSERT INTO final_composition_cards VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            [
+                ("v2", "detail-1", 3, "detail-event-0", "a", "item", None, None, 4),
+                ("v2", "detail-1", 3, "detail-event-0", "b", "item", None, None, 1),
+                ("v2", "detail-1", 3, "detail-event-0", "x", "item", None, None, 7),
+                ("v2", "detail-1", 3, "detail-event-0", "y", "item", None, None, 2),
+            ],
+        )
 
     client = _client(monkeypatch, stats_db).web_app.app.test_client()
     response = client.get(
@@ -395,7 +487,10 @@ def test_public_daily_node_detail_uses_global_members_for_rankings(monkeypatch, 
     assert body["node"]["global_run_count"] == 6
     assert [row["run_count"] for row in body["recommended_compositions"]] == [3, 1, 1]
     assert body["recommended_compositions"][0]["item_ids"] == ["a", "b", "x", "y"]
+    assert [row["cardId"] for row in body["recommended_compositions"][0]["cards"]] == ["b", "y", "a", "x"]
+    assert [row["slot_position"] for row in body["recommended_compositions"][0]["cards"]] == [1, 2, 4, 7]
     assert [row["card_id"] for row in body["associated_cards"][:3]] == ["x", "y", "z"]
+    assert [row["card_id"] for row in body["associated_skills"][:2]] == ["skill-a", "skill-b"]
     assert "run_id" not in json.dumps(body)
 
 
@@ -409,7 +504,7 @@ def test_public_daily_node_detail_cache_uses_resolved_version_for_latest(monkeyp
     assert first.status_code == 200
     assert first.get_json()["version_id"] == "v2"
     expected_key = web_app._day_stats_result_cache_key(
-        "v2", "daily-node-v2", "Vanessa", 3, "daily-a"
+        "v2", "daily-node-v4", "Vanessa", 3, "daily-a"
     )
     assert web_app._day_stats_cache_get(expected_key) == first.get_json()
 
@@ -614,6 +709,15 @@ def test_public_daily_path_expansion_returns_branch_path_indexes_for_partial_con
                 ])
                 if side == "left":
                     member_rows.append(("v2", "partial-child", 5, run_id))
+        for number in range(3):
+            run_id = f"partial-outsider-{number}"
+            member_rows.extend([
+                ("v2", "partial-merge", 4, run_id),
+                ("v2", "partial-child-2", 5, run_id),
+            ])
+        conn.execute("INSERT INTO daily_archetype_nodes VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                     ("v2", 18, "18.2", "Vanessa", 5, "partial-child-2", 2, 3, 6, .5,
+                      json.dumps(["child", "two"]), 3, 1.0, json.dumps(["child", "two"])))
         conn.executemany("INSERT INTO daily_archetype_members VALUES (?, ?, ?, ?)", member_rows)
     response = _client(monkeypatch, stats_db).web_app.app.test_client().post(
         "/api/routes/daily/expand", json={
@@ -628,6 +732,12 @@ def test_public_daily_path_expansion_returns_branch_path_indexes_for_partial_con
     body = response.get_json()
     assert body["branches"][0]["path_indexes"] == [0]
     assert body["branches"][0]["path_run_count"] == 3
+    assert any(
+        row["node_id"] == "partial-child-2"
+        and row["path_run_count"] == 3
+        and row["path_indexes"] == []
+        for row in body["branches"]
+    )
     assert "run_id" not in json.dumps(body)
 
 
@@ -771,8 +881,8 @@ def test_public_routes_page_contract_and_navigation(monkeypatch, stats_db):
     css = raw_client.get("/static/routes.css").get_data(as_text=True)
 
     assert '<meta name="robots" content="index, follow">' in html
-    assert 'href="static/routes.css?v=20260921e"' in html
-    assert 'src="static/routes.js?v=20260921e"' in html
+    assert 'href="static/routes.css?v=20260924-node-share"' in html
+    assert 'src="static/routes.js?v=20260924-node-share"' in html
     assert "fetch('api/track/pv'" in html
     assert 'href="/routes" class="nav-tab active"' in html
     assert "可拖拽阵容路线画布" in html and "下一次真实观测 Day" in html
@@ -789,13 +899,13 @@ def test_public_routes_page_contract_and_navigation(monkeypatch, stats_db):
     assert "@media(max-width:650px)" in css.replace(" ", "")
 
 
-def test_route_v2_cache_namespace_is_v8():
+def test_route_v2_cache_namespace_is_v9():
     from pathlib import Path
     source = (Path(__file__).parents[1] / "web_runs" / "app.py").read_text(encoding="utf-8")
-    assert "'daily-v8'" in source
-    assert "'daily-summary-v6'" in source
-    assert "'daily-v7'" not in source
-    assert "'daily-summary-v5'" not in source
+    assert "'daily-v9'" in source
+    assert "'daily-summary-v7'" in source
+    assert "'daily-v8'" not in source
+    assert "'daily-summary-v6'" not in source
 
 
 def test_daily_routes_accept_observed_days_beyond_day_16(monkeypatch, stats_db):

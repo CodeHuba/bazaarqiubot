@@ -16,10 +16,12 @@ from collections import Counter, defaultdict
 from datetime import datetime, timezone
 from itertools import combinations
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 
 
 _SCHEMA_VERSION = 5
+TARGET_NODE_CAPS = ((100, 5), (300, 7), (800, 9), (float("inf"), 10))
+CORE_DUPLICATE_JACCARD = 0.65
 _ROUTE_OTHER_SIGNATURE = "__OTHER__"
 _ROUTE_MIN_SUPPORT_RATE = 0.05
 _ROUTE_MAX_MAJOR_SIGNATURES_PER_DAY = 12
@@ -81,6 +83,8 @@ CREATE TABLE IF NOT EXISTS final_composition_cards (
 ) WITHOUT ROWID;
 CREATE INDEX IF NOT EXISTS idx_final_cards_card
     ON final_composition_cards(version_id, card_kind, card_id, day, run_id);
+CREATE INDEX IF NOT EXISTS idx_final_cards_day_run_kind
+    ON final_composition_cards(version_id, day, run_id, card_kind, card_id, slot_position);
 
 CREATE TABLE IF NOT EXISTS early_day_item_cores (
     version_id TEXT NOT NULL REFERENCES build_versions(version_id),
@@ -231,6 +235,8 @@ CREATE INDEX IF NOT EXISTS idx_daily_archetype_edges_parent
     ON daily_archetype_edges(version_id, parent_day, parent_node_id, child_day);
 CREATE INDEX IF NOT EXISTS idx_daily_archetype_members_day_run
     ON daily_archetype_members(version_id, day, run_id, node_id);
+CREATE INDEX IF NOT EXISTS idx_daily_archetype_members_run_day
+    ON daily_archetype_members(version_id, run_id, day, node_id);
 
 CREATE TABLE IF NOT EXISTS item_core_route_node_runs (
     version_id TEXT NOT NULL,
@@ -335,6 +341,11 @@ def _read_source(source_path: Path) -> tuple[dict[str, Any], list[dict[str, Any]
                 (snapshot["run_id"], snapshot["event_id"]),
             ).fetchall()
             item_ids = sorted({row["card_id"] for row in cards if row["card_kind"] == "item"})
+            # A successful fetch without item cards is an invalid composition
+            # observation (usually a missing playerBoard). Keep it in the source
+            # counters, but exclude it from all composition-derived statistics.
+            if not item_ids:
+                continue
             facts.append({
                 "snapshot": dict(snapshot),
                 "cards": [dict(row) for row in cards],
@@ -494,9 +505,11 @@ def _build_daily_node_rankings(
             key=lambda items: (-len(signature_runs[items]), tuple(sorted(items))),
         )
         run_count = len(cluster["runs"])
+        representative_runs = sorted(signature_runs[representative])
         recommendations.append({
             "items": sorted(representative), "run_count": run_count,
             "rate": run_count / total if total else 0.0,
+            "representative_run": representative_runs[0] if representative_runs else None,
         })
     recommendations.sort(key=lambda row: (-row["run_count"], tuple(row["items"])))
 
@@ -516,9 +529,14 @@ def _build_daily_node_rankings(
 
 
 def _build_daily_route_directions(
-    nodes: list[dict[str, Any]], edges: list[dict[str, Any]], max_directions: int = 3
+    nodes: list[dict[str, Any]], edges: list[dict[str, Any]], max_directions: int | None = None
 ) -> dict[str, list[dict[str, Any]]]:
-    """Reduce raw next-observation edges to a few distinct target-core directions."""
+    """Reduce raw next-observation edges to distinct target-core directions.
+
+    The data layer keeps every qualified direction by default. Callers may pass
+    max_directions for an explicit presentation cap, but route construction must
+    not silently discard later transformation branches.
+    """
     node_lookup = {(int(row["day"]), str(row["node_id"])): row for row in nodes}
     grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for edge in edges:
@@ -580,12 +598,227 @@ def _build_daily_route_directions(
                 "variants": [dict(row["edge"]) for row in members],
             })
         directions.sort(key=lambda row: (-row["run_count"], row["target_core_items"]))
-        selected = directions[:max_directions]
+        selected = directions if max_directions is None else directions[:max_directions]
         coverage = sum(row["run_count"] for row in selected) / observable if observable else 0.0
         for direction in selected:
             direction["coverage_rate"] = coverage
         result[parent_node] = selected
     return result
+
+
+def _cluster_daily_compositions(
+    snapshots: Mapping[str, frozenset[str] | set[str]],
+) -> list[dict[str, Any]]:
+    """Cluster real 5–8 card boards, then extract compact discriminative cores."""
+    if not snapshots:
+        return []
+    boards = {run_id: frozenset(items) for run_id, items in snapshots.items() if items}
+    if not boards:
+        return []
+    total = len(boards)
+    min_support = (1 if total < 5 else
+                   min(15, max(5, math.ceil(total * 0.015))))
+    global_counts = Counter(card for items in boards.values() for card in items)
+    signature_runs: dict[frozenset[str], set[str]] = defaultdict(set)
+    for run_id, items in boards.items():
+        signature_runs[items].add(run_id)
+
+    ordered = sorted(signature_runs, key=lambda items: (
+        -len(signature_runs[items]), tuple(sorted(items))
+    ))
+    raw_clusters: list[dict[str, Any]] = []
+    signature_candidates: dict[str, list[tuple[dict[str, Any], frozenset[str]]]] = defaultdict(list)
+    for cluster in raw_clusters:
+        for signature in cluster["signatures"]:
+            for card in signature:
+                signature_candidates[card].append((cluster, signature))
+    for items in ordered:
+        best = None
+        candidate_by_id: dict[int, dict[str, Any]] = {}
+        candidate_counts: Counter[tuple[int, frozenset[str]]] = Counter()
+        for card in items:
+            for cluster, known in signature_candidates.get(card, []):
+                cluster_id = id(cluster)
+                candidate_by_id[cluster_id] = cluster
+                candidate_counts[(cluster_id, known)] += 1
+        candidate_clusters: dict[int, dict[str, Any]] = {}
+        for (cluster_id, known), count in candidate_counts.items():
+            minimum_shared = 2 if min(len(items), len(known)) <= 4 else 3
+            if count >= minimum_shared:
+                candidate_clusters[cluster_id] = candidate_by_id[cluster_id]
+        for cluster in candidate_clusters.values():
+            similarities = []
+            for known in cluster["signatures"]:
+                minimum_shared = 2 if min(len(items), len(known)) <= 4 else 3
+                if len(items & known) < minimum_shared:
+                    continue
+                union = items | known
+                similarities.append(
+                    len(items & known) / len(union) if union else 1.0
+                )
+            similarity = max(similarities, default=0.0)
+            candidate = (similarity, len(items), cluster)
+            if similarity >= 0.50 and (best is None or candidate[:2] > best[:2]):
+                best = candidate
+        if best is None:
+            raw_clusters.append({
+                "representative": items,
+                "signatures": [items],
+                "runs": set(signature_runs[items]),
+            })
+            cluster = raw_clusters[-1]
+            for card in items:
+                signature_candidates[card].append((cluster, items))
+        else:
+            best[2]["runs"].update(signature_runs[items])
+            best[2]["signatures"].append(items)
+            for card in items:
+                signature_candidates[card].append((best[2], items))
+
+    clusters = []
+    discarded = []
+    for raw in raw_clusters:
+        run_ids = sorted(raw["runs"])
+        if len(run_ids) < min_support:
+            discarded.append(raw)
+            continue
+        local_counts = Counter(card for run_id in run_ids for card in boards[run_id])
+        ranked = []
+        for card, count in local_counts.items():
+            local_rate = count / len(run_ids)
+            global_rate = global_counts[card] / total
+            if local_rate < 0.50:
+                continue
+            lift = local_rate / global_rate if global_rate else 0.0
+            # Prefer cards concentrated in this complete-board family; ubiquitous
+            # class shell cards should lose to archetype-defining pairs.
+            score = local_rate * math.log2(max(1.0, lift))
+            ranked.append((score, lift, local_rate, card))
+        ranked.sort(key=lambda row: (-row[0], -row[1], -row[2], row[3]))
+        discriminative = [row[3] for row in ranked if row[0] > 0.0]
+        if len(discriminative) >= 2:
+            core_items = discriminative[:4]
+        else:
+            # With only one complete-board family there is no cross-cluster lift.
+            # Fall back to its stable shared skeleton rather than dropping it.
+            core_items = [row[3] for row in ranked[:4]]
+        if len(core_items) < 2:
+            continue
+        representative = min(
+            (boards[run_id] for run_id in run_ids),
+            key=lambda items: (-sum(card in items for card in core_items), -len(items), tuple(sorted(items))),
+        )
+        clusters.append({
+            "raw": raw,
+            "runs": run_ids,
+            "core_items": core_items,
+            "representative_items": sorted(representative),
+            "core_support_runs": sum(
+                set(core_items).issubset(boards[run_id]) for run_id in run_ids
+            ),
+            "core_support_run_ids": [
+                run_id for run_id in run_ids if set(core_items).issubset(boards[run_id])
+            ],
+        })
+    for cluster in clusters:
+        cluster["raw"]["recovered_runs"] = set()
+    for raw in discarded:
+        raw_runs = raw["runs"]
+        best = None
+        for cluster in clusters:
+            cluster_signatures = cluster["raw"]["signatures"]
+            stable_cards = {
+                card for card in set().union(*cluster_signatures)
+                if sum(card in signature for signature in cluster_signatures)
+                >= max(1, math.ceil(len(cluster_signatures) * 0.5))
+            }
+            best_similarity = 0.0
+            best_overlap = 0
+            for signature in raw["signatures"]:
+                for known in cluster_signatures:
+                    union = signature | known
+                    similarity = len(signature & known) / len(union) if union else 1.0
+                    best_similarity = max(best_similarity, similarity)
+                    best_overlap = max(best_overlap, len(signature & known))
+            stable_hits = max(
+                len(signature & stable_cards) for signature in raw["signatures"]
+            )
+            candidate = (
+                best_similarity >= 0.30 and
+                (stable_hits >= 2 or best_overlap >= 3),
+                stable_hits,
+                best_overlap,
+                best_similarity,
+                cluster,
+            )
+            if candidate[0] and (best is None or candidate[:4] > best[:4]):
+                best = candidate
+        if best is not None:
+            best[4]["runs"].extend(sorted(raw_runs))
+            best[4]["runs"] = sorted(set(best[4]["runs"]))
+
+    for cluster in clusters:
+        cluster.pop("raw", None)
+        cluster.pop("recovered_runs", None)
+        run_ids = cluster["runs"]
+        core_items = set(cluster["core_items"])
+        cluster["core_support_run_ids"] = [
+            run_id for run_id in run_ids if core_items.issubset(boards[run_id])
+        ]
+        cluster["core_support_runs"] = len(cluster["core_support_run_ids"])
+    merged: list[dict[str, Any]] = []
+    for cluster in sorted(clusters, key=lambda row: (-len(row["runs"]), tuple(row["core_items"]))):
+        duplicate = None
+        for existing in merged:
+            if _core_jaccard(set(cluster["core_items"]), set(existing["core_items"])) >= CORE_DUPLICATE_JACCARD:
+                duplicate = existing
+                break
+        if duplicate is None:
+            merged.append(cluster)
+        else:
+            duplicate["runs"] = sorted(set(duplicate["runs"]) | set(cluster["runs"]))
+            duplicate["core_support_run_ids"] = sorted(
+                set(duplicate.get("core_support_run_ids", []))
+                | set(cluster.get("core_support_run_ids", []))
+            )
+            duplicate["core_support_runs"] = len(duplicate["core_support_run_ids"])
+    clusters = merged
+    clusters.sort(key=lambda row: (-len(row["runs"]), tuple(row["core_items"])))
+    return clusters
+
+def _daily_cluster_cap(sample_count: int) -> int:
+    for threshold, cap in TARGET_NODE_CAPS:
+        if sample_count < threshold:
+            return cap
+    return TARGET_NODE_CAPS[-1][1]
+
+
+def _core_jaccard(left: set[str], right: set[str]) -> float:
+    union = left | right
+    return len(left & right) / len(union) if union else 1.0
+
+
+def _select_diverse_clusters(clusters: list[dict[str, Any]], sample_count: int) -> list[dict[str, Any]]:
+    cap = _daily_cluster_cap(sample_count)
+    if len(clusters) <= cap:
+        return clusters
+    ranked = sorted(clusters, key=lambda row: (-len(row["runs"]), tuple(row["core_items"])))
+    selected = [ranked[0]]
+    remaining = ranked[1:]
+    while remaining and len(selected) < cap:
+        candidate = max(
+            remaining,
+            key=lambda row: (
+                min(1.0 - _core_jaccard(set(row["core_items"]), set(chosen["core_items"]))
+                    for chosen in selected
+                ),
+                len(row["runs"]),
+                tuple(row["core_items"]),
+            ),
+        )
+        selected.append(candidate)
+        remaining.remove(candidate)
+    return sorted(selected, key=lambda row: (-len(row["runs"]), tuple(row["core_items"])))
 
 
 def _build_daily_archetype_routes(
@@ -622,96 +855,20 @@ def _build_daily_archetype_routes(
         all_days = sorted({day for timeline in run_days.values() for day in timeline})
         for day in all_days:
             day_items = {run: timeline[day] for run, timeline in run_days.items() if day in timeline}
-            run_ids = sorted(day_items)
-            n = len(run_ids)
-            min_leaf = max(2, math.ceil(n * 0.08))
-            counts = Counter(card for cards in day_items.values() for card in cards)
-            candidates = [card for card, count in counts.items()
-                          if count >= min_leaf and n - count >= min_leaf]
-            candidates.sort(key=lambda card: (-entropy(counts[card] / n), -counts[card], card))
-            candidates = candidates[:32]
-            leaves = [{"runs": run_ids, "present": tuple(), "absent": tuple(), "depth": 0}]
-            while len(leaves) < min(6, max(1, n // min_leaf)):
-                best = None
-                for leaf_index, leaf in enumerate(leaves):
-                    leaf_runs = leaf["runs"]
-                    if leaf["depth"] >= 3 or len(leaf_runs) < min_leaf * 2:
-                        continue
-                    available = [card for card in candidates
-                                 if card not in leaf["present"] and card not in leaf["absent"]]
-                    if not available:
-                        continue
-                    base = sum(entropy(sum(card in day_items[run] for run in leaf_runs) / len(leaf_runs))
-                               for card in candidates) / max(1, len(candidates))
-                    for card in available:
-                        yes = [run for run in leaf_runs if card in day_items[run]]
-                        no = [run for run in leaf_runs if card not in day_items[run]]
-                        if len(yes) < min_leaf or len(no) < min_leaf:
-                            continue
-                        child_impurity = sum(
-                            len(child) / len(leaf_runs) *
-                            (sum(entropy(sum(feature in day_items[run] for run in child) / len(child))
-                                 for feature in candidates) / max(1, len(candidates)))
-                            for child in (yes, no)
-                        )
-                        candidate = (base - child_impurity, min(len(yes), len(no)), card,
-                                     leaf_index, yes, no)
-                        if candidate[0] >= 0.04 and (best is None or candidate[:3] > best[:3]):
-                            best = candidate
-                if best is None:
-                    break
-                _gain, _balance, card, leaf_index, yes, no = best
-                parent = leaves.pop(leaf_index)
-                leaves.extend([
-                    {"runs": yes, "present": tuple(sorted((*parent["present"], card))),
-                     "absent": parent["absent"], "depth": parent["depth"] + 1},
-                    {"runs": no, "present": parent["present"],
-                     "absent": tuple(sorted((*parent["absent"], card))),
-                     "depth": parent["depth"] + 1},
-                ])
-
-            leaves.sort(key=lambda leaf: (-len(leaf["runs"]), leaf["present"], leaf["absent"]))
-            for rank, leaf in enumerate(leaves, start=1):
-                leaf_runs = sorted(leaf["runs"])
+            n = len(day_items)
+            clusters = _select_diverse_clusters(
+                _cluster_daily_compositions(day_items), n
+            )
+            for rank, cluster in enumerate(clusters, start=1):
+                leaf_runs = cluster["runs"]
                 leaf_count = len(leaf_runs)
                 card_counts = Counter(card for run in leaf_runs for card in day_items[run])
-                # Name each archetype with cards that actually co-occur in the same
-                # runs. Independent marginal frequencies must never be concatenated
-                # into a fake multi-card "core".
-                feature_pool = [card for card, count in sorted(
-                    card_counts.items(), key=lambda row: (-row[1], row[0])
-                ) if count / leaf_count >= 0.20][:16]
-                best_core: tuple[tuple[str, ...], int] | None = None
-                max_size = min(5, len(feature_pool))
-                for size in range(max_size, 1, -1):
-                    candidates_for_size = []
-                    for combo in combinations(feature_pool, size):
-                        support_runs = sum(
-                            set(combo).issubset(day_items[run]) for run in leaf_runs
-                        )
-                        support_rate = support_runs / leaf_count
-                        if support_rate >= 0.50:
-                            candidates_for_size.append((support_runs, combo))
-                    if candidates_for_size:
-                        support_runs, combo = max(
-                            candidates_for_size,
-                            key=lambda row: (row[0], tuple(reversed(row[1]))),
-                        )
-                        best_core = (tuple(combo), support_runs)
-                        break
-                if best_core is None:
-                    singles = [(count, card) for card, count in card_counts.items()
-                               if count / leaf_count >= 0.50]
-                    if singles:
-                        support_runs, card = max(singles, key=lambda row: (row[0], row[1]))
-                        best_core = ((card,), support_runs)
-                core_items = list(best_core[0]) if best_core else []
-                core_support_runs = best_core[1] if best_core else 0
+                core_items = list(cluster["core_items"])
+                core_support_runs = int(cluster["core_support_runs"])
                 core_support_rate = core_support_runs / leaf_count if leaf_count else 0.0
                 representative = [card for card, count in sorted(card_counts.items(), key=lambda row: (-row[1], row[0]))
                                   if count / leaf_count >= 0.35][:8]
-                identity = json.dumps([version_id, season, phase, hero, day,
-                                       leaf["present"], leaf["absent"]],
+                identity = json.dumps([version_id, season, phase, hero, day, core_items],
                                       ensure_ascii=False, separators=(",", ":"))
                 node_id = hashlib.sha256(identity.encode()).hexdigest()[:24]
                 node_core_items[node_id] = frozenset(core_items)
