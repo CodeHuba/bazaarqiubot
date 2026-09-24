@@ -33,6 +33,13 @@ def test_hero_overview_share_has_button_podium_and_watermark():
     assert 'download="bazaarqiubot-hero-overview.png"' in share_fn
 
 
+def test_tier_share_only_includes_first_two_levels():
+    html = WINRATE_HTML.parent.joinpath("topcard.html").read_text(encoding="utf-8")
+    share_fn = html[html.index("async function shareTierTable()"):html.index("// ── 阵容榜 ──")]
+    assert "(data.tiers||[]).slice(0,2)" in share_fn
+    assert "完整 T 表仍保留在页面中" in share_fn
+
+
 def _share_function():
     html = WINRATE_HTML.read_text(encoding="utf-8")
     return html[html.index("async function shareWinrate()"):html.index("async function queryPartner()")]

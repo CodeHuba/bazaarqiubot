@@ -2316,6 +2316,7 @@ async function shareTierTable(){
   if(typeof html2canvas==='undefined'){alert('分享组件加载失败，请刷新页面后重试。');return;}
   const data=_lastTierData, node=document.createElement('div'); node.className='tier-share-card';
   const shareButton=document.getElementById('tier-share-button');
+  // 分享图只展示前两个级别，完整 T 表仍保留在页面中。
   const oldShareLabel=shareButton?.textContent;
   const progress=document.createElement('div');
   progress.className='tier-share-progress';
@@ -2325,7 +2326,7 @@ async function shareTierTable(){
   const progressText=progress.querySelector('.tier-share-progress-text');
   const progressTitle=progress.querySelector('.tier-share-progress-title');
   if(shareButton){shareButton.disabled=true;shareButton.textContent='生成中…';}
-  const shareGroups=(data.tiers||[]).map(group=>{
+  const shareGroups=(data.tiers||[]).slice(0,2).map(group=>{
     const color=TIER_META[group.name]?.[0]||'#B5B3D7';
     const cards=group.cards.map(card=>{
       const image=tierShareImageUrl(card.img);
