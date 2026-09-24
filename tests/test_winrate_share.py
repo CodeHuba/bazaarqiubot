@@ -35,11 +35,15 @@ def test_hero_overview_share_has_button_podium_and_watermark():
 
 def test_tier_share_only_includes_first_two_levels():
     html = WINRATE_HTML.parent.joinpath("topcard.html").read_text(encoding="utf-8")
-    share_fn = html[html.index("async function shareTierTable()"):html.index("// ── 阵容榜 ──")]
+    share_fn = html[html.index("async function preloadShareImages"):html.index("// ── 阵容榜 ──")]
     assert "(data.tiers||[]).slice(0,2)" in share_fn
     assert "const shareGroupsData=(data.tiers||[]).slice(0,2)" in share_fn
     assert "const shareCardCount=shareGroupsData.reduce" in share_fn
     assert "正在加载卡图 0/'+shareCardCount" in share_fn
+    assert "正在生成分享图（布局中）" in share_fn
+    assert "正在生成分享图（首次渲染）" in share_fn
+    assert "正在使用兼容模式重新绘制" in share_fn
+    assert "renderTierShareCanvas" in share_fn
 
 
 def _share_function():

@@ -2287,28 +2287,62 @@ function tierShareImageUrl(url){
 }
 async function preloadShareImages(node, onProgress, concurrency=6, timeoutMs=12000){
   const images=[...node.querySelectorAll('img[data-src]')];
-  let cursor=0, complete=0;
-  const update=()=>onProgress?.(complete,images.length);
+  let cursor=0, complete=0, failed=0;
+  const update=()=>onProgress?.(complete,images.length,failed);
   update();
   async function worker(){
     while(cursor<images.length){
       const img=images[cursor++];
-      await new Promise(resolve=>{
-        const timer=setTimeout(resolve,timeoutMs);
-        const done=()=>{clearTimeout(timer);resolve();};
-        img.addEventListener('load',done,{once:true});
-        img.addEventListener('error',done,{once:true});
+      const loaded=await new Promise(resolve=>{
+        const timer=setTimeout(()=>resolve(false),timeoutMs);
+        const done=ok=>{clearTimeout(timer);resolve(ok);};
+        img.addEventListener('load',()=>done(true),{once:true});
+        img.addEventListener('error',()=>done(false),{once:true});
         img.src=img.dataset.src;
       });
+      if(loaded){
+        try{await img.decode?.();}catch(_){/* 已加载但无法解码时交给渲染阶段处理 */}
+      }else{
+        failed++;
+        img.removeAttribute('src');
+        img.dataset.failed='1';
+      }
       complete++; update();
     }
   }
   await Promise.all(Array.from({length:Math.min(concurrency,images.length)},worker));
+  return {total:images.length,loaded:images.length-failed,failed};
 }
 function withTimeout(promise, timeoutMs, message){
   let timer;
   const timeout=new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error(message)),timeoutMs);});
   return Promise.race([promise,timeout]).finally(()=>clearTimeout(timer));
+}
+async function renderTierShareCanvas(node, progressTitle, progressText, progressBar){
+  const render=function(scale, timeoutMs){
+    return withTimeout(
+      html2canvas(node,{backgroundColor:'#090A2A',scale,useCORS:true,allowTaint:false,imageTimeout:10000,logging:false}),
+      timeoutMs,
+      '分享图渲染超时'
+    );
+  };
+  progressTitle.textContent='正在生成分享图（布局中）';
+  progressText.textContent='正在计算卡牌布局…';
+  progressBar.style.width='72%';
+  await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+  try{
+    progressTitle.textContent='正在生成分享图（首次渲染）';
+    progressText.textContent='正在绘制图片，请稍候…';
+    progressBar.style.width='80%';
+    return await render(1,30000);
+  }catch(firstError){
+    console.warn('T 表分享图首次渲染失败，降低清晰度重试',firstError);
+    progressTitle.textContent='首次渲染未完成，正在重试';
+    progressText.textContent='正在使用兼容模式重新绘制…';
+    progressBar.style.width='86%';
+    await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+    return await render(.75,30000);
+  }
 }
 async function shareTierTable(){
   if(!_lastTierData){await loadTierTable();}
@@ -2340,20 +2374,19 @@ async function shareTierTable(){
   node.innerHTML=`<h2>📋 ${tierEscape(data.hero)} 卡牌 T 表</h2><p>基于终局阵容统计使用率与 10 胜率 · 当前赛季 ${tierEscape(data.phase)} · ${data.rank_filter==='legendary'?'传奇':'全部段位'} · ${data.days?`近 ${data.days} 天`:'全赛段'}</p>${shareGroups}<footer class="tier-share-watermark"><span>bazaarqiubot.com · ${new Date().toLocaleDateString('zh-CN')}</span><strong>BazaarQiuBot</strong></footer>`;
   document.body.appendChild(node);
   try{
-    await preloadShareImages(node,(complete,total)=>{
-      const percent=total?Math.round(complete/total*100):100;
+    await preloadShareImages(node,(complete,total,failed)=>{
+      const percent=total?Math.round(complete/total*70):70;
       if(progressBar)progressBar.style.width=percent+'%';
-      if(progressText)progressText.textContent=`正在加载卡图 ${complete}/${total}`;
+      if(progressText)progressText.textContent=`正在加载卡图 ${complete}/${total}${failed?`（${failed} 张失败，继续生成）`:''}`;
     });
-    if(progressTitle)progressTitle.textContent='正在生成图片…';
-    if(progressText)progressText.textContent='卡图已就绪，正在渲染';
+    if(progressTitle)progressTitle.textContent='卡图加载完成';
+    if(progressText)progressText.textContent='正在准备渲染环境…';
+    if(progressBar)progressBar.style.width='70%';
+    const canvas=await renderTierShareCanvas(node,progressTitle,progressText,progressBar);
+    if(progressTitle)progressTitle.textContent='分享图生成完成';
+    if(progressText)progressText.textContent='正在准备预览…';
     if(progressBar)progressBar.style.width='100%';
-    await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
-    const canvas=await withTimeout(
-      html2canvas(node,{backgroundColor:'#090A2A',scale:1,useCORS:true,allowTaint:false,imageTimeout:8000,logging:false}),
-      20000,
-      '分享图渲染超时'
-    );
+    await new Promise(resolve=>requestAnimationFrame(resolve));
     const url=canvas.toDataURL('image/png'), overlay=document.createElement('div');
     overlay.className='tier-modal'; overlay.innerHTML=`<div class="tier-modal-box"><button class="tier-modal-close" onclick="this.closest('.tier-modal').remove()">×</button><h2>分享图片已生成</h2><p>长按保存，或点击下载。</p><img src="${url}" alt="T表分享图"><a class="content-tab" href="${url}" download="bazaarqiubot-tier-table.png">⬇ 下载图片</a></div>`; document.body.appendChild(overlay);
   }catch(error){console.error('T 表分享图生成失败',error);alert('分享图生成失败，请稍后重试。');}
