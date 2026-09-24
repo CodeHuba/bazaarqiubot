@@ -69,6 +69,11 @@ def stats_db(tmp_path):
                 version_id TEXT NOT NULL, edge_id TEXT NOT NULL, run_id TEXT NOT NULL,
                 PRIMARY KEY (version_id, edge_id, run_id)
             );
+            CREATE TABLE daily_archetype_members (
+                version_id TEXT NOT NULL, node_id TEXT NOT NULL, day INTEGER NOT NULL,
+                run_id TEXT NOT NULL,
+                PRIMARY KEY (version_id, node_id, day, run_id)
+            );
             CREATE TABLE final_compositions (
                 version_id TEXT NOT NULL, run_id TEXT NOT NULL, event_id TEXT NOT NULL,
                 season INTEGER NOT NULL, phase TEXT NOT NULL, hero TEXT,
@@ -77,6 +82,12 @@ def stats_db(tmp_path):
                 player_level INTEGER, outcome TEXT, is_pvp INTEGER,
                 opponent_hero TEXT, opponent_name TEXT, item_signature TEXT NOT NULL,
                 PRIMARY KEY (version_id, run_id, day)
+            );
+            CREATE TABLE final_composition_cards (
+                version_id TEXT NOT NULL, run_id TEXT NOT NULL, day INTEGER NOT NULL,
+                event_id TEXT NOT NULL, card_id TEXT NOT NULL, card_kind TEXT NOT NULL,
+                tier TEXT, enchantment TEXT, slot_position INTEGER NOT NULL,
+                PRIMARY KEY (version_id, run_id, day, card_id, card_kind, slot_position)
             );
             CREATE TABLE daily_archetype_edge_cards (
                 version_id TEXT NOT NULL, edge_id TEXT NOT NULL, change_kind TEXT NOT NULL,
@@ -112,6 +123,11 @@ def stats_db(tmp_path):
                      ("v2", "daily-a", 3, "a", "core", 10, 1.0))
         conn.execute("INSERT INTO daily_archetype_cards VALUES (?, ?, ?, ?, ?, ?, ?)",
                      ("v2", "daily-b", 4, "c", "core", 6, 1.0))
+        conn.executemany("INSERT INTO daily_archetype_cards VALUES (?, ?, ?, ?, ?, ?, ?)", [
+            ("v2", "daily-dispersed", 4, "z", "common", 3, .75),
+            ("v2", "daily-dispersed", 4, "y", "common", 2, .50),
+            ("v2", "daily-dispersed", 4, "x", "variant", 1, .25),
+        ])
         conn.execute("INSERT INTO daily_archetype_edges VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                      ("v2", "edge-daily", 3, "daily-a", 4, "daily-b", 6, 10, 8, .8, .75, 0))
         conn.execute("INSERT INTO daily_archetype_edges VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -137,12 +153,13 @@ def _client(monkeypatch, stats_db):
     monkeypatch.setenv("STATS_PASSWORD", "test-password")
     import importlib
     import sys
-    app_path = "/mnt/d/PJ/QiuBot-github/QiuBot/web_runs"
-    repo_path = "/mnt/d/PJ/QiuBot-github/QiuBot"
+    import types
+    from pathlib import Path
+    repo_path = str(Path(__file__).resolve().parents[1])
+    app_path = str(Path(repo_path) / "web_runs")
     for path in (repo_path, app_path):
         if path not in sys.path:
             sys.path.insert(0, path)
-    import types
     bazaar_stub = types.ModuleType("plugins.bazaar_plugin")
     bazaar_stub.__path__ = [repo_path + "/plugins/bazaar_plugin"]
     monkeypatch.setitem(sys.modules, "plugins.bazaar_plugin", bazaar_stub)
@@ -174,6 +191,8 @@ def _client(monkeypatch, stats_db):
             path = str(stats_db.parent / ('stats.db' if path.endswith('stats.db') else 'compat.db'))
         return original_connect(path, *args, **kwargs)
     monkeypatch.setattr(sqlite_module, "connect", connect_redirect)
+    for module_name in ("app", "day_stats_builder"):
+        sys.modules.pop(module_name, None)
     web_app = importlib.import_module("app")
     monkeypatch.setattr(sqlite_module, "connect", original_connect)
     monkeypatch.setattr(web_app, "DAY_STATS_DB_PATH", str(stats_db), raising=False)
@@ -187,12 +206,81 @@ def _client(monkeypatch, stats_db):
         def get(self, *args, **kwargs):
             kwargs.setdefault("headers", {}).update(_auth())
             return raw_client.get(*args, **kwargs)
+
+        def post(self, *args, **kwargs):
+            kwargs.setdefault("headers", {}).update(_auth())
+            return raw_client.post(*args, **kwargs)
     return AuthClient(web_app)
 
 
 def _auth():
     import base64
     return {"Authorization": "Basic " + base64.b64encode(b"tester:test-password").decode()}
+
+
+
+def test_node_share_create_and_read_is_version_pinned(monkeypatch, stats_db):
+    client = _client(monkeypatch, stats_db)
+    created = client.post("/api/routes/share", json={
+        "share_type": "node", "version": "v2", "hero": "Vanessa", "day": 3, "node_id": "daily-a"
+    })
+    assert created.status_code == 201
+    result = created.get_json()
+    assert result["share_type"] == "node"
+    assert result["version_id"] == "v2"
+    detail = client.get("/api/routes/share/" + result["share_id"])
+    assert detail.status_code == 200
+    data = detail.get_json()
+    assert data["version_id"] == "v2"
+    assert data["hero"] == "Vanessa"
+    assert data["node_id"] == "daily-a"
+    assert "run_id" not in detail.get_data(as_text=True)
+    with sqlite3.connect(stats_db.parent / "stats.db") as conn:
+        assert conn.execute("SELECT open_count FROM route_shares WHERE share_id=?", (result["share_id"],)).fetchone()[0] == 1
+
+
+def test_node_share_rejects_unknown_node(monkeypatch, stats_db):
+    client = _client(monkeypatch, stats_db)
+    response = client.post("/api/routes/share", json={
+        "share_type": "node", "version": "v2", "hero": "Vanessa", "day": 3, "node_id": "missing"
+    })
+    assert response.status_code == 404
+
+
+def test_route_share_preserves_paths_and_tracks_expand(monkeypatch, stats_db):
+    client = _client(monkeypatch, stats_db)
+    paths = [[{"day": 3, "node_id": "daily-a"}, {"day": 4, "node_id": "daily-b"}]]
+    created = client.post("/api/routes/share", json={
+        "share_type": "route", "version": "v2", "hero": "Vanessa",
+        "start_day": 3, "node_id": "daily-a", "paths": paths,
+    })
+    assert created.status_code == 201
+    share = created.get_json()
+    assert share["share_type"] == "route"
+    read = client.get("/api/routes/share/" + share["share_id"])
+    assert read.status_code == 200
+    body = read.get_json()
+    assert body["version_id"] == "v2"
+    assert body["paths"] == paths
+    assert "run_id" not in read.get_data(as_text=True)
+    event = client.post("/api/routes/share/" + share["share_id"] + "/event",
+                        json={"event_type": "route_expanded"})
+    assert event.status_code == 201
+    with sqlite3.connect(stats_db.parent / "stats.db") as conn:
+        row = conn.execute("SELECT open_count, expand_count FROM route_shares WHERE share_id=?",
+                           (share["share_id"],)).fetchone()
+        assert row == (1, 1)
+        assert conn.execute("SELECT COUNT(*) FROM route_share_events WHERE share_id=?",
+                            (share["share_id"],)).fetchone()[0] == 1
+
+
+def test_route_share_rejects_unknown_path_node(monkeypatch, stats_db):
+    client = _client(monkeypatch, stats_db)
+    response = client.post("/api/routes/share", json={
+        "share_type": "route", "version": "v2", "hero": "Vanessa", "start_day": 3,
+        "paths": [[{"day": 3, "node_id": "daily-a"}, {"day": 4, "node_id": "missing"}]],
+    })
+    assert response.status_code == 404
 
 
 def test_day_stats_latest_returns_version_metadata(monkeypatch, stats_db):
@@ -305,20 +393,43 @@ def test_public_daily_routes_api_returns_nodes_edges_and_changes(monkeypatch, st
     assert directions[0]["run_count"] == 6
     assert directions[0]["target_core_items"] == ["a", "c"]
     assert directions[0]["variants"][0]["target_core_items"] == ["a", "c"]
-    assert directions[0]["representative_run_id"].startswith("route-")
+    assert "run_id" not in json.dumps(body)
     assert directions[0]["associated_cards"][0]["card_id"] == "x"
     assert directions[0]["associated_cards"][0]["support_rate"] == pytest.approx(5 / 6)
     assert len(directions) <= 3
-    assert [edge["child_node_id"] for edge in body["edges"]] == ["daily-b"]
+    assert [edge["child_node_id"] for edge in body["edges"]] == [
+        "daily-b", "daily-dispersed",
+    ]
 
 
-def test_public_daily_routes_hides_dispersed_nodes_from_summary(monkeypatch, stats_db):
+def test_public_daily_routes_keeps_empty_core_nodes_in_summary(monkeypatch, stats_db):
     client = _client(monkeypatch, stats_db)
     response = client.web_app.app.test_client().get(
         "/api/routes/daily/summary?version=v2&hero=Vanessa"
     )
     assert response.status_code == 200
-    assert "daily-dispersed" not in [row["node_id"] for row in response.get_json()["nodes"]]
+    assert "daily-dispersed" in [row["node_id"] for row in response.get_json()["nodes"]]
+
+
+def test_empty_core_node_returns_dynamic_signature_cards_without_changing_representative_cards(
+        monkeypatch, stats_db):
+    raw_client = _client(monkeypatch, stats_db).web_app.app.test_client()
+    daily = raw_client.get("/api/routes/daily?version=v2&hero=Vanessa&day=4")
+    detail = raw_client.get(
+        "/api/routes/daily/node?version=v2&hero=Vanessa&day=4&node_id=daily-dispersed"
+    )
+
+    assert daily.status_code == 200
+    node = next(row for row in daily.get_json()["nodes"] if row["node_id"] == "daily-dispersed")
+    assert [row["cardId"] for row in node["representative_cards"]] == ["z"]
+    assert [row["card_id"] for row in node["signature_cards"]] == ["z", "y"]
+    assert node["signature_cards"][0]["support_runs"] == 3
+    assert node["signature_cards"][0]["support_rate"] == .75
+    assert node["signature_cards"][0]["display"]["name"] == "中文-z"
+
+    assert detail.status_code == 200
+    detail_node = detail.get_json()["node"]
+    assert [row["card_id"] for row in detail_node["signature_cards"]] == ["z", "y"]
 
 
 def test_public_daily_routes_summary_groups_all_days(monkeypatch, stats_db):
@@ -327,7 +438,337 @@ def test_public_daily_routes_summary_groups_all_days(monkeypatch, stats_db):
         "/api/routes/daily/summary?version=v2&hero=Vanessa"
     )
     assert response.status_code == 200
-    assert [row["day"] for row in response.get_json()["nodes"]] == [3, 4]
+    assert [row["day"] for row in response.get_json()["nodes"]] == [3, 4, 4]
+
+
+def test_public_daily_node_detail_uses_global_members_for_rankings(monkeypatch, stats_db):
+    snapshots = {
+        "detail-1": ["a", "b", "x", "y"],
+        "detail-2": ["a", "b", "x", "y"],
+        "detail-3": ["a", "b", "x", "y", "z"],
+        "detail-4": ["a", "b", "y", "z"],
+        "detail-5": ["a", "x", "z"],
+        "detail-6": ["a", "b", "p", "q"],
+    }
+    with sqlite3.connect(stats_db) as conn:
+        for index, (run_id, items) in enumerate(snapshots.items()):
+            conn.execute("INSERT INTO daily_archetype_members VALUES (?, ?, ?, ?)",
+                         ("v2", "daily-a", 3, run_id))
+            conn.execute("INSERT INTO final_compositions VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                         ("v2", run_id, f"detail-event-{index}", 18, "18.2", "Vanessa",
+                          "Legendary", 3, "early", None, None, "2026-09-20", None,
+                          None, None, None, None, json.dumps(items)))
+        conn.executemany(
+            "INSERT INTO final_composition_cards VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            [
+                ("v2", run_id, 3, f"detail-event-{index}", skill, "skill", None, None, -1)
+                for index, run_id in enumerate(snapshots)
+                for skill in (["skill-a", "skill-b"] if index < 3 else (["skill-a"] if index < 5 else ["skill-c"]))
+            ],
+        )
+        conn.executemany(
+            "INSERT INTO final_composition_cards VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            [
+                ("v2", "detail-1", 3, "detail-event-0", "a", "item", None, None, 4),
+                ("v2", "detail-1", 3, "detail-event-0", "b", "item", None, None, 1),
+                ("v2", "detail-1", 3, "detail-event-0", "x", "item", None, None, 7),
+                ("v2", "detail-1", 3, "detail-event-0", "y", "item", None, None, 2),
+            ],
+        )
+
+    client = _client(monkeypatch, stats_db).web_app.app.test_client()
+    response = client.get(
+        "/api/routes/daily/node?version=v2&hero=Vanessa&day=3&node_id=daily-a"
+    )
+
+    assert response.status_code == 200
+    body = response.get_json()
+    assert body["node"]["node_id"] == "daily-a"
+    assert body["node"]["global_run_count"] == 6
+    assert [row["run_count"] for row in body["recommended_compositions"]] == [3, 1, 1]
+    assert body["recommended_compositions"][0]["item_ids"] == ["a", "b", "x", "y"]
+    assert [row["cardId"] for row in body["recommended_compositions"][0]["cards"]] == ["b", "y", "a", "x"]
+    assert [row["slot_position"] for row in body["recommended_compositions"][0]["cards"]] == [1, 2, 4, 7]
+    assert [row["card_id"] for row in body["associated_cards"][:3]] == ["x", "y", "z"]
+    assert [row["card_id"] for row in body["associated_skills"][:2]] == ["skill-a", "skill-b"]
+    assert "run_id" not in json.dumps(body)
+
+
+def test_public_daily_node_detail_cache_uses_resolved_version_for_latest(monkeypatch, stats_db):
+    client = _client(monkeypatch, stats_db)
+    web_app = client.web_app
+    raw_client = web_app.app.test_client()
+    url = "/api/routes/daily/node?version=latest&hero=Vanessa&day=3&node_id=daily-a"
+
+    first = raw_client.get(url)
+    assert first.status_code == 200
+    assert first.get_json()["version_id"] == "v2"
+    expected_key = web_app._day_stats_result_cache_key(
+        "v2", "daily-node-v4", "Vanessa", 3, "daily-a"
+    )
+    assert web_app._day_stats_cache_get(expected_key) == first.get_json()
+
+    monkeypatch.setattr(
+        web_app, "_day_stats_connection",
+        lambda: (_ for _ in ()).throw(AssertionError("cache hit must avoid sqlite")),
+    )
+    second = raw_client.get(url)
+    assert second.status_code == 200
+    assert second.get_json() == first.get_json()
+
+
+@pytest.mark.parametrize("paths,error", [
+    ([[{"day": 3, "node_id": "daily-a"}]] * 65, "paths may contain at most 64 paths"),
+    ([[{"day": day, "node_id": "daily-a"} for day in range(1, 18)]],
+     "each path may contain at most 16 nodes"),
+    ([[{"day": 3, "node_id": "daily-a"}] * 5 for _ in range(52)],
+     "paths may contain at most 256 total nodes"),
+])
+def test_public_daily_path_expansion_rejects_cost_limits_before_database(
+        monkeypatch, stats_db, paths, error):
+    client = _client(monkeypatch, stats_db)
+    monkeypatch.setattr(
+        client.web_app, "_day_stats_connection",
+        lambda: (_ for _ in ()).throw(AssertionError("oversized input must be rejected before sqlite")),
+    )
+
+    response = client.web_app.app.test_client().post("/api/routes/daily/expand", json={
+        "version": "v2", "hero": "Vanessa", "paths": paths,
+    })
+
+    assert response.status_code == 400
+    assert response.get_json() == {"error": error}
+
+
+def test_public_daily_path_expansion_normalizes_and_deduplicates_paths(monkeypatch, stats_db):
+    with sqlite3.connect(stats_db) as conn:
+        conn.executemany("INSERT INTO daily_archetype_members VALUES (?, ?, ?, ?)", [
+            ("v2", "daily-a", 3, "dedup-run"),
+            ("v2", "daily-b", 4, "dedup-run"),
+        ])
+
+    client = _client(monkeypatch, stats_db)
+    web_app = client.web_app
+    original_member_runs = web_app._daily_route_member_runs
+    calls = 0
+
+    def counted_member_runs(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        return original_member_runs(*args, **kwargs)
+
+    monkeypatch.setattr(web_app, "_daily_route_member_runs", counted_member_runs)
+    response = web_app.app.test_client().post("/api/routes/daily/expand", json={
+        "version": "v2", "hero": "Vanessa",
+        "paths": [
+            [{"day": 3, "node_id": " daily-a "}, {"day": 4, "node_id": "daily-b"}],
+            [{"day": 3, "node_id": "daily-a"}, {"day": 4, "node_id": "daily-b"}],
+        ],
+    })
+
+    assert response.status_code == 200
+    assert response.get_json()["current_node_id"] == "daily-b"
+    assert response.get_json()["path_run_count"] == 1
+    # Expansion loads all distinct node memberships in one batch rather than
+    # issuing one membership query for every node in every path.
+    assert calls == 0
+
+
+def test_public_daily_path_expansion_rejects_mixed_origins(monkeypatch, stats_db):
+    client = _client(monkeypatch, stats_db).web_app.app.test_client()
+    response = client.post("/api/routes/daily/expand", json={
+        "version": "v2", "hero": "Vanessa", "paths": [
+            [{"day": 3, "node_id": "daily-a"}, {"day": 4, "node_id": "daily-b"}],
+            [{"day": 4, "node_id": "daily-b"}],
+        ],
+    })
+    assert response.status_code == 400
+    assert response.get_json() == {"error": "all paths must start at the same node"}
+
+
+def test_public_daily_path_expansion_unions_converged_paths_and_returns_all_qualified_branches(
+        monkeypatch, stats_db):
+    with sqlite3.connect(stats_db) as conn:
+        conn.execute("INSERT INTO daily_archetype_nodes VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                     ("v2", 18, "18.2", "Vanessa", 2, "daily-root", 1, 12, 20, .6,
+                      '["root"]', 12, 1.0, '["root"]'))
+        conn.execute("INSERT INTO daily_archetype_nodes VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                     ("v2", 18, "18.2", "Vanessa", 3, "daily-x", 2, 6, 20, .3,
+                      '[\"x\"]', 6, 1.0, '[\"x\"]'))
+        for child_index in range(4):
+            child_id = f"daily-c{child_index}"
+            core = f"c{child_index}"
+            conn.execute("INSERT INTO daily_archetype_nodes VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                         ("v2", 18, "18.2", "Vanessa", 5, child_id, child_index + 1,
+                          3, 12, .25, json.dumps([core]), 3, 1.0, json.dumps([core])))
+        for number in range(12):
+            run_id = f"expand-{number}"
+            start_node = "daily-a" if number < 6 else "daily-x"
+            child_id = f"daily-c{number // 3}"
+            conn.executemany("INSERT INTO daily_archetype_members VALUES (?, ?, ?, ?)", [
+                ("v2", "daily-root", 2, run_id),
+                ("v2", start_node, 3, run_id),
+                ("v2", "daily-b", 4, run_id),
+                ("v2", child_id, 5, run_id),
+            ])
+
+    client = _client(monkeypatch, stats_db).web_app.app.test_client()
+    response = client.post("/api/routes/daily/expand", json={
+        "version": "v2",
+        "hero": "Vanessa",
+        "paths": [
+            [{"day": 2, "node_id": "daily-root"}, {"day": 3, "node_id": "daily-a"}, {"day": 4, "node_id": "daily-b"}],
+            [{"day": 2, "node_id": "daily-root"}, {"day": 3, "node_id": "daily-x"}, {"day": 4, "node_id": "daily-b"}],
+            [{"day": 2, "node_id": "daily-root"}, {"day": 3, "node_id": "daily-a"}, {"day": 4, "node_id": "daily-b"}],
+        ],
+    })
+
+    assert response.status_code == 200
+    body = response.get_json()
+    assert body["current_node_id"] == "daily-b"
+    assert body["current_day"] == 4
+    assert body["path_run_count"] == 12
+    assert body["path_observable_runs"] == 12
+    assert body["display_threshold"] == 3
+    assert len(body["branches"]) == 4
+    assert [row["path_run_count"] for row in body["branches"]] == [3, 3, 3, 3]
+    assert body["visible_coverage_rate"] == 1.0
+    assert body["hidden_run_count"] == 0
+    assert "run_id" not in json.dumps(body)
+
+
+def test_public_daily_path_expansion_uses_each_runs_next_observed_day_and_reports_gaps(
+        monkeypatch, stats_db):
+    with sqlite3.connect(stats_db) as conn:
+        for day, node_id, core in ((6, "next-six", ["six"]), (7, "next-seven", []),
+                                   (8, "not-next", ["late"])):
+            conn.execute("INSERT INTO daily_archetype_nodes VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                         ("v2", 18, "18.2", "Vanessa", day, node_id, 1, 3, 6, .5,
+                          json.dumps(core), 0 if not core else 3, 0.0 if not core else 1.0,
+                          json.dumps(core)))
+        for number in range(6):
+            run_id = f"gap-{number}"
+            target_day = 6 if number < 3 else 7
+            target_node = "next-six" if number < 3 else "next-seven"
+            conn.executemany("INSERT INTO daily_archetype_members VALUES (?, ?, ?, ?)", [
+                ("v2", "daily-a", 3, run_id),
+                ("v2", "daily-b", 4, run_id),
+                ("v2", target_node, target_day, run_id),
+                ("v2", "not-next", 8, run_id),
+            ])
+            for day, items in ((3, ["a"]), (4, ["b"]), (target_day, [target_node]),
+                               (8, ["late"])):
+                conn.execute("INSERT INTO final_compositions VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                             ("v2", run_id, f"{run_id}-{day}", 18, "18.2", "Vanessa",
+                              "Legendary", day, "middle", None, None, "2026-09-20", None,
+                              None, None, None, None, json.dumps(items)))
+
+    response = _client(monkeypatch, stats_db).web_app.app.test_client().post(
+        "/api/routes/daily/expand", json={
+            "version": "v2", "hero": "Vanessa", "paths": [[
+                {"day": 3, "node_id": "daily-a"},
+                {"day": 4, "node_id": "daily-b"},
+            ]],
+        })
+
+    assert response.status_code == 200
+    body = response.get_json()
+    assert body["path_observable_runs"] == 6
+    assert [(row["target_day"], row["path_run_count"], row["day_gap"],
+             row["skipped_days"], row["is_gap"])
+            for row in body["branches"]] == [
+        (6, 3, 2, 1, True),
+        (7, 3, 3, 2, True),
+    ]
+    assert body["branches"][1]["node"]["core_items"] == []
+    assert all(row["node_id"] != "not-next" for row in body["branches"])
+    assert "run_id" not in json.dumps(body)
+
+
+def test_public_daily_path_expansion_returns_branch_path_indexes_for_partial_convergence(
+        monkeypatch, stats_db):
+    with sqlite3.connect(stats_db) as conn:
+        for day, node_id, core in (
+            (2, "partial-root", ["root"]),
+            (3, "partial-left", ["left"]),
+            (3, "partial-right", ["right"]),
+            (4, "partial-merge", ["merge"]),
+            (5, "partial-child", ["child"]),
+        ):
+            conn.execute("INSERT INTO daily_archetype_nodes VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                         ("v2", 18, "18.2", "Vanessa", day, node_id, 1, 3, 3, 1.0,
+                          json.dumps(core), 3, 1.0, json.dumps(core)))
+        member_rows = []
+        for side in ("left", "right"):
+            for number in range(3):
+                run_id = f"partial-{side}-{number}"
+                member_rows.extend([
+                    ("v2", "partial-root", 2, run_id),
+                    ("v2", f"partial-{side}", 3, run_id),
+                    ("v2", "partial-merge", 4, run_id),
+                ])
+                if side == "left":
+                    member_rows.append(("v2", "partial-child", 5, run_id))
+        for number in range(3):
+            run_id = f"partial-outsider-{number}"
+            member_rows.extend([
+                ("v2", "partial-merge", 4, run_id),
+                ("v2", "partial-child-2", 5, run_id),
+            ])
+        conn.execute("INSERT INTO daily_archetype_nodes VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                     ("v2", 18, "18.2", "Vanessa", 5, "partial-child-2", 2, 3, 6, .5,
+                      json.dumps(["child", "two"]), 3, 1.0, json.dumps(["child", "two"])))
+        conn.executemany("INSERT INTO daily_archetype_members VALUES (?, ?, ?, ?)", member_rows)
+    response = _client(monkeypatch, stats_db).web_app.app.test_client().post(
+        "/api/routes/daily/expand", json={
+            "version": "v2", "hero": "Vanessa", "paths": [
+                [{"day": 2, "node_id": "partial-root"}, {"day": 3, "node_id": "partial-left"},
+                 {"day": 4, "node_id": "partial-merge"}],
+                [{"day": 2, "node_id": "partial-root"}, {"day": 3, "node_id": "partial-right"},
+                 {"day": 4, "node_id": "partial-merge"}],
+            ],
+        })
+    assert response.status_code == 200
+    body = response.get_json()
+    assert body["branches"][0]["path_indexes"] == [0]
+    assert body["branches"][0]["path_run_count"] == 3
+    assert any(
+        row["node_id"] == "partial-child-2"
+        and row["path_run_count"] == 3
+        and row["path_indexes"] == []
+        for row in body["branches"]
+    )
+    assert "run_id" not in json.dumps(body)
+
+
+def test_public_daily_path_expansion_rejects_non_next_observed_transition(monkeypatch, stats_db):
+    with sqlite3.connect(stats_db) as conn:
+        conn.execute("INSERT INTO daily_archetype_nodes VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                     ("v2", 18, "18.2", "Vanessa", 5, "skip-target", 1, 1, 1, 1.0,
+                      '["target"]', 1, 1.0, '["target"]'))
+        conn.executemany("INSERT INTO daily_archetype_members VALUES (?, ?, ?, ?)", [
+            ("v2", "daily-a", 3, "invalid-skip"),
+            ("v2", "daily-dispersed", 4, "invalid-skip"),
+            ("v2", "skip-target", 5, "invalid-skip"),
+        ])
+        for day in (3, 4, 5):
+            conn.execute("INSERT INTO final_compositions VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                         ("v2", "invalid-skip", f"invalid-skip-{day}", 18, "18.2", "Vanessa",
+                          "Legendary", day, "middle", None, None, "2026-09-20", None,
+                          None, None, None, None, "[]"))
+
+    response = _client(monkeypatch, stats_db).web_app.app.test_client().post(
+        "/api/routes/daily/expand", json={
+            "version": "v2", "hero": "Vanessa", "paths": [[
+                {"day": 3, "node_id": "daily-a"},
+                {"day": 5, "node_id": "skip-target"},
+            ]],
+        })
+
+    assert response.status_code == 400
+    assert response.get_json() == {"error": "path transition is not a next observed Day"}
+
+
 def test_public_routes_page_and_api_do_not_require_basic_auth(monkeypatch, stats_db):
     client = _client(monkeypatch, stats_db)
     raw_client = client.web_app.app.test_client()
@@ -382,7 +823,7 @@ def test_routes_page_contains_page_view_tracking_contract(monkeypatch, stats_db)
     page = client.web_app.app.test_client().get("/routes")
 
     assert page.status_code == 200
-    assert b"/api/track/pv" in page.data
+    assert b"api/track/pv" in page.data
     assert b"routes" in page.data
 
 
@@ -440,33 +881,61 @@ def test_public_routes_page_contract_and_navigation(monkeypatch, stats_db):
     css = raw_client.get("/static/routes.css").get_data(as_text=True)
 
     assert '<meta name="robots" content="index, follow">' in html
-    assert 'href="/static/routes.css?v=20260921a"' in html
-    assert 'src="/static/routes.js?v=20260921a"' in html
+    assert 'href="static/routes.css?v=20260924-node-share"' in html
+    assert 'src="static/routes.js?v=20260924-node-share"' in html
+    assert "fetch('api/track/pv'" in html
     assert 'href="/routes" class="nav-tab active"' in html
-    assert "每天的主流阵容" in html and "真实对局" in html
-    assert "/api/routes/daily" in js and "/api/routes/daily/summary" in js
-    assert "转型概率" not in js or "transition_rate" in js
-    assert "parent_observable_runs" in js and "core_support_rate" in js
-    assert "新增核心" in js and "退出核心" in js
-    assert "directions" in js and "associated_cards" in js
-    assert "最多展示三个差异方向" in html
-    assert "真实代表阵容" in js and "关联牌推荐" in js and "常见变体" in js
-    assert "route-detail" in css
-    assert "/runs?" in js and "查询相似真实阵容" in js
-    assert "URLSearchParams" in js and "history.replaceState" in js
-    assert "AbortController" in js
-    assert "allowedHosts" in js and "s.bazaardb.gg" in js
+    assert "可拖拽阵容路线画布" in html and "下一次真实观测 Day" in html
+    assert "/api/routes/daily/expand" in js and "/api/routes/daily/node" in js
+    assert "function apiPath(path)" in js
+    assert "location.pathname" in js
+    assert "paths:requestPaths" in js
+    assert "state.nodes.has" in js and "state.paths.set" in js
+    assert "pointerdown" in js and "wheel" in js and "fitView" in js
+    assert "推荐阵容 Top 3" in js and "关联牌 Top 8" in js
+    assert "查询相似真实阵容" not in js and "/runs?" not in js
+    assert "canvas-viewport" in css and "node-detail" in css
     assert "object-fit:contain" in css.replace(" ", "")
-    assert "@media(max-width:760px)" in css.replace(" ", "")
+    assert "@media(max-width:650px)" in css.replace(" ", "")
 
 
-def test_route_v2_cache_namespace_is_v5():
+def test_route_v2_cache_namespace_is_v9():
     from pathlib import Path
     source = (Path(__file__).parents[1] / "web_runs" / "app.py").read_text(encoding="utf-8")
-    assert "'daily-v5'" in source
-    assert "'daily-summary-v5'" in source
-    assert "'daily-v4'" not in source
-    assert "'daily-summary-v4'" not in source
+    assert "'daily-v9'" in source
+    assert "'daily-summary-v7'" in source
+    assert "'daily-v8'" not in source
+    assert "'daily-summary-v6'" not in source
+
+
+def test_daily_routes_accept_observed_days_beyond_day_16(monkeypatch, stats_db):
+    with sqlite3.connect(stats_db) as conn:
+        conn.execute(
+            "INSERT INTO daily_archetype_nodes VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            ("v2", 18, "18.2", "Vanessa", 19, "day-nineteen", 1, 1, 1, 1.0,
+             '[\"late\"]', 1, 1.0, '[\"late\"]'),
+        )
+        conn.execute(
+            "INSERT INTO daily_archetype_members VALUES (?, ?, ?, ?)",
+            ("v2", "day-nineteen", 19, "late-run"),
+        )
+        conn.execute(
+            "INSERT INTO final_compositions VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            ("v2", "late-run", "late-run-19", 18, "18.2", "Vanessa",
+             "Legendary", 19, "very-late", None, None, "2026-09-20", None,
+             None, None, None, None, '[\"late\"]'),
+        )
+
+    raw_client = _client(monkeypatch, stats_db).web_app.app.test_client()
+    daily = raw_client.get("/api/routes/daily?version=v2&hero=Vanessa&day=19")
+    detail = raw_client.get(
+        "/api/routes/daily/node?version=v2&hero=Vanessa&day=19&node_id=day-nineteen"
+    )
+
+    assert daily.status_code == 200
+    assert daily.get_json()["nodes"][0]["node_id"] == "day-nineteen"
+    assert detail.status_code == 200
+    assert detail.get_json()["node"]["node_id"] == "day-nineteen"
 
 
 def test_app_prefers_its_own_directory_for_sibling_modules():

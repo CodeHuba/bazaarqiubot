@@ -10,9 +10,11 @@ import json
 import re
 import sqlite3 as _sqlite3
 import hashlib
+import math
 import threading
 import urllib.parse
 import urllib.request
+import secrets
 from datetime import datetime
 from collections import defaultdict
 from dotenv import load_dotenv
@@ -46,6 +48,7 @@ from ocr_worker import start_worker, enqueue_run
 from plugins.bazaar_plugin.runs_query import RunsQuery
 from plugins.bazaar_plugin.data_client import RUNS_SEASON_ID, CURRENT_PHASE
 from day_stats_builder import (
+    _build_daily_node_rankings,
     _build_daily_route_directions,
     _build_daily_route_direction_details,
 )
@@ -368,7 +371,7 @@ from flask import g
 # 新增 stats_pv 表记录页面访问
 def _init_stats_tables():
     import sqlite3 as _sl
-    conn = _sl.connect('/opt/qiubot/data/stats.db')
+    conn = _sl.connect(os.getenv('STATS_DB_PATH', '/opt/qiubot/data/stats.db'))
     
     # API 调用日志（扩展）
     conn.execute('''CREATE TABLE IF NOT EXISTS api_log (
@@ -465,12 +468,34 @@ def _init_stats_tables():
     conn.execute('CREATE INDEX IF NOT EXISTS idx_announcements_status ON announcements(status)')
     conn.execute('CREATE INDEX IF NOT EXISTS idx_announcements_published_at ON announcements(published_at)')
 
+    # 固定版本路线分享：只保存公开定位和快照版本，不保存 run_id。
+    conn.execute('''CREATE TABLE IF NOT EXISTS route_shares (
+        share_id TEXT PRIMARY KEY,
+        share_type TEXT NOT NULL,
+        version_id TEXT NOT NULL,
+        hero TEXT NOT NULL,
+        start_day INTEGER,
+        node_id TEXT,
+        snapshot_json TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        last_accessed_at TEXT,
+        open_count INTEGER NOT NULL DEFAULT 0,
+        expand_count INTEGER NOT NULL DEFAULT 0
+    )''')
+    conn.execute('CREATE INDEX IF NOT EXISTS idx_route_shares_created_at ON route_shares(created_at)')
+    conn.execute('''CREATE TABLE IF NOT EXISTS route_share_events (
+        event_id INTEGER PRIMARY KEY AUTOINCREMENT,
+        share_id TEXT NOT NULL,
+        event_type TEXT NOT NULL,
+        created_at TEXT NOT NULL
+    )''')
+    conn.execute('CREATE INDEX IF NOT EXISTS idx_route_share_events_share ON route_share_events(share_id, event_type)')
     conn.commit()
     conn.close()
 
 _init_stats_tables()
 
-STATS_DB = '/opt/qiubot/data/stats.db'
+STATS_DB = os.getenv('STATS_DB_PATH', '/opt/qiubot/data/stats.db')
 try:
     init_analytics_db(STATS_DB)
     _feature_event_writer = FeatureEventWriter(STATS_DB)
@@ -711,6 +736,54 @@ def _day_stats_signature_ids(signature):
     return parsed if isinstance(parsed, list) else []
 
 
+def _daily_recommendation_cards(conn, version_id, day, representative_run, item_ids):
+    """Return recommendation cards in the slot order of a real member snapshot."""
+    wanted = set(item_ids)
+    if not representative_run or not wanted:
+        return [dict(card, slot_position=-1) for card in _day_stats_cards(item_ids)]
+    rows = conn.execute(
+        '''SELECT card_id, slot_position
+           FROM final_composition_cards
+           WHERE version_id=? AND run_id=? AND day=? AND card_kind='item'
+             AND card_id IN ({placeholders})
+           ORDER BY slot_position, card_id'''.format(
+               placeholders=','.join('?' for _ in wanted) or "NULL"
+           ),
+        (version_id, representative_run, day, *sorted(wanted)),
+    ).fetchall()
+    positions = {row['card_id']: int(row['slot_position']) for row in rows}
+    cards = _day_stats_cards([row['card_id'] for row in rows])
+    by_id = {card['cardId']: card for card in cards}
+    ordered = []
+    for card_id in sorted(wanted, key=lambda value: (positions.get(value, -1), value)):
+        card = dict(by_id.get(card_id) or _day_stats_cards([card_id])[0])
+        card['slot_position'] = positions.get(card_id, -1)
+        ordered.append(card)
+    return ordered
+
+
+def _daily_node_associated_skills(conn, version_id, day, run_ids, limit=8):
+    """Rank skills observed in the node's real member snapshots."""
+    if not run_ids:
+        return []
+    rows = _day_stats_batched_rows(
+        conn,
+        '''SELECT card_id, COUNT(DISTINCT run_id) AS support_runs
+           FROM final_composition_cards
+           WHERE version_id=? AND day=? AND card_kind='skill'
+             AND run_id IN ({placeholders})
+           GROUP BY card_id
+           ORDER BY support_runs DESC, card_id''',
+        (version_id, day), sorted(run_ids),
+    )
+    total = len(run_ids)
+    return [
+        {"card_id": row["card_id"], "support_runs": int(row["support_runs"]),
+         "support_rate": int(row["support_runs"]) / total if total else 0.0}
+        for row in rows[:limit]
+    ]
+
+
 def _track_feature(feature, page, outcome):
     try:
         ip = _masked_client_ip()
@@ -784,6 +857,9 @@ def after_request(response):
         ('GET', '/api/comp/card'): ('comp_card_query', 'runs'),
         ('GET', '/api/hero_overview'): ('hero_overview', 'topcard'),
         ('GET', '/api/routes/daily'): ('routes_query', 'routes'),
+        ('GET', '/api/routes/daily/node'): ('routes_node_detail', 'routes'),
+        ('GET', '/api/routes/daily/nodes/<node_id>'): ('routes_node_detail', 'routes'),
+        ('POST', '/api/routes/daily/expand'): ('routes_expand', 'routes'),
         ('GET', '/api/routes/daily/summary'): ('routes_summary', 'routes'),
         ('GET', '/api/routes/latest'): ('routes_latest', 'routes'),
         ('GET', '/api/routes/cores'): ('routes_cores', 'routes'),
@@ -1108,6 +1184,156 @@ def _day_stats_core_route_response(core_id):
         conn.close()
 
 
+
+
+_ROUTE_SHARE_ID_RE = re.compile(r'^[A-Za-z0-9_-]{16,64}$')
+
+
+def _route_share_db():
+    conn = _sqlite3.connect(STATS_DB, timeout=5)
+    conn.row_factory = _sqlite3.Row
+    return conn
+
+
+def _route_share_snapshot(row):
+    snapshot = json.loads(row['snapshot_json'])
+    snapshot.update({
+        'share_id': row['share_id'],
+        'share_type': row['share_type'],
+        'version_id': row['version_id'],
+        'hero': row['hero'],
+        'created_at': row['created_at'],
+        'open_count': row['open_count'],
+        'expand_count': row['expand_count'],
+    })
+    return snapshot
+
+
+@app.route('/api/routes/share', methods=['POST'])
+def api_routes_share_create():
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict) or data.get('share_type') not in {'node', 'route'}:
+        return jsonify({'error': 'share_type must be node or route'}), 400
+    share_type = data['share_type']
+    version = str(data.get('version') or '').strip()
+    hero = str(data.get('hero') or '').strip()
+    day_raw = data.get('day') if share_type == 'node' else data.get('start_day', data.get('day'))
+    node_id = str(data.get('node_id') or '').strip()
+    if (not _valid_day_stats_version(version) or not _valid_day_stats_hero(hero)
+            or isinstance(day_raw, bool) or not isinstance(day_raw, int) or not 1 <= day_raw <= 99):
+        return jsonify({'error': 'invalid share request'}), 400
+    paths = None
+    if share_type == 'route':
+        paths = data.get('paths')
+        if not isinstance(paths, list) or not paths or len(paths) > 64:
+            return jsonify({'error': 'route paths must contain 1 to 64 paths'}), 400
+        normalized_paths = []
+        for path in paths:
+            if not isinstance(path, list) or not path or len(path) > 16:
+                return jsonify({'error': 'each route path must contain 1 to 16 nodes'}), 400
+            normalized = []
+            for item in path:
+                if not isinstance(item, dict):
+                    return jsonify({'error': 'invalid route path node'}), 400
+                item_day = item.get('day')
+                item_node = str(item.get('node_id') or '').strip()
+                if (isinstance(item_day, bool) or not isinstance(item_day, int)
+                        or not 1 <= item_day <= 99 or not _valid_day_stats_core_id(item_node)):
+                    return jsonify({'error': 'invalid route path node'}), 400
+                normalized.append({'day': item_day, 'node_id': item_node})
+            normalized_paths.append(normalized)
+        paths = normalized_paths
+        if not node_id:
+            node_id = paths[0][0]['node_id']
+    elif not _valid_day_stats_core_id(node_id):
+        return jsonify({'error': 'invalid node share request'}), 400
+    conn = None
+    try:
+        stats_conn = _day_stats_connection()
+        try:
+            metadata = _day_stats_cached_metadata(stats_conn, version)
+            if metadata is None:
+                return jsonify({'error': 'version not found'}), 404
+            if share_type == 'node':
+                node = _daily_route_node_row(stats_conn, metadata['version_id'], hero, day_raw, node_id)
+                if node is None:
+                    return jsonify({'error': 'node not found'}), 404
+            else:
+                for path in paths:
+                    for item in path:
+                        node = _daily_route_node_row(
+                            stats_conn, metadata['version_id'], hero, item['day'], item['node_id']
+                        )
+                        if node is None:
+                            return jsonify({'error': 'route contains node not found'}), 404
+        finally:
+            stats_conn.close()
+        share_id = secrets.token_urlsafe(18)
+        created_at = datetime.utcnow().isoformat(timespec='seconds') + 'Z'
+        snapshot = ({'day': day_raw, 'node_id': node_id} if share_type == 'node'
+                    else {'start_day': day_raw, 'node_id': node_id, 'paths': paths})
+        conn = _route_share_db()
+        conn.execute('''INSERT INTO route_shares
+            (share_id, share_type, version_id, hero, start_day, node_id,
+             snapshot_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
+            (share_id, share_type, metadata['version_id'], hero, day_raw, node_id,
+             json.dumps(snapshot, ensure_ascii=False, separators=(',', ':')), created_at))
+        conn.commit()
+        return jsonify({'share_id': share_id, 'share_type': share_type,
+                        'version_id': metadata['version_id'], 'hero': hero,
+                        'start_day': day_raw, 'day': day_raw, 'node_id': node_id}), 201
+    except _sqlite3.Error:
+        if conn:
+            conn.rollback()
+        return jsonify({'error': 'share storage unavailable'}), 503
+    finally:
+        if conn:
+            conn.close()
+
+
+@app.route('/api/routes/share/<share_id>/event', methods=['POST'])
+def api_routes_share_event(share_id):
+    if not _ROUTE_SHARE_ID_RE.fullmatch(share_id or ''):
+        return jsonify({'error': 'share not found'}), 404
+    data = request.get_json(silent=True) or {}
+    event_type = data.get('event_type')
+    if event_type not in {'image_generated', 'image_downloaded', 'route_expanded'}:
+        return jsonify({'error': 'invalid share event'}), 400
+    conn = _route_share_db()
+    try:
+        row = conn.execute('SELECT share_type FROM route_shares WHERE share_id=?', (share_id,)).fetchone()
+        if row is None:
+            return jsonify({'error': 'share not found'}), 404
+        now = datetime.utcnow().isoformat(timespec='seconds') + 'Z'
+        conn.execute('INSERT INTO route_share_events (share_id,event_type,created_at) VALUES (?,?,?)',
+                     (share_id, event_type, now))
+        if event_type == 'route_expanded':
+            conn.execute('UPDATE route_shares SET expand_count=expand_count+1 WHERE share_id=?', (share_id,))
+        conn.commit()
+        return jsonify({'ok': True}), 201
+    finally:
+        conn.close()
+
+
+@app.route('/api/routes/share/<share_id>', methods=['GET'])
+def api_routes_share_read(share_id):
+    if not _ROUTE_SHARE_ID_RE.fullmatch(share_id or ''):
+        return jsonify({'error': 'share not found'}), 404
+    conn = _route_share_db()
+    try:
+        now = datetime.utcnow().isoformat(timespec='seconds') + 'Z'
+        cursor = conn.execute('''UPDATE route_shares
+            SET open_count=open_count+1, last_accessed_at=? WHERE share_id=?''', (now, share_id))
+        if cursor.rowcount != 1:
+            conn.rollback()
+            return jsonify({'error': 'share not found'}), 404
+        row = conn.execute('SELECT * FROM route_shares WHERE share_id=?', (share_id,)).fetchone()
+        conn.commit()
+        return jsonify(_route_share_snapshot(row))
+    finally:
+        conn.close()
+
+
 @app.route('/api/routes/daily', methods=['GET'])
 @routes_rate_limit
 def api_routes_daily():
@@ -1132,12 +1358,12 @@ def _day_stats_daily_response():
     day_raw = request.args.get('day', '').strip()
     if not _valid_day_stats_hero(hero):
         return jsonify({'error': 'invalid hero'}), 400
-    if not day_raw.isdigit() or not 1 <= int(day_raw) <= 16:
-        return jsonify({'error': 'day must be between 1 and 16'}), 400
+    if not day_raw.isdigit() or not 1 <= int(day_raw) <= 99:
+        return jsonify({'error': 'day must be between 1 and 99'}), 400
     if not _valid_day_stats_version(version):
         return _day_stats_invalid_version_response()
     day = int(day_raw)
-    cache_key = _day_stats_result_cache_key(version, 'daily-v5', hero, day)
+    cache_key = _day_stats_result_cache_key(version, 'daily-v9', hero, day)
     cached = _day_stats_cache_get(cache_key)
     if cached is not None:
         return jsonify(cached)
@@ -1152,7 +1378,7 @@ def _day_stats_daily_response():
         # Cache against the immutable resolved version so a fresh "latest"
         # build cannot reuse a previous version's payload.
         resolved_cache_key = _day_stats_result_cache_key(
-            metadata['version_id'], 'daily-v5', hero, day
+            metadata['version_id'], 'daily-v9', hero, day
         )
         cached = _day_stats_cache_get(resolved_cache_key)
         if cached is not None:
@@ -1162,9 +1388,9 @@ def _day_stats_daily_response():
                     core_support_rate, representative_items
                     FROM daily_archetype_nodes
                     WHERE version_id=? AND hero=? AND day=?
-                      AND core_items!='[]' AND core_support_rate>=0.5
                     ORDER BY rank, node_id''', (metadata['version_id'], hero, day)).fetchall()]
-        for node in nodes:
+        for display_rank, node in enumerate(nodes, start=1):
+            node['rank'] = display_rank
             node['core_items'] = json.loads(node['core_items'])
             node['representative_items'] = json.loads(node['representative_items'])
             node['cards'] = _day_stats_cards(node['core_items'])
@@ -1174,6 +1400,9 @@ def _day_stats_daily_response():
                 (metadata['version_id'], node['node_id'])).fetchall()]
             for card in node['card_stats']:
                 card['display'] = _day_stats_cards([card['card_id']])[0]
+            node['signature_cards'] = _daily_route_representative_cards(
+                conn, metadata['version_id'], node['node_id'], node['run_count'], node['core_items']
+            )
         node_ids = [node['node_id'] for node in nodes]
         edges = []
         if node_ids:
@@ -1185,7 +1414,6 @@ def _day_stats_daily_response():
                     JOIN daily_archetype_nodes child
                       ON child.version_id=e.version_id AND child.node_id=e.child_node_id
                     WHERE e.version_id=? AND e.parent_day=?
-                      AND child.core_items!='[]' AND child.core_support_rate>=0.5
                     ORDER BY e.transition_rate DESC, e.run_count DESC''',
                     (metadata['version_id'], day)).fetchall()
             edges = [dict(row) for row in rows if row['parent_node_id'] in node_ids]
@@ -1258,6 +1486,382 @@ def _day_stats_daily_response():
         conn.close()
 
 
+def _daily_route_node_row(conn, version_id, hero, day, node_id):
+    return conn.execute('''SELECT day, node_id, rank, run_count, day_observable_runs,
+            day_share, core_items, core_support_runs, core_support_rate, representative_items
+        FROM daily_archetype_nodes
+        WHERE version_id=? AND hero=? AND day=? AND node_id=?''',
+        (version_id, hero, day, node_id)).fetchone()
+
+
+def _daily_route_representative_cards(conn, version_id, node_id, run_count, core_items):
+    """Choose 1-3 stable high-frequency cards for nodes without a formal core."""
+    if core_items or not run_count:
+        return []
+    rows = [dict(row) for row in conn.execute('''SELECT card_id, support_runs, support_rate
+        FROM daily_archetype_cards
+        WHERE version_id=? AND node_id=? AND role!='core'
+        ORDER BY support_rate DESC, support_runs DESC, card_id''',
+        (version_id, node_id)).fetchall()]
+    minimum_support = max(2, math.ceil(math.sqrt(run_count)))
+    ranked = []
+    z = 1.28
+    for row in rows:
+        support = int(row['support_runs'])
+        if support < minimum_support:
+            continue
+        rate = float(row['support_rate'])
+        denominator = 1 + z * z / run_count
+        centre = rate + z * z / (2 * run_count)
+        margin = z * math.sqrt((rate * (1 - rate) + z * z / (4 * run_count)) / run_count)
+        row['stability_score'] = (centre - margin) / denominator
+        ranked.append(row)
+    if not ranked:
+        return []
+    threshold = max(0.08, ranked[0]['stability_score'] * 0.5)
+    selected = [row for row in ranked if row['stability_score'] >= threshold][:3]
+    for row in selected:
+        row['display'] = _day_stats_cards([row['card_id']])[0]
+    return selected
+
+
+def _daily_route_member_runs(conn, version_id, day, node_id):
+    return {row['run_id'] for row in conn.execute('''SELECT run_id
+        FROM daily_archetype_members WHERE version_id=? AND day=? AND node_id=?''',
+        (version_id, day, node_id)).fetchall()}
+
+
+_DAILY_ROUTE_MAX_PATHS = 64
+_DAILY_ROUTE_MAX_PATH_LENGTH = 16
+_DAILY_ROUTE_MAX_TOTAL_NODES = 256
+
+
+def _daily_route_validate_path_cost(raw_paths):
+    """Bound attacker-controlled work before opening the statistics database."""
+    if not isinstance(raw_paths, list) or not raw_paths:
+        raise ValueError('paths must be a non-empty array')
+    if len(raw_paths) > _DAILY_ROUTE_MAX_PATHS:
+        raise ValueError(f'paths may contain at most {_DAILY_ROUTE_MAX_PATHS} paths')
+    total_nodes = 0
+    for raw_path in raw_paths:
+        if not isinstance(raw_path, list) or not raw_path:
+            raise ValueError('each path must be a non-empty array')
+        if len(raw_path) > _DAILY_ROUTE_MAX_PATH_LENGTH:
+            raise ValueError(
+                f'each path may contain at most {_DAILY_ROUTE_MAX_PATH_LENGTH} nodes'
+            )
+        total_nodes += len(raw_path)
+        if total_nodes > _DAILY_ROUTE_MAX_TOTAL_NODES:
+            raise ValueError(
+                f'paths may contain at most {_DAILY_ROUTE_MAX_TOTAL_NODES} total nodes'
+            )
+
+
+def _daily_route_node_rows(conn, version_id, hero):
+    rows = conn.execute('''SELECT day, node_id, rank, run_count, day_observable_runs,
+            day_share, core_items, core_support_runs, core_support_rate, representative_items
+        FROM daily_archetype_nodes WHERE version_id=? AND hero=?''',
+        (version_id, hero)).fetchall()
+    by_key = {(int(row['day']), row['node_id']): row for row in rows}
+    days_by_node = defaultdict(list)
+    for row in rows:
+        days_by_node[row['node_id']].append(int(row['day']))
+    return by_key, days_by_node
+
+
+def _daily_route_member_map(conn, version_id, node_keys):
+    members = defaultdict(set)
+    keys = sorted(set(node_keys))
+    # Two bind variables per key plus version_id; stay below conservative
+    # SQLite variable limits while retaining a constant number of queries.
+    for start in range(0, len(keys), 400):
+        batch = keys[start:start + 400]
+        predicates = ' OR '.join('(day=? AND node_id=?)' for _ in batch)
+        params = [version_id]
+        for day, node_id in batch:
+            params.extend((day, node_id))
+        for row in conn.execute(f'''SELECT day, node_id, run_id
+            FROM daily_archetype_members
+            WHERE version_id=? AND ({predicates})''', params).fetchall():
+            members[(int(row['day']), row['node_id'])].add(row['run_id'])
+    return members
+
+
+def _daily_route_parse_paths(raw_paths, conn, version_id, hero):
+    _daily_route_validate_path_cost(raw_paths)
+    node_rows, days_by_node = _daily_route_node_rows(conn, version_id, hero)
+    parsed = []
+    seen_paths = set()
+    current = None
+    origin = None
+    for raw_path in raw_paths:
+        path = []
+        previous_day = None
+        for index, raw_node in enumerate(raw_path):
+            if isinstance(raw_node, dict):
+                node_id = str(raw_node.get('node_id') or '').strip()
+                day = raw_node.get('day')
+                if not isinstance(day, int) or isinstance(day, bool):
+                    raise ValueError('path node day must be an integer')
+            else:
+                node_id = str(raw_node).strip()
+                candidates = days_by_node.get(node_id, ())
+                if len(candidates) != 1:
+                    raise ValueError('path node must resolve to exactly one day')
+                day = candidates[0]
+            if not _valid_day_stats_core_id(node_id) or (day, node_id) not in node_rows:
+                raise ValueError('path node not found')
+            if index and day <= previous_day:
+                raise ValueError('path days must be strictly increasing')
+            path.append((day, node_id))
+            previous_day = day
+        endpoint = path[-1]
+        if origin is None:
+            origin = path[0]
+        elif path[0] != origin:
+            raise ValueError('all paths must start at the same node')
+        if current is None:
+            current = endpoint
+        elif endpoint != current:
+            raise ValueError('all paths must end at the same node')
+        canonical = tuple(path)
+        if canonical not in seen_paths:
+            seen_paths.add(canonical)
+            parsed.append(path)
+    return parsed, current
+
+
+def _daily_route_path_runs(member_map, observed_days, path):
+    runs = None
+    for index, node_key in enumerate(path):
+        node_runs = member_map.get(node_key, set())
+        runs = set(node_runs) if runs is None else runs & node_runs
+        if index:
+            previous_day = path[index - 1][0]
+            target_day = node_key[0]
+            runs = {
+                run_id for run_id in runs
+                if next((day for day in observed_days.get(run_id, ()) if day > previous_day), None)
+                == target_day
+            }
+    return runs or set()
+
+
+@app.route('/api/routes/daily/node', methods=['GET'])
+@app.route('/api/routes/daily/nodes/<node_id>', methods=['GET'])
+@routes_rate_limit
+def api_routes_daily_node(node_id=None):
+    version = (request.args.get('version') or 'latest').strip()
+    hero = request.args.get('hero', '').strip()
+    day_raw = request.args.get('day', '').strip()
+    node_id = node_id or request.args.get('node_id', '').strip()
+    if (not _valid_day_stats_version(version) or not _valid_day_stats_hero(hero)
+            or not day_raw.isdigit() or not 1 <= int(day_raw) <= 99
+            or not _valid_day_stats_core_id(node_id)):
+        return jsonify({'error': 'invalid node detail request'}), 400
+    day = int(day_raw)
+    metadata = _day_stats_cache_get(_day_stats_metadata_cache_key(version))
+    if metadata is not None:
+        cache_key = _day_stats_result_cache_key(
+            metadata['version_id'], 'daily-node-v4', hero, day, node_id
+        )
+        cached = _day_stats_cache_get(cache_key)
+        if cached is not None:
+            return jsonify(cached)
+    try:
+        conn = _day_stats_connection()
+    except (_sqlite3.Error, OSError):
+        return jsonify({'error': 'day stats database unavailable'}), 503
+    try:
+        metadata = _day_stats_cached_metadata(conn, version)
+        if metadata is None:
+            return jsonify({'error': 'version not found'}), 404
+        cache_key = _day_stats_result_cache_key(
+            metadata['version_id'], 'daily-node-v4', hero, day, node_id
+        )
+        cached = _day_stats_cache_get(cache_key)
+        if cached is not None:
+            return jsonify(cached)
+        row = _daily_route_node_row(conn, metadata['version_id'], hero, day, node_id)
+        if row is None:
+            return jsonify({'error': 'node not found'}), 404
+        node = dict(row)
+        node['core_items'] = json.loads(node['core_items'])
+        node['representative_items'] = json.loads(node['representative_items'])
+        member_runs = _daily_route_member_runs(conn, metadata['version_id'], day, node_id)
+        snapshots = {}
+        if member_runs:
+            for snapshot in _day_stats_batched_rows(
+                conn,
+                '''SELECT run_id, item_signature FROM final_compositions
+                   WHERE version_id=? AND day=? AND run_id IN ({placeholders})''',
+                (metadata['version_id'], day), sorted(member_runs),
+            ):
+                snapshots[snapshot['run_id']] = frozenset(json.loads(snapshot['item_signature']))
+        rankings = _build_daily_node_rankings(node['core_items'], snapshots)
+        node['global_run_count'] = rankings['node_global_runs']
+        node['cards'] = _day_stats_cards(node['core_items'])
+        node['signature_cards'] = _daily_route_representative_cards(
+            conn, metadata['version_id'], node_id, node['run_count'], node['core_items']
+        )
+        recommendations = []
+        for item in rankings['recommended_compositions']:
+            recommendations.append({
+                'item_ids': item['items'],
+                'cards': _daily_recommendation_cards(
+                    conn, metadata['version_id'], day,
+                    item.get('representative_run'), item['items']
+                ),
+                'run_count': item['run_count'], 'rate': item['rate'],
+            })
+        associated = rankings['associated_cards']
+        for card in associated:
+            card['display'] = _day_stats_cards([card['card_id']])[0]
+        associated_skills = _daily_node_associated_skills(
+            conn, metadata['version_id'], day, member_runs
+        )
+        for skill in associated_skills:
+            skill['display'] = _day_stats_cards([skill['card_id']])[0]
+        payload = _day_stats_envelope(
+            metadata, hero=hero, day=day, node=node,
+            recommended_compositions=recommendations, associated_cards=associated,
+            associated_skills=associated_skills,
+        )
+        _day_stats_cache_set(cache_key, payload, _DAY_STATS_VERSION_TTL)
+        return jsonify(payload)
+    finally:
+        conn.close()
+
+
+@app.route('/api/routes/daily/expand', methods=['GET', 'POST'])
+@routes_rate_limit
+def api_routes_daily_expand():
+    data = request.get_json(silent=True) if request.method == 'POST' else None
+    data = data if isinstance(data, dict) else request.args
+    version = str(data.get('version') or 'latest').strip()
+    hero = str(data.get('hero') or '').strip()
+    raw_paths = data.get('paths')
+    if isinstance(raw_paths, str):
+        try:
+            raw_paths = json.loads(raw_paths)
+        except ValueError:
+            return jsonify({'error': 'paths must be valid JSON'}), 400
+    if not _valid_day_stats_version(version) or not _valid_day_stats_hero(hero):
+        return jsonify({'error': 'invalid path expansion request'}), 400
+    try:
+        _daily_route_validate_path_cost(raw_paths)
+    except ValueError as exc:
+        return jsonify({'error': str(exc)}), 400
+    try:
+        conn = _day_stats_connection()
+    except (_sqlite3.Error, OSError):
+        return jsonify({'error': 'day stats database unavailable'}), 503
+    try:
+        metadata = _day_stats_cached_metadata(conn, version)
+        if metadata is None:
+            return jsonify({'error': 'version not found'}), 404
+        try:
+            paths, current = _daily_route_parse_paths(
+                raw_paths, conn, metadata['version_id'], hero
+            )
+        except ValueError as exc:
+            return jsonify({'error': str(exc)}), 400
+        current_day, current_node_id = current
+        member_map = _daily_route_member_map(
+            conn, metadata['version_id'],
+            (node_key for path in paths for node_key in path),
+        )
+        candidate_runs = set().union(*member_map.values()) if member_map else set()
+        observed_days = defaultdict(list)
+        if candidate_runs:
+            for row in _day_stats_batched_rows(
+                conn,
+                '''SELECT run_id, day FROM daily_archetype_members
+                   WHERE version_id=? AND run_id IN ({placeholders})
+                   ORDER BY run_id, day''',
+                (metadata['version_id'],), sorted(candidate_runs),
+            ):
+                observed_days[row['run_id']].append(int(row['day']))
+        path_runs_by_index = []
+        path_runs = set()
+        for path in paths:
+            runs = _daily_route_path_runs(member_map, observed_days, path)
+            if len(path) > 1 and not runs:
+                return jsonify({'error': 'path transition is not a next observed Day'}), 400
+            path_runs_by_index.append(runs)
+            path_runs.update(runs)
+        next_members = defaultdict(set)
+        # Branches belong to the current node, not to the intersection of the
+        # paths selected by the caller. The selected paths are only annotations
+        # (path_run_count/path_indexes); using path_runs here hides legitimate
+        # late transformations that diverge from an earlier displayed path.
+        current_node_runs = member_map.get((current_day, current_node_id), set())
+        branch_runs = current_node_runs
+        if branch_runs:
+            for row in _day_stats_batched_rows(
+                conn,
+                '''SELECT m.node_id, m.day, m.run_id
+                   FROM daily_archetype_members m
+                   JOIN (
+                       SELECT version_id, run_id, MIN(day) AS next_day
+                       FROM daily_archetype_members
+                       WHERE version_id=? AND day>? AND run_id IN ({placeholders})
+                       GROUP BY version_id, run_id
+                   ) next ON next.run_id=m.run_id AND next.next_day=m.day
+                          AND m.version_id=next.version_id''',
+                (metadata['version_id'], current_day),
+                sorted(branch_runs),
+            ):
+                next_members[(int(row['day']), row['node_id'])].add(row['run_id'])
+        observable_runs = set().union(*next_members.values()) if next_members else set()
+        observable = len(observable_runs)
+        threshold = min(15, max(3, math.ceil(observable * 0.03)))
+        branches = []
+        visible_runs = set()
+        for (target_day, child_node_id), runs in next_members.items():
+            if len(runs) < threshold:
+                continue
+            child = _daily_route_node_row(
+                conn, metadata['version_id'], hero, target_day, child_node_id
+            )
+            if child is None:
+                continue
+            child = dict(child)
+            child['core_items'] = json.loads(child['core_items'])
+            child['representative_items'] = json.loads(child['representative_items'])
+            child['cards'] = _day_stats_cards(child['core_items'])
+            child['signature_cards'] = _daily_route_representative_cards(
+                conn, metadata['version_id'], child_node_id, child['run_count'], child['core_items']
+            )
+            count = len(runs)
+            branches.append({
+                'node': child, 'node_id': child_node_id, 'day': target_day,
+                'target_day': target_day, 'day_gap': target_day - current_day,
+                'skipped_days': target_day - current_day - 1,
+                'is_gap': target_day > current_day + 1,
+                'path_run_count': count,
+                'transition_rate': count / observable if observable else 0.0,
+                'path_indexes': [
+                    index for index, path_runs_for_index in enumerate(path_runs_by_index)
+                    if path_runs_for_index & runs
+                ],
+            })
+            visible_runs.update(runs)
+        branches.sort(key=lambda row: (
+            -row['path_run_count'], row['target_day'], row['node_id']
+        ))
+        payload = _day_stats_envelope(
+            metadata, hero=hero, current_day=current_day,
+            current_node_id=current_node_id, path_run_count=len(path_runs),
+            path_observable_runs=observable, display_threshold=threshold,
+            branches=branches, hidden_run_count=observable - len(visible_runs),
+            visible_coverage_rate=len(visible_runs) / observable if observable else 0.0,
+        )
+        return jsonify(payload)
+    finally:
+        conn.close()
+
+
 @app.route('/api/routes/daily/summary', methods=['GET'])
 @routes_rate_limit
 def api_routes_daily_summary():
@@ -1267,7 +1871,7 @@ def api_routes_daily_summary():
         return jsonify({'error': 'invalid hero'}), 400
     if not _valid_day_stats_version(version):
         return _day_stats_invalid_version_response()
-    cache_key = _day_stats_result_cache_key(version, 'daily-summary-v5', hero)
+    cache_key = _day_stats_result_cache_key(version, 'daily-summary-v7', hero)
     cached = _day_stats_cache_get(cache_key)
     if cached is not None:
         return jsonify(cached)
@@ -1280,7 +1884,7 @@ def api_routes_daily_summary():
         if error:
             return error
         resolved_cache_key = _day_stats_result_cache_key(
-            metadata['version_id'], 'daily-summary-v5', hero
+            metadata['version_id'], 'daily-summary-v7', hero
         )
         cached = _day_stats_cache_get(resolved_cache_key)
         if cached is not None:
@@ -1290,9 +1894,15 @@ def api_routes_daily_summary():
                     core_support_rate, representative_items
                     FROM daily_archetype_nodes
                     WHERE version_id=? AND hero=?
-                      AND core_items!='[]' AND core_support_rate>=0.5
                     ORDER BY day, rank''', (metadata['version_id'], hero)).fetchall()]
+        next_display_rank = None
+        display_rank = 0
         for row in rows:
+            if next_display_rank != row['day']:
+                next_display_rank = row['day']
+                display_rank = 0
+            display_rank += 1
+            row['rank'] = display_rank
             row['core_items'] = json.loads(row['core_items'])
             row['representative_items'] = json.loads(row['representative_items'])
             row['cards'] = _day_stats_cards(row['core_items'])
@@ -2264,6 +2874,13 @@ def partner_page():
 def topcard_page():
     return send_from_directory('static', 'topcard.html')
 
+@app.route('/share/routes/<share_id>')
+def routes_share_page(share_id):
+    if not _ROUTE_SHARE_ID_RE.fullmatch(share_id or ''):
+        return jsonify({'error': 'share not found'}), 404
+    return send_from_directory('static', 'routes-share.html')
+
+
 @app.route('/routes')
 def routes_page():
     return send_from_directory('static', 'routes.html')
@@ -2701,4 +3318,9 @@ def internal_error(e):
 
 if __name__ == '__main__':
     # 单个慢统计请求不能阻塞其它页面/API 请求。
-    app.run(host='0.0.0.0', port=1027, debug=False, threaded=True)
+    app.run(
+        host=os.getenv('WEB_HOST', '0.0.0.0'),
+        port=int(os.getenv('WEB_PORT', '1027')),
+        debug=False,
+        threaded=True,
+    )

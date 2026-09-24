@@ -4,12 +4,11 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>阵容路线 | 巴扎丘Bot</title>
-  <meta name="description" content="查看 The Bazaar 传奇10胜阵容从前期到后期的逐日演变路线。">
-  <meta name="keywords" content="The Bazaar,巴扎,阵容路线,阵容演变,传奇10胜">
+  <meta name="description" content="查看 The Bazaar 传奇10胜阵容逐日演变路线。">
   <meta name="robots" content="index, follow">
   <link rel="canonical" href="https://bazaarqiubot.com/routes">
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐉</text></svg>">
-  <link rel="stylesheet" href="/static/routes.css?v=20260921a">
+  <link rel="stylesheet" href="static/routes.css?v=20260924-node-share">
 </head>
 <body>
 <nav class="navbar">
@@ -21,93 +20,30 @@
     <a href="/feedback" class="nav-tab">意见反馈</a><a href="/support" class="nav-tab">支持</a>
   </div>
 </nav>
-
 <main class="main">
   <header class="hero">
-    <div>
-      <span class="eyebrow">DAILY BUILD EVOLUTION</span>
-      <h1>阵容是怎样一步步成型的？</h1>
-      <p>先看某一天的主流阵容，再沿真实对局观察它下一天最常演变成什么。每条分支都由同一批 Run 的每日最终快照统计。</p>
-    </div>
-    <a class="hero-link" href="/runs">查看真实阵容 →</a>
+    <div><span class="eyebrow">DAILY BUILD MAP</span><h1>沿着真实对局，展开阵容成长路线</h1><p>选择一个当天核心阵容，从下一天开始逐层展开。多条路线抵达同一阵容时会汇入同一个节点。</p></div>
   </header>
-
-  <section class="scope-note">
-    <strong>统计口径</strong>
-    <span>当前版本 · 传奇段位 · 最终 10 胜；同一 Run/Day 只取最后一次快照。品质、附魔和槽位不参与阵容归类。</span>
-    <button id="details-toggle" type="button" aria-expanded="false">怎么看？</button>
-  </section>
-  <section id="details-panel" class="details-panel" hidden>
-    每个阵容由 1–5 张在同一批 Run 中稳定共现的核心卡描述。后续路线先过滤低样本，再按 80% 核心包含率合并近似变体，最多展示三个差异方向；隐藏路线仍保留在原始分母中。点击方向可查看真实代表阵容、关联牌排行、常见变体和到达 Day 分布。
-  </section>
-
+  <section class="scope-note"><strong>统计口径</strong><span>当前版本 · 传奇段位 · 最终10胜 · 每个 Run/Day 最后快照；每个 Run 连接下一次真实观测 Day。</span><button id="details-toggle" type="button" aria-expanded="false">怎么看？</button></section>
+  <section id="details-panel" class="details-panel" hidden>节点是当天的全局阵容统计，连线是当前路径成员的下一次真实观测；虚线表示中间 Day 缺失。点击节点查看当天推荐阵容 Top 3 和关联牌 Top 8，使用节点按钮展开或收起路线。</section>
   <section class="toolbar" aria-label="路线筛选">
-    <label>职业
-      <select id="hero-select">
-        <option value="Vanessa">瓦内莎</option><option value="Dooley">杜利</option>
-        <option value="Mak">马克</option><option value="Pygmalien">皮格马利翁</option>
-        <option value="Stelle">斯黛尔</option><option value="Jules">朱尔斯</option>
-        <option value="Karnok">卡诺克</option><option value="The Dragons">双龙</option>
-      </select>
-    </label>
-    <div class="stage-key" aria-label="阶段划分">
-      <span class="early">前期 Day 1–3</span><span class="middle">中期 Day 4–7</span>
-      <span class="late">后期 Day 8–11</span><span class="very-late">大后期 Day 12+</span>
+    <label>职业<select id="hero-select"><option value="Vanessa">瓦内莎</option><option value="Dooley">杜利</option><option value="Mak">马克</option><option value="Pygmalien">皮格马利翁</option><option value="Stelle">斯黛尔</option><option value="Jules">朱尔斯</option><option value="Karnok">卡诺克</option><option value="The Dragons">双龙</option></select></label>
+    <div class="stage-key"><span class="early">前期 Day 1–3</span><span class="middle">中期 Day 4–7</span><span class="late">后期 Day 8–11</span><span class="very-late">大后期 Day 12+</span></div>
+  </section>
+  <section class="metadata"><div><span>数据截止</span><strong id="meta-cutoff">—</strong></div><div><span>传奇10胜局</span><strong id="meta-runs">—</strong></div><div><span>快照样本</span><strong id="meta-snapshots">—</strong></div><div><span>逐日终态</span><strong id="meta-finals">—</strong></div><div><span>统计版本</span><strong id="meta-version">—</strong></div></section>
+  <div id="status" class="status visible" aria-live="polite">正在载入路线数据…</div>
+  <section class="day-overview"><div class="section-heading"><div><span class="eyebrow">START POINT</span><h2>选择起始 Day 与核心阵容</h2></div><p>选择后画布默认展开下一次真实观测；同一 Day 只保留一个展开节点。</p></div><div id="day-tabs" class="day-tabs"></div><div id="archetype-list" class="archetype-list"></div></section>
+  <section id="route-workspace" class="route-workspace is-empty">
+    <div class="canvas-toolbar"><div><strong id="canvas-title">路线画布</strong><span id="canvas-summary">请选择起点</span></div><div class="canvas-actions"><button id="zoom-out" type="button" title="缩小">−</button><button id="zoom-in" type="button" title="放大">＋</button><button id="fit-view" type="button">适配视图</button><button id="reset-view" type="button">回到起点</button><button hidden id="share-route" type="button" title="路线分享暂未开放" aria-hidden="true">分享路线</button><button id="focus-view" type="button" aria-pressed="false">聚焦画板</button></div></div>
+    <div id="canvas-viewport" class="canvas-viewport" tabindex="0" aria-label="可拖拽阵容路线画布">
+      <div id="canvas-world" class="canvas-world"><svg id="route-edges" class="route-edges" aria-hidden="true"></svg><div id="route-nodes" class="route-nodes"></div></div>
+      <div id="canvas-empty" class="canvas-empty"><strong>先选择一套当天核心阵容</strong><span>画布会从起点开始绘制连续的逐日分支。</span></div>
     </div>
-  </section>
-
-  <section class="metadata" aria-label="数据版本">
-    <div><span>数据截止</span><strong id="meta-cutoff">—</strong></div>
-    <div><span>传奇10胜局</span><strong id="meta-runs">—</strong></div>
-    <div><span>快照样本</span><strong id="meta-snapshots">—</strong></div>
-    <div><span>逐日终态</span><strong id="meta-finals">—</strong></div>
-    <div class="version-meta"><span>统计版本</span><strong id="meta-version">—</strong></div>
-  </section>
-
-  <div id="status" class="status visible" aria-live="polite">正在载入逐日路线数据…</div>
-
-  <section class="day-overview" aria-labelledby="overview-title">
-    <div class="section-heading">
-      <div><span class="eyebrow">DAILY META</span><h2 id="overview-title">每天的主流阵容</h2></div>
-      <p>选择一个 Day，再选择一套阵容查看后续发展。</p>
-    </div>
-    <div id="day-tabs" class="day-tabs" role="tablist" aria-label="选择 Day"></div>
-  </section>
-
-  <section class="route-workspace">
-    <aside class="archetypes-panel">
-      <div class="panel-heading">
-        <div><span id="stage-label" class="stage-badge">前期</span><h2 id="day-title">Day 3 主流阵容</h2></div>
-        <span id="archetype-count" class="count-pill">0</span>
-      </div>
-      <p class="panel-help">出场率以当天有快照的传奇 10 胜局为分母。</p>
-      <div id="archetype-list" class="archetype-list"></div>
-    </aside>
-
-    <section class="evolution-panel">
-      <div class="panel-heading evolution-heading">
-        <div><span class="eyebrow">NEXT OBSERVED DAY</span><h2 id="evolution-title">选择一套阵容查看演变</h2></div>
-        <div class="change-legend"><span class="retained">＝保留核心</span><span class="added">＋新增核心</span><span class="removed">－退出核心</span></div>
-      </div>
-      <div id="evolution-content" class="empty-state">
-        <strong>从左侧选择一套主流阵容</strong>
-        <span>这里会显示它在真实对局中的下一步演变和统计依据。</span>
-      </div>
-    </section>
   </section>
 </main>
-
+<aside id="node-detail" class="node-detail" aria-hidden="true"><button id="detail-close" class="detail-close" type="button" aria-label="关闭详情">×</button><div id="detail-content"></div></aside><div id="detail-backdrop" class="detail-backdrop" hidden></div>
 <footer><a href="/static/privacy.html" target="_blank">隐私政策</a><span>© 2026 BazaarQiuBot</span></footer>
-<script>
-  // 阵容路线页面浏览量：页面访问使用既有 PV 统计链路，功能查询由后端 canonical API 记录。
-  window.addEventListener('DOMContentLoaded', () => {
-    fetch('/api/track/pv', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({tab: 'routes'})
-    }).catch(() => {});
-  });
-</script>
-<script src="/static/routes.js?v=20260921a" defer></script>
+<script>window.addEventListener('DOMContentLoaded',()=>{fetch('api/track/pv',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tab:'routes'})}).catch(()=>{});});</script>
+<script src="static/routes.js?v=20260924-node-share" defer></script>
 </body>
 </html>
