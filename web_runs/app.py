@@ -30,6 +30,7 @@ if _APP_DIR in _sys.path:
 _sys.path.insert(0, _APP_DIR)
 if '/opt/qiubot/web_runs' not in _sys.path:
     _sys.path.append('/opt/qiubot/web_runs')
+from feedback_utils import parse_feedback_page
 from ocr_worker import start_worker, enqueue_run
 
 # 启动 OCR 后台线程
@@ -1976,7 +1977,10 @@ def api_hero_overview():
 
 @app.route('/api/feedback', methods=['GET'])
 def api_feedback_list():
-    page = int(request.args.get('page', 1))
+    try:
+        page = parse_feedback_page(request.args.get('page', '1'))
+    except ValueError as exc:
+        return jsonify({'error': str(exc)}), 400
     per = 20
     offset = (page - 1) * per
     try:
