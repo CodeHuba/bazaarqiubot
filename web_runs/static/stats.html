@@ -368,7 +368,7 @@ setInterval(() => {
 .feedback-admin-head{display:flex;gap:10px;align-items:flex-start;margin-bottom:8px}
 .feedback-admin-content{flex:1;white-space:pre-wrap;line-height:1.6;color:#e2e8f0;font-size:14px;word-break:break-word}
 .feedback-status{padding:3px 9px;border-radius:999px;font-size:11px;font-weight:700;white-space:nowrap}
-.feedback-status-open{background:#422006;color:#fbbf24}.feedback-status-in_progress{background:#0c4a6e;color:#7dd3fc}.feedback-status-resolved{background:#064e3b;color:#6ee7b7}.feedback-status-hidden{background:#3f3f46;color:#d4d4d8}
+.feedback-status-open{background:#422006;color:#fbbf24}.feedback-status-in_progress{background:#0c4a6e;color:#7dd3fc}.feedback-status-resolved{background:#064e3b;color:#6ee7b7}.feedback-status-hidden{background:#3f3f46;color:#d4d4d8}.feedback-status-unknown{background:#3f3f46;color:#d4d4d8}
 .feedback-admin-meta{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:#6b7280;margin-bottom:10px}
 .feedback-admin-image{display:block;max-width:180px;max-height:120px;object-fit:contain;border-radius:6px;border:1px solid #374151;margin:8px 0}
 .feedback-admin-actions{display:grid;grid-template-columns:150px 1fr auto auto;gap:8px;align-items:start}
@@ -428,9 +428,9 @@ function renderFeedbackAdmin(data) {
       <div class="feedback-admin-item" id="feedback-admin-${item.id}">
         <div class="feedback-admin-head">
           <div class="feedback-admin-content">${escapeHtml(item.content)}</div>
-          <span class="feedback-status feedback-status-${item.status}">${labels[item.status] || item.status}</span>
+          <span class="feedback-status feedback-status-${labels[item.status] ? item.status : 'unknown'}">${labels[item.status] || '未知状态'}</span>
         </div>
-        ${item.image_path ? `<a href="${escapeHtml(item.image_path)}" target="_blank" rel="noopener"><img class="feedback-admin-image" src="${escapeHtml(item.image_path)}" alt="反馈截图"></a>` : ''}
+        ${item.image_path && /^\/static\/uploads\/[A-Za-z0-9._-]+$/.test(item.image_path) ? `<a href="${escapeHtml(item.image_path)}" target="_blank" rel="noopener"><img class="feedback-admin-image" src="${escapeHtml(item.image_path)}" alt="反馈截图"></a>` : ''}
         <div class="feedback-admin-meta">
           <span>#${item.id}</span><span>❤️ ${item.likes || 0}</span><span>💬 ${item.comment_count || 0}</span>
           <span>提交：${escapeHtml(item.created_at || '')}</span>

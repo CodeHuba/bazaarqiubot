@@ -14,9 +14,24 @@ def _connect(db_path):
 
 
 def migrate_feedback_schema(db_path):
-    """Add moderation metadata to an existing feedback database safely."""
+    """Create the base schema and add moderation metadata to existing databases."""
     conn = _connect(db_path)
     try:
+        conn.execute("""CREATE TABLE IF NOT EXISTS feedback (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            content TEXT NOT NULL,
+            image_path TEXT,
+            contact TEXT,
+            likes INTEGER NOT NULL DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )""")
+        conn.execute("""CREATE TABLE IF NOT EXISTS comments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            feedback_id INTEGER NOT NULL,
+            parent_id INTEGER,
+            content TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )""")
         columns = {row[1] for row in conn.execute("PRAGMA table_info(feedback)")}
         if "status" not in columns:
             conn.execute("ALTER TABLE feedback ADD COLUMN status TEXT NOT NULL DEFAULT 'open'")
@@ -25,6 +40,7 @@ def migrate_feedback_schema(db_path):
         if "updated_at" not in columns:
             conn.execute("ALTER TABLE feedback ADD COLUMN updated_at TEXT")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_feedback_status_time ON feedback(status, created_at DESC)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_comments_feedback ON comments(feedback_id)")
         conn.commit()
     finally:
         conn.close()

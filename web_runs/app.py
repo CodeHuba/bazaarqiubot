@@ -1999,7 +1999,7 @@ def api_feedback_list():
     try:
         conn = _fb_conn()
         rows = conn.execute(
-            "SELECT id, content, image_path, contact, likes, created_at "
+            "SELECT id, content, image_path, likes, created_at "
             "FROM feedback WHERE COALESCE(status, 'open') != 'hidden' "
             "ORDER BY likes DESC, created_at DESC LIMIT ? OFFSET ?",
             (per, offset)
@@ -2043,7 +2043,10 @@ def api_feedback_post():
         )
         fid = cur.lastrowid
         conn.commit()
-        row = conn.execute('SELECT * FROM feedback WHERE id=?', (fid,)).fetchone()
+        row = conn.execute(
+            'SELECT id, content, image_path, likes, created_at FROM feedback WHERE id=?',
+            (fid,)
+        ).fetchone()
         conn.close()
         _log_feedback_action('submit', fid, _mask_ip(request.headers.get('X-Forwarded-For', request.remote_addr)), g.fingerprint)
         return jsonify(dict(row)), 201
@@ -2064,8 +2067,9 @@ def admin_feedback_list():
         ))
     except ValueError as exc:
         return jsonify({'error': str(exc)}), 400
-    except Exception as exc:
-        return jsonify({'error': str(exc)}), 500
+    except Exception:
+        app.logger.exception('admin feedback list failed')
+        return jsonify({'error': '服务器内部错误'}), 500
 
 
 @app.route('/api/admin/feedback/<int:fid>', methods=['PUT'])
@@ -2082,8 +2086,9 @@ def admin_feedback_update(fid):
         return jsonify({'error': str(exc)}), 400
     except LookupError:
         return jsonify({'error': 'feedback not found'}), 404
-    except Exception as exc:
-        return jsonify({'error': str(exc)}), 500
+    except Exception:
+        app.logger.exception('admin feedback update failed')
+        return jsonify({'error': '服务器内部错误'}), 500
 
 
 @app.route('/api/admin/feedback/<int:fid>', methods=['DELETE'])
@@ -2091,12 +2096,13 @@ def admin_feedback_update(fid):
 def admin_feedback_delete(fid):
     try:
         deleted = delete_feedback(FEEDBACK_DB, fid)
-        remove_feedback_image(deleted.get('image_path'), UPLOAD_DIR)
-        return jsonify({'ok': True})
+        image_deleted = remove_feedback_image(deleted.get('image_path'), UPLOAD_DIR)
+        return jsonify({'ok': True, 'image_deleted': image_deleted})
     except LookupError:
         return jsonify({'error': 'feedback not found'}), 404
-    except Exception as exc:
-        return jsonify({'error': str(exc)}), 500
+    except Exception:
+        app.logger.exception('admin feedback delete failed')
+        return jsonify({'error': '服务器内部错误'}), 500
 
 
 @app.route('/api/feedback/<int:fid>/like', methods=['POST'])

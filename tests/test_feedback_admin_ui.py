@@ -32,3 +32,29 @@ def test_public_feedback_list_excludes_hidden_and_does_not_leak_admin_notes():
     ]
     assert "COALESCE(status, 'open') != 'hidden'" in public_section
     assert "admin_note" not in public_section
+    assert "contact" not in public_section
+
+
+def test_public_feedback_post_uses_a_field_allowlist():
+    source = APP_PY.read_text(encoding="utf-8")
+    post_section = source[
+        source.index("@app.route('/api/feedback', methods=['POST'])"):
+        source.index("@app.route('/api/admin/feedback', methods=['GET'])")
+    ]
+    assert "SELECT *" not in post_section
+    assert "admin_note" not in post_section
+    assert "SELECT id, content, image_path, likes, created_at" in post_section
+
+
+def test_feedback_schema_bootstraps_empty_database_and_comments_table(tmp_path):
+    import sqlite3
+    import sys
+    sys.path.insert(0, str(Path(__file__).parents[1] / "web_runs"))
+    from feedback_admin import migrate_feedback_schema
+
+    db = tmp_path / "empty-feedback.db"
+    migrate_feedback_schema(db)
+    conn = sqlite3.connect(db)
+    tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    conn.close()
+    assert {"feedback", "comments"} <= tables
