@@ -546,11 +546,33 @@ def get_quest_tooltips(item_data: dict, tier_name: str, db_path: "str | Path" = 
 
     for qg in quests:
         for entry in (qg.get("Entries") or []):
-            # 触发条件
+            # 任务目标：优先使用客户端为该任务条目提供的官方 Localization.Tooltips。
+            # 不能只根据 Trigger + Target 拼接；例如藏宝图的真实目标是
+            # “Visit or Fight 2 Gold-tier or higher encounters”，比“选择遭遇 x2”完整。
             trigger = entry.get("Trigger") or {}
             tname = get_trigger_name(trigger)
             target = entry.get("Target", 1)
             condition_text = f"{tname} x{target}" if target > 1 else tname
+            entry_loc = entry.get("Localization") or {}
+            official_goal_lines = []
+            from . import translations as _trans
+            for goal_tip in entry_loc.get("Tooltips") or []:
+                goal_content = goal_tip.get("Content") or {}
+                goal_text = goal_content.get("Text", "")
+                if not goal_text:
+                    continue
+                goal_key = goal_content.get("Key", "")
+                goal_zh = (
+                    _trans.get_zh_by_hash(goal_key) if goal_key else None
+                ) or _trans.get_tooltip_zh(goal_text) or goal_text
+                official_goal_lines.append(render_tooltip(
+                    goal_zh,
+                    abilities,
+                    auras,
+                    tier_attrs,
+                ))
+            if official_goal_lines:
+                condition_text = "；".join(dict.fromkeys(official_goal_lines))
 
             # 奖励
             reward = entry.get("Reward") or {}
