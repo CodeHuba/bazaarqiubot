@@ -77,6 +77,8 @@ ATTRIBUTE_UNIT_ZH = {
     "RageRemoveAmount": "狂怒",
     "TempoApplyAmount": "节奏",
     "TempoRemoveAmount": "节奏",
+    "TempoCost": "节奏",
+    "FlatTempoCostReduction": "节奏",
     "HealthMax": "生命值",
     "HealthRegen": "回复",
     "AmmoMax": "弹药",
@@ -318,12 +320,14 @@ def render_tooltip(
         "回复", "狂怒", "节奏", "生命值", "弹药", "暴击", "黄金", "经验",
     )
     base_placeholders = re.findall(r"\{(ability|aura)\.[^}.]+\}", text)
-    should_add_implicit_units = len(base_placeholders) >= 2
+    should_add_implicit_units = True
 
     def placeholder_unit(ph: str) -> str:
-        """返回基础 ability/aura 占位符对应的目标属性单位。"""
+        """返回占位符对应的目标属性单位。"""
         parts = ph.strip().split(".")
-        if len(parts) < 2 or (len(parts) > 2 and parts[2] in {"targets", "ref", "mod"}):
+        if len(parts) < 2:
+            return ATTRIBUTE_UNIT_ZH.get(ph.strip(), "")
+        if len(parts) > 2 and parts[2] in {"targets", "ref"}:
             return ""
         prefix, value_id = parts[0], parts[1]
         collection = abilities if prefix == "ability" else auras if prefix == "aura" else {}

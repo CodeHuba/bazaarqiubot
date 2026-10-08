@@ -39,7 +39,7 @@ def cache_needs_refresh(cached: dict, current_version: str) -> bool:
 
 
 # 当前 CDN 图片资源版本，可通过环境变量覆盖
-IMAGE_VERSION = os.getenv("CARD_IMAGE_VERSION", "18.0")
+IMAGE_VERSION = os.getenv("CARD_IMAGE_VERSION", "19.0")
 
 def preserve_cached_record_on_failure(cached: dict | None, error: str = "") -> dict | None:
     """刷新失败时保留旧记录，调用方可另行记录 error。"""
