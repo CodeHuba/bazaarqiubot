@@ -87,8 +87,20 @@ class RunsQuery:
                 _en = _info.get('internalName') or ''
                 if _en:
                     existing = self.card_mapping.get(_cid)
-                    if not isinstance(existing, dict) or not existing.get('name'):
-                        self.card_mapping[_cid] = {'name': _en, 'type': _info.get('type', '')}
+                    # card_images.json 是当前赛季的资源索引，优先于可能滞后的历史
+                    # card_id_mapping.json；同一 card_id 改名时，搜索必须同时接受新英文名。
+                    if not isinstance(existing, dict):
+                        existing = {}
+                    old_name = str(existing.get('name') or '')
+                    if old_name and old_name.lower().replace(' ', '') != _en.lower().replace(' ', ''):
+                        old_key = old_name.lower().replace(' ', '')
+                        old_ids = self.name_to_ids.get(old_key, [])
+                        self.name_to_ids[old_key] = [x for x in old_ids if x != _cid]
+                    self.card_mapping[_cid] = {
+                        **existing,
+                        'name': _en,
+                        'type': existing.get('type') or _info.get('type', ''),
+                    }
                     ids = self.name_to_ids.setdefault(_en.lower().replace(' ', ''), [])
                     if _cid not in ids:
                         ids.append(_cid)
