@@ -4,6 +4,9 @@ import sys
 from pathlib import Path
 from types import ModuleType
 
+import httpx
+import pytest
+
 
 MODULE_PATH = Path(__file__).resolve().parents[1] / "plugins" / "bazaar_plugin" / "data_client.py"
 
@@ -25,7 +28,7 @@ def _load_data_client(monkeypatch):
     return module
 
 
-def test_player_stat_chain_uses_season_19_without_changing_current_season(monkeypatch):
+def test_player_stat_chain_uses_season_20_without_changing_current_season(monkeypatch):
     module = _load_data_client(monkeypatch)
     captured = {}
 
@@ -58,4 +61,34 @@ def test_player_stat_chain_uses_season_19_without_changing_current_season(monkey
     asyncio.run(module.BazaarDataClient().get_player_stat("Koucha_"))
 
     assert module.CURRENT_SEASON_ID == 18
-    assert captured["params"] == {"username": "Koucha_", "seasonId": 19}
+    assert module.RUNS_SEASON_ID == 18
+    assert captured["url"] == "https://bazaarapi.mrmao.life/api/user/comprehensive-info"
+    assert captured["params"] == {"username": "Koucha_", "seasonId": 20}
+
+
+@pytest.mark.parametrize("command", ["stat", "history", "hist", "历史", "history --cb"])
+def test_player_commands_send_api_season_20(command, monkeypatch):
+    from test_bz_db_command import load_plugin_module, FakeEvent
+
+    module = load_plugin_module(monkeypatch)
+    plugin = module.BazaarPlugin()
+    plugin.client = module.BazaarDataClient()
+    captured = []
+    client_class = httpx.AsyncClient
+
+    def respond(request):
+        captured.append(dict(request.url.params))
+        return httpx.Response(200, json={"success": True, "data": {}})
+
+    transport = httpx.MockTransport(respond)
+    monkeypatch.setattr(
+        httpx,
+        "AsyncClient",
+        lambda **kwargs: client_class(transport=transport, **kwargs),
+    )
+
+    sub, _, flags = command.partition(" ")
+    result = asyncio.run(plugin._dispatch(sub, f"Koucha_ {flags}".strip(), FakeEvent()))
+
+    assert captured == [{"username": "Koucha_", "seasonId": "20"}]
+    assert "本赛季无记录" in result
