@@ -1,0 +1,21 @@
+'use strict';
+const $ = selector => document.querySelector(selector);
+const esc = value => String(value ?? '').replace(/[&<>"']/g,c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const statuses = {pending:'待审核',creating:'创建中',active:'已启用',failed:'收集失败',stopped:'已停止',rejected:'已拒绝',cancelled:'已取消',deleted:'已删除'};
+const actions = {approve:'批准',reject:'拒绝',rename:'改名',retry:'重试收集',cancel:'取消创建',stop:'停止收集',resume:'恢复收集',delete:'删除空间'};
+const allowed = {pending:['approve','reject','rename','cancel','delete'],creating:['rename','retry','cancel','stop','delete'],active:['rename','retry','stop','delete'],failed:['rename','retry','cancel','stop','delete'],stopped:['rename','resume','delete'],rejected:['delete'],cancelled:['delete'],deleted:[]};
+let requestId = 0;
+async function api(url,options = {}) { const response = await fetch(url,{credentials:'same-origin',...options}); const data = await response.json().catch(() => ({})); if (!response.ok) throw Error(response.status === 401 ? '管理身份已失效，请重新登录管理页面。' : data.error || `请求失败 (${response.status})`); return data; }
+async function loadSpaces() { const request = ++requestId; try { const data = await api('/api/admin/zaza/spaces'); if (request !== requestId) return; $('#admin-spaces').innerHTML = data.spaces.map(space => `<article class="run" data-id="${esc(space.id)}"><div class="run-head"><strong>${esc(space.name)}</strong><span>${esc(statuses[space.status] || space.status)}</span></div><p class="muted">${esc(space.profile_url || '')} · 更新 ${esc(space.updated_at || '')}</p>${space.collection_error ? `<p class="error">${esc(space.collection_error)}</p>` : ''}<a class="tag" href="/zaza#${encodeURIComponent(space.id)}">公开详情</a><div>${(allowed[space.status] || []).map(action => `<button class="secondary" data-action="${action}">${actions[action]}</button>`).join('')}</div></article>`).join('') || '<p class="muted">暂无空间申请</p>'; } catch (error) { if (request === requestId) $('#admin-error').textContent = error.message; } }
+async function loadSettings() { try { const data = await api('/api/admin/zaza/settings'); $('#review-mode').value = data.review_mode ?? data.settings?.review_mode ?? (data.settings?.auto_approve === true ? 'auto' : 'review'); $('#save-settings').disabled = false; $('#settings-result').textContent = '策略仅影响之后的新申请。'; } catch (error) { $('#settings-result').className = 'error'; $('#settings-result').textContent = error.message; } }
+$('#settings').onsubmit = async event => { event.preventDefault(); $('#save-settings').disabled = true; try { await api('/api/admin/zaza/settings',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({review_mode:$('#review-mode').value,auto_approve:$('#review-mode').value === 'auto'})}); $('#settings-result').className = 'muted'; $('#settings-result').textContent = '创建策略已保存'; } catch (error) { $('#settings-result').className = 'error'; $('#settings-result').textContent = error.message; } finally { $('#save-settings').disabled = false; } };
+$('#admin-spaces').onclick = async event => {
+  const button = event.target.closest('button[data-action]'); if (!button || button.disabled) return;
+  const row = button.closest('[data-id]'), action = button.dataset.action, body = {action};
+  if (action === 'rename') { const name = prompt('新名称须以「空间」结尾',row.querySelector('strong').textContent); if (name === null) return; body.name = name.trim(); if (!body.name.endsWith('空间')) { $('#admin-error').textContent = '名称须以空间结尾'; return; } }
+  if (['delete','reject','cancel','stop'].includes(action) && !confirm(`确认${actions[action]}「${row.querySelector('strong').textContent}」？`)) return;
+  row.querySelectorAll('button').forEach(item => item.disabled = true); $('#admin-error').textContent = '';
+  try { await api('/api/admin/zaza/spaces/'+encodeURIComponent(row.dataset.id),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}); await loadSpaces(); }
+  catch (error) { $('#admin-error').textContent = error.message; row.querySelectorAll('button').forEach(item => item.disabled = false); }
+};
+$('#admin-refresh').onclick = () => { $('#admin-error').textContent = ''; loadSpaces(); loadSettings(); }; loadSpaces(); loadSettings();

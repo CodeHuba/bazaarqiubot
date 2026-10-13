@@ -53,6 +53,7 @@ from day_stats_builder import (
     _build_daily_route_direction_details,
 )
 from web_runs.day_snapshot_store import DaySnapshotStore
+from zaza_space import create_zaza_blueprint
 
 INGEST_TOKEN = os.getenv('BAZAAR_INGEST_TOKEN', '')
 RUNS_DB_PATH = os.getenv('RUNS_DB_PATH', '/opt/qiubot/data/bazaar_runs.db')
@@ -228,8 +229,36 @@ def _mask_ip(ip):
     p = str(ip).split('.')
     return f"{p[0]}.{p[1]}.*.*" if len(p) == 4 else ip
 
+
+_zaza_card_query = None
+_zaza_card_query_lock = threading.Lock()
+
+
+def _zaza_card_display(card_id):
+    global _zaza_card_query
+    if _zaza_card_query is None:
+        with _zaza_card_query_lock:
+            if _zaza_card_query is None:
+                query = RunsQuery()
+                query.load()
+                _zaza_card_query = query
+    return _zaza_card_query.card_display_info_cached(card_id)
+
+
+# Skills use the same local image/name cache as items.
+setattr(_zaza_card_display, 'resolve_skill', _zaza_card_display)
+
 app = Flask(__name__, static_folder='static')
 app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024
+app.register_blueprint(create_zaza_blueprint(
+    runs_path=lambda: os.getenv('RUNS_DB_PATH', RUNS_DB_PATH),
+    space_path=os.getenv('ZAZA_SPACE_DB_PATH', '/opt/qiubot/data/zaza_spaces.db'),
+    snapshots_path=lambda: os.getenv('DAY_SNAPSHOT_DB_PATH', DAY_SNAPSHOT_DB_PATH),
+    season=lambda: RUNS_SEASON_ID,
+    phase=lambda: CURRENT_PHASE,
+    card_resolver=_zaza_card_display,
+    admin_authorized=lambda: _stats_authorized(),
+))
 _card_art_proxy_locks: dict[str, threading.Lock] = {}
 # 线上仅通过 Caddy 单层反代访问；由 Caddy 覆盖 X-Forwarded-For 后再解析真实客户端地址。
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1)
@@ -2874,6 +2903,10 @@ def partner_page():
 def topcard_page():
     return send_from_directory('static', 'topcard.html')
 
+@app.route('/zaza')
+def zaza_page():
+    return send_from_directory('static', 'zaza.html')
+
 @app.route('/share/routes/<share_id>')
 def routes_share_page(share_id):
     if not _ROUTE_SHARE_ID_RE.fullmatch(share_id or ''):
@@ -3290,6 +3323,42 @@ def admin_delete_announcement(aid):
     return jsonify({'ok': True})
 
 # ===== Admin Stats =====
+
+@app.route('/admin/zaza')
+@require_stats_auth
+def zaza_admin_page():
+    return send_from_directory('static', 'zaza-admin.html')
+
+
+@app.route('/api/admin/zaza/<path:admin_path>', methods=['GET', 'PUT', 'POST', 'DELETE'])
+@require_stats_auth
+def zaza_admin_staging_proxy(admin_path):
+    """Use the production admin auth while keeping Zaza state in isolated staging."""
+    import urllib.error as _urllib_error
+    import urllib.request as _urllib_request
+    target = 'http://127.0.0.1:1030/api/admin/zaza/' + admin_path
+    if request.query_string:
+        target += '?' + request.query_string.decode('ascii', 'ignore')
+    body = request.get_data(cache=False)
+    headers = {'Accept': request.headers.get('Accept', 'application/json')}
+    if request.content_type:
+        headers['Content-Type'] = request.content_type
+    staging_password = os.getenv('STAGING_ZAZA_PASSWORD', os.getenv('STATS_PASSWORD', ''))
+    manager = _urllib_request.HTTPBasicAuthHandler()
+    manager.add_password(None, 'http://127.0.0.1:1030', 'admin', staging_password)
+    opener = _urllib_request.build_opener(manager)
+    outbound = _urllib_request.Request(target, data=body or None, headers=headers, method=request.method)
+    try:
+        with opener.open(outbound, timeout=20) as response:
+            payload = response.read()
+            return Response(payload, response.status,
+                            {'Content-Type': response.headers.get('Content-Type', 'application/json')})
+    except _urllib_error.HTTPError as exc:
+        return Response(exc.read(), exc.code,
+                        {'Content-Type': exc.headers.get('Content-Type', 'application/json')})
+    except (_urllib_error.URLError, TimeoutError) as exc:
+        return jsonify({'error': f'Staging management service unavailable: {exc}'}), 503
+
 
 @app.route('/admin/day-routes')
 @require_stats_auth

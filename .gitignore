@@ -57,3 +57,11 @@ node_modules/
 *.orig
 *.backup
 *.backup-*
+
+# Zaza runtime artifacts
+tools/zaza-chrome-profile/
+tools/zaza_collector_token.txt
+tools/zaza_collector_rejected.json
+
+# Local validation artifacts
+.tmp/
