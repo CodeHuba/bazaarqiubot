@@ -17,6 +17,7 @@ import os
 import re
 import sys
 from datetime import datetime, timezone, timedelta
+from email.utils import format_datetime
 from urllib.parse import urlencode, quote
 
 import requests
@@ -31,9 +32,33 @@ INGEST_API = 'http://101.34.58.217:1027/api/ingest'
 INGEST_TOKEN = 'eb3ff2d2de6ae942723c332e05882a8cfea2df1adf7d5b78'
 DB_PATH = os.path.join(os.path.dirname(__file__), '..', 'data', 'bazaar_runs_ids.db')  # 本地只存已采集 ID
 SEASON_START = 'Wed, 01 Jul 2026 16:32:42 GMT'  # 当前赛季开始时间
+PHASE_START_UTC = '2026-10-14T00:00:00+00:00'  # 19.2，北京时间 2026-10-14 08:00
 MAX_PAGES = 50  # 最多拉取页数（每页20条）
 PAGE_DELAY_MIN = 3  # 每页最小间隔秒数
 PAGE_DELAY_MAX = 6  # 每页最大间隔秒数（随机化，模拟人类）
+
+
+def collection_created_after(now=None):
+    """默认请求最近四小时，查询起点不早于当前 phase。"""
+    override = os.environ.get('BAZAAR_RUNS_CREATED_AFTER')
+    if override:
+        return override
+    current = now or datetime.now(timezone.utc)
+    phase_start = datetime.fromisoformat(PHASE_START_UTC)
+    return format_datetime(max(current - timedelta(hours=4), phase_start), usegmt=True)
+
+def run_in_current_phase(run):
+    """按已确认的创建时间口径校验，不能依赖上游查询参数过滤。"""
+    created_at = run.get('createdAt')
+    if not isinstance(created_at, str):
+        return False
+    try:
+        created = datetime.fromisoformat(created_at.replace('Z', '+00:00'))
+    except ValueError:
+        return False
+    if created.tzinfo is None:
+        return False
+    return created >= datetime.fromisoformat(PHASE_START_UTC)
 
 
 def init_db():
@@ -51,7 +76,8 @@ def init_db():
 def save_runs(conn, runs, min_wins: int = 1):
     """推送 runs 到服务器 API，本地只记录已采集 ID"""
     # 过滤低胜场
-    filtered = [r for r in runs if (r.get('statWins') or 0) >= min_wins]
+    filtered = [r for r in runs if (r.get('statWins') or 0) >= min_wins
+                and run_in_current_phase(r)]
     if not filtered:
         return 0
 
@@ -221,7 +247,7 @@ def collect_via_fetch_in_browser(driver, conn, t_token):
         params = {
             'sort': 'newest',
             'order': 'desc',
-            'createdAfter': (datetime.now(timezone.utc) - timedelta(hours=4)).strftime('%a, %d %b %Y %H:%M:%S GMT'),
+            'createdAfter': collection_created_after(),
             't': t_token
         }
         if cursor_created_at and cursor_id:
@@ -272,6 +298,11 @@ def collect_via_fetch_in_browser(driver, conn, t_token):
         new = save_runs(conn, data)
         total_new += new
         print(f"  第 {page+1} 页: {len(data)} 条 runs（新增 {new}）")
+
+        if all(not run_in_current_phase(run) for run in data):
+            print("  已到当前 phase 创建时间边界，采集结束")
+            break
+
 
         # 遇到全重复页跳过，继续翻页（可能中间有漏采的）
         if new == 0:

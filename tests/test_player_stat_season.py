@@ -57,5 +57,5 @@ def test_player_stat_chain_uses_season_19_without_changing_current_season(monkey
 
     asyncio.run(module.BazaarDataClient().get_player_stat("Koucha_"))
 
-    assert module.CURRENT_SEASON_ID == 18
+    assert module.CURRENT_SEASON_ID == 19
     assert captured["params"] == {"username": "Koucha_", "seasonId": 19}
