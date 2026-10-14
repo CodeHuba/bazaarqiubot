@@ -115,6 +115,53 @@ def test_comp_uses_current_phase_and_tolerates_missing_mapping(tmp_path, monkeyp
     assert result["recommendations"][0]["run_id"] in {f"r{i}" for i in range(1, 13)}
 
 
+@pytest.mark.parametrize("hero", ["Stelle", "The Dragons"])
+@pytest.mark.parametrize("total_runs", [0, 9, 10, 17, 20, 33, 49, 50])
+@pytest.mark.parametrize("required_card", [None, "target"])
+def test_comp_falls_back_when_default_support_exceeds_sample_size(
+    tmp_path, monkeypatch, hero, total_runs, required_card
+):
+    pytest.importorskip("mlxtend")
+    db_path = tmp_path / "runs.db"
+    _make_runs_db(db_path)
+    conn = sqlite3.connect(db_path)
+    conn.execute("DELETE FROM runs")
+    conn.executemany(
+        "INSERT INTO runs VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        [
+            (
+                f"r{i}", hero,
+                json.dumps([_card("target"), _card("core-a"), _card("core-b"), _card(f"flex-{i}")]),
+                10, "", "2026-01-01", "test-season", "test-phase", "Legendary",
+            )
+            for i in range(total_runs)
+        ],
+    )
+    conn.commit()
+    monkeypatch.setattr(runs_query_module, "RUNS_SEASON_ID", "test-season")
+    monkeypatch.setattr(runs_query_module, "CURRENT_PHASE", "test-phase")
+    monkeypatch.setattr(runs_query_module, "_comp_cache", {})
+    query = RunsQuery(db_path=str(db_path))
+    query.conn = conn
+    monkeypatch.setattr(query, "card_display_info_cached", lambda cid: {
+        "name": cid, "name_en": cid, "img": "", "size": "Small",
+    })
+    try:
+        result = query.comp(hero, required_card=required_card)
+    finally:
+        conn.close()
+
+    assert "error" not in result
+    assert result["total_runs"] == total_runs
+    if total_runs < 10:
+        assert result["layers"] == []
+        assert result["recommendations"] == []
+    elif required_card:
+        assert result["layers"]
+        assert result["recommendations"]
+        assert result["layers"][0]["count"] == total_runs
+
+
 def test_load_ignores_null_mapping_values(tmp_path, monkeypatch):
     _fake_card_images(monkeypatch)
     db_path = tmp_path / "runs.db"

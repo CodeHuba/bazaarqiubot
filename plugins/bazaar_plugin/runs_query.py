@@ -950,6 +950,9 @@ class RunsQuery:
             te_arr = te.fit(transactions).transform(transactions)
             df = pd.DataFrame(te_arr, columns=te.columns_)
             for fallback_sup in FALLBACK_SUPPORTS:
+                # 小样本阶段跳过无法达到的阈值，避免支持度比例 > 1 中断降级。
+                if fallback_sup > total_runs:
+                    continue
                 freq_df = fpgrowth(df, min_support=fallback_sup / total_runs, use_colnames=True)
                 freq_df['length'] = freq_df['itemsets'].apply(len)
                 cands = [frozenset(r['itemsets']) for _, r in freq_df[freq_df['length'] == 2].iterrows()]
