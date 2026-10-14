@@ -1,4 +1,5 @@
 import subprocess
+import shutil
 from pathlib import Path
 
 
@@ -75,7 +76,7 @@ def test_season_update_restores_database_on_failure_and_avoids_auto_commit():
 
 def test_help_is_side_effect_free_and_documents_both_modes():
     result = subprocess.run(
-        ["bash", str(SCRIPT), "--help"],
+        [shutil.which("bash") or "bash", SCRIPT.as_posix(), "--help"],
         check=True,
         capture_output=True,
         text=True,
