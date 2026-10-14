@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>巴扎阵容库 · 数据看板</title>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="/static/vendor/chart.umd-4.4.0.min.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'Inter','PingFang SC','Microsoft YaHei',sans-serif;background:#0a0e1a;color:#e2e8f0;min-height:100vh}
@@ -70,10 +70,10 @@ body{font-family:'Inter','PingFang SC','Microsoft YaHei',sans-serif;background:#
 
   <div class="controls">
     <span class="ctrl-label">统计周期：</span>
-    <button class="day-btn" onclick="setDays(1)">今天</button>
-    <button class="day-btn active" onclick="setDays(7)">近 7 天</button>
-    <button class="day-btn" onclick="setDays(30)">近 30 天</button>
-    <button class="day-btn" onclick="setDays(90)">近 90 天</button>
+    <button class="day-btn" data-days="1" onclick="setDays(1)">今天</button>
+    <button class="day-btn active" data-days="7" onclick="setDays(7)">近 7 天</button>
+    <button class="day-btn" data-days="30" onclick="setDays(30)">近 30 天</button>
+    <button class="day-btn" data-days="90" onclick="setDays(90)">近 90 天</button>
     <button class="day-btn" style="margin-left:auto;background:#0ea5e9;color:#fff;border-color:#0ea5e9" onclick="openFeedbackAdminModal()">意见反馈管理</button>
     <button class="day-btn" style="background:#8A4DFF;color:#fff;border-color:#8A4DFF" onclick="openSupportersModal()">赞赏者管理</button>
     <button class="day-btn" style="background:#F5C76A;color:#0a0e1a;border-color:#F5C76A" onclick="openTriviaModal()">冷知识管理</button>
@@ -89,14 +89,10 @@ let _trendChart = null, _apiChart = null;
 
 function setDays(d) {
   _days = d;
-  document.querySelectorAll('.day-btn').forEach(b => b.classList.remove('active'));
-  event.target.classList.add('active');
+  document.querySelectorAll('[data-days]').forEach(b => {
+    b.classList.toggle('active', Number(b.dataset.days) === d);
+  });
   loadStats();
-
-// 自动刷新（每30分钟）
-setInterval(() => {
-  loadStats();
-}, 1800000);
 }
 
 const TAB_NAMES = {runs:'阵容查询', winrate:'胜率查询', partner:'最佳搭档', topcard:'职业榜单', feedback:'意见反馈', stats:'数据看板'};
@@ -158,6 +154,20 @@ async function loadStats() {
     }, 1000);
   } catch(e) {
     document.getElementById('main-content').innerHTML = '<div class="error-msg">加载失败: ' + e.message + '</div>';
+  }
+}
+
+function renderChart(canvasId, previousChart, config) {
+  const canvas = document.getElementById(canvasId);
+  try {
+    if (previousChart) previousChart.destroy();
+    if (typeof window.Chart !== 'function') throw new Error('Chart.js 未加载');
+    return new window.Chart(canvas.getContext('2d'), config);
+  } catch (e) {
+    console.warn('统计图表加载失败:', canvasId, e);
+    // 图表失败不能阻断 KPI 和后续表格的渲染。
+    canvas.parentElement.innerHTML = '<div class="loading" role="status">图表暂不可用，统计数据已正常加载</div>';
+    return null;
   }
 }
 
@@ -259,8 +269,7 @@ function renderStats(d) {
 
   // 趋势图
   const daily = d.daily || [];
-  if (_trendChart) _trendChart.destroy();
-  _trendChart = new Chart(document.getElementById('trend-chart').getContext('2d'), {
+  _trendChart = renderChart('trend-chart', _trendChart, {
     type: 'bar',
     data: {
       labels: daily.map(r => r.day?.slice(5)),
@@ -279,8 +288,7 @@ function renderStats(d) {
 
   // 模块使用分布：只统计核心功能事件，并按 page/module 合并，排除页面访问、后台刷新和辅助 API。
   const moduleUsage = d.module_usage || [];
-  if (_apiChart) _apiChart.destroy();
-  _apiChart = new Chart(document.getElementById('api-chart').getContext('2d'), {
+  _apiChart = renderChart('api-chart', _apiChart, {
     type: 'doughnut',
     data: {
       labels: moduleUsage.map(item => MODULE_NAMES[item.module] || item.module),
