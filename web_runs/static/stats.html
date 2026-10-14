@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>巴扎阵容库 · 数据看板</title>
 <script src="/static/vendor/chart.umd-4.4.0.min.js"></script>
+<script src="/static/stats-intraday.js" defer></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'Inter','PingFang SC','Microsoft YaHei',sans-serif;background:#0a0e1a;color:#e2e8f0;min-height:100vh}
@@ -27,8 +28,8 @@ body{font-family:'Inter','PingFang SC','Microsoft YaHei',sans-serif;background:#
 .kpi-sub{font-size:12px;color:#6b7280;margin-top:6px}
 .section{margin-bottom:24px}
 .section-title{font-size:14px;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:.06em;margin-bottom:14px}
-.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
-@media(max-width:768px){.grid-2{grid-template-columns:1fr}}
+.grid-2{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px}
+@media(max-width:768px){.grid-2{grid-template-columns:minmax(0,1fr)}}
 .chart-card{background:#111827;border:1px solid #1f2937;border-radius:12px;padding:20px}
 .chart-title{font-size:13px;font-weight:600;color:#e2e8f0;margin-bottom:14px}
 .chart-wrap{position:relative;height:220px}
@@ -55,6 +56,20 @@ body{font-family:'Inter','PingFang SC','Microsoft YaHei',sans-serif;background:#
 .fb-action-icon{font-size:28px;margin-bottom:6px}
 .fb-action-value{font-size:24px;font-weight:700;color:#e2e8f0}
 .fb-action-label{font-size:12px;color:#6b7280;margin-top:4px}
+.intraday-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px}
+.intraday-heading h2{font-size:16px;color:#e2e8f0}
+.intraday-controls{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:16px;font-size:13px;color:#9ca3af}
+.intraday-controls input[type=date],.intraday-controls select{background:#0d1221;color:#e2e8f0;border:1px solid #374151;border-radius:8px;padding:7px 10px;color-scheme:dark;max-width:100%}
+.intraday-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:16px}
+.intraday-summary>div{background:#0d1221;border:1px solid #1f2937;border-radius:10px;padding:14px}
+.intraday-value{font-size:23px;font-weight:700;color:#f59e0b;margin:8px 0;overflow-wrap:anywhere}
+.intraday-note{font-size:12px;line-height:1.7;color:#9ca3af}
+#intraday-status{margin-bottom:12px}
+#intraday-panel .chart-wrap{height:280px;margin-bottom:12px}
+#intraday-details summary{cursor:pointer;font-size:13px;color:#9ca3af;padding:12px 0}
+.intraday-table-wrap{overflow:auto;max-height:320px}
+.intraday-table-wrap .tbl{min-width:650px}
+@media(max-width:600px){.intraday-summary{grid-template-columns:1fr}.intraday-controls label{max-width:100%}.intraday-heading{align-items:flex-start}}
 </style>
   <link rel="stylesheet" href="/static/query-progress.css">
   <script src="/static/query-progress.js"></script>
@@ -80,6 +95,36 @@ body{font-family:'Inter','PingFang SC','Microsoft YaHei',sans-serif;background:#
     <button class="day-btn" style="background:#34d399;color:#0a0e1a;border-color:#34d399" onclick="openAnnouncementModal()">公告管理</button>
   </div>
 
+  <div id="overview-kpis"></div>
+  <section id="intraday-panel" class="chart-card section" aria-labelledby="intraday-title">
+    <div class="intraday-heading">
+      <h2 id="intraday-title">日内使用趋势</h2>
+      <button type="button" class="day-btn" id="intraday-refresh">刷新</button>
+    </div>
+    <div class="intraday-controls">
+      <button type="button" class="day-btn active" id="intraday-today">今天</button>
+      <button type="button" class="day-btn" id="intraday-yesterday">昨天</button>
+      <label for="intraday-date">日期</label><input type="date" id="intraday-date">
+      <label for="intraday-metric">指标</label>
+      <select id="intraday-metric">
+        <option value="uses">核心功能使用次数</option>
+        <option value="uv">核心活跃 UV（估算）</option>
+        <option value="pv">页面 PV</option>
+        <option value="api_calls">API 调用量</option>
+      </select>
+      <label for="intraday-module">模块</label><select id="intraday-module"><option value="all">全部模块</option></select>
+      <label><input type="checkbox" id="intraday-compare" checked> 对比前一天同期</label>
+    </div>
+    <div class="intraday-summary">
+      <div><div class="intraday-note" id="intraday-total-label">当日累计</div><div class="intraday-value" id="intraday-total">—</div><div class="intraday-note" id="intraday-total-note">北京时间</div></div>
+      <div><div class="intraday-note">较前一天同期</div><div class="intraday-value" id="intraday-change">—</div><div class="intraday-note" id="intraday-previous-total">—</div></div>
+      <div><div class="intraday-note">截至当前的峰值小时</div><div class="intraday-value" id="intraday-peak">—</div><div class="intraday-note" id="intraday-peak-note">—</div></div>
+    </div>
+    <p id="intraday-status" class="intraday-note" role="status" aria-live="polite">正在加载日内统计…</p>
+    <div class="chart-wrap" id="intraday-chart-wrap"><canvas id="intraday-chart" role="img" aria-label="单日逐小时使用趋势，数据详见下方逐小时明细"></canvas></div>
+    <details id="intraday-details"><summary>逐小时明细</summary><div class="intraday-table-wrap"><table class="tbl"><thead><tr><th>北京时间</th><th id="intraday-table-metric">使用次数</th><th>前一天同期</th><th>核心 UV</th><th>成功</th><th>空结果</th><th>错误</th></tr></thead><tbody id="intraday-hourly-body"></tbody></table></div></details>
+    <p class="intraday-note">按北京时间每小时统计；核心功能沿用现有 10 秒去重规则。UV 优先按指纹去重，缺少指纹时按脱敏 IP 估算，全天 UV 单独去重。当前小时尚未结束，未来小时留空。今天每 5 分钟自动刷新，数据最多缓存 60 秒。</p>
+  </section>
   <div id="main-content"><div class="loading">加载中...</div></div>
 </div>
 
@@ -181,7 +226,7 @@ function renderStats(d) {
   const errorRate = totalCalls > 0 ? ((apiDist.reduce((s,a)=>s+(a.errors||0),0)/totalCalls)*100).toFixed(1) : '0.0';
   const avgMs = apiDist.length > 0 ? Math.round(apiDist.reduce((s,a)=>s+(a.avg_ms||0),0)/apiDist.length) : 0;
 
-  el.innerHTML = `
+  document.getElementById('overview-kpis').innerHTML = `
     <div class="kpi-grid">
       <div class="kpi-card">
         <div class="kpi-label">API 调用量</div>
@@ -204,7 +249,8 @@ function renderStats(d) {
         <div class="kpi-sub">API 失败占比</div>
       </div>
     </div>
-
+  `;
+  el.innerHTML = `
     <div class="section">
       <div class="section-title">核心功能使用排行（统计周期内）</div>
       <div class="table-card">

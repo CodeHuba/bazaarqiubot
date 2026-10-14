@@ -15,14 +15,17 @@ import threading
 import urllib.parse
 import urllib.request
 import secrets
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from collections import defaultdict
 from dotenv import load_dotenv
 load_dotenv("/opt/qiubot/.env")
 from functools import wraps
 from flask import Flask, request, jsonify, send_from_directory, send_file, abort, Response
 from werkzeug.middleware.proxy_fix import ProxyFix
-from analytics import FeatureEventWriter, aggregate_hot_card_queries, init_analytics_db, overview as feature_overview
+from analytics import (
+    FeatureEventWriter, aggregate_hot_card_queries, init_analytics_db,
+    intraday as feature_intraday, overview as feature_overview,
+)
 
 _APP_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, '/opt/qiubot')
@@ -882,7 +885,7 @@ def after_request(response):
         response.cache_control.max_age = 60
         response.cache_control.stale_while_revalidate = 300
     # Day stats require Basic Auth; never retain credentials-bound responses in browsers/proxies.
-    if request.path.startswith('/api/day-stats/'):
+    if request.path.startswith('/api/day-stats/') or request.path == '/api/stats/intraday':
         response.cache_control.private = True
         response.cache_control.no_store = True
     # 静态资源缓存头
@@ -2768,6 +2771,39 @@ def api_comments_post(fid):
         return jsonify(dict(row)), 201
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+_intraday_cache = {}
+_intraday_cache_lock = threading.Lock()
+
+
+@app.route('/api/stats/intraday', methods=['GET'])
+@require_stats_auth
+def api_stats_intraday():
+    """单日逐小时使用趋势；前一天按相同时间进度对比。"""
+    date = request.args.get('date')
+    today = datetime.now(timezone(timedelta(hours=8))).date().isoformat()
+    key = (STATS_DB, date, today)
+    now = time.monotonic()
+    with _intraday_cache_lock:
+        cached = _intraday_cache.get(key)
+        if cached and cached[0] > now:
+            return jsonify(cached[1])
+    try:
+        data = feature_intraday(STATS_DB, date)
+    except ValueError as exc:
+        return jsonify({'error': str(exc)}), 400
+    except Exception:
+        app.logger.exception('intraday stats failed')
+        return jsonify({'error': '日内统计暂不可用，请稍后重试'}), 500
+    with _intraday_cache_lock:
+        expired = [cache_key for cache_key, (until, _) in _intraday_cache.items() if until <= now]
+        for cache_key in expired:
+            _intraday_cache.pop(cache_key, None)
+        if len(_intraday_cache) >= 96:
+            _intraday_cache.pop(next(iter(_intraday_cache)))
+        _intraday_cache[key] = (time.monotonic() + 60, data)
+    return jsonify(data)
 
 
 @app.route('/api/stats/overview', methods=['GET'])
