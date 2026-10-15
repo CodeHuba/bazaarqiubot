@@ -39,6 +39,14 @@ body{font-family:'Inter','PingFang SC','Microsoft YaHei',sans-serif;background:#
 .tbl td{padding:10px 16px;border-bottom:1px solid #1a2235;color:#e2e8f0}
 .tbl tr:last-child td{border-bottom:none}
 .tbl tr:hover td{background:#1a2235}
+.feature-note{font-size:12px;line-height:1.7;color:#9ca3af;margin-bottom:12px}
+.feature-table-wrap{overflow-x:auto}
+.feature-table{min-width:850px}
+.feature-info{min-width:260px;max-width:420px;white-space:normal}
+.feature-name{font-weight:600;color:#e2e8f0}
+.feature-description{font-size:12px;line-height:1.6;color:#9ca3af;margin-top:5px}
+.feature-extra{margin-top:14px}
+.feature-extra>summary{cursor:pointer;color:#9ca3af;font-size:13px;padding:10px 0}
 .badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600}
 .badge-green{background:#065f46;color:#34d399}
 .badge-yellow{background:#78350f;color:#fbbf24}
@@ -150,14 +158,30 @@ const MODULE_NAMES = {
   routes:'阵容路线', feedback:'意见反馈', trivia:'冷知识', support:'支持',
   stats:'数据看板'
 };
-const FEATURE_NAMES = {
-  runs_query:'阵容查询', winrate_query:'胜率查询', partner_query:'最佳搭档',
-  topcard_query:'职业榜单', comp_query:'阵容分析', comp_card_query:'以卡找阵容',
-  hero_overview:'职业概览', routes_query:'阵容路线查询', routes_summary:'阵容路线概览加载', routes_latest:'阵容路线版本加载',
-  routes_cores:'阵容路线核心列表', routes_detail:'阵容路线详情',
-  feedback_submit:'提交反馈', feedback_like:'反馈点赞',
-  feedback_comment:'反馈评论', trivia_submit:'提交冷知识', trivia_vote:'冷知识投票',
-  support_page_view:'支持页访问', donation_qr_open:'打开赞赏码', trivia_share:'分享冷知识'
+const FEATURE_INFO = {
+  runs_query:{name:'阵容查询 → 阵容列表', description:'选择“阵容列表”模式后点击“查询”；翻页也可能产生统计。'},
+  comp_card_query:{name:'阵容查询 → 阵容分析', description:'选择“阵容分析”模式，输入一张核心卡后点击“查询”。'},
+  winrate_query:{name:'胜率查询 → 10胜率查询', description:'在“10胜率查询”表单设置卡牌等条件后点击“查询”。'},
+  partner_query:{name:'最佳搭档 → 最佳搭档查询', description:'在“最佳搭档查询”表单输入卡牌后点击“查询”。'},
+  hero_overview:{name:'职业榜单 → 职业概况', description:'页面顶部的“职业概况”区域；首次打开自动加载，修改时间范围或段位也可能重新加载。'},
+  topcard_query:{name:'职业榜单 → 卡牌榜', description:'职业选择区下方的“卡牌榜”标签；首次打开自动加载，切换职业或筛选条件也可能重新加载。'},
+  comp_query:{name:'职业榜单 → 阵容榜', description:'职业选择区下方的“阵容榜”标签；切换职业或段位也可能重新加载。'},
+  card_tier_query:{name:'职业榜单 → 卡牌 T 表', description:'职业选择区下方的“卡牌 T 表”标签；切换职业、时间范围或段位也可能重新加载。'},
+  feedback_submit:{name:'意见反馈 → 提交反馈', description:'填写反馈内容后点击“提交反馈”。'},
+  feedback_like:{name:'意见反馈 → 点赞', description:'点击某条反馈下方的“❤️”点赞按钮。'},
+  feedback_comment:{name:'意见反馈 → 发送评论／回复', description:'在某条反馈的评论区发送评论或回复；仅展开评论区不计入。'},
+  trivia_submit:{name:'冷知识 → 提交问题', description:'在“提个问题”表单填写问题后点击“提交问题”。'},
+  trivia_vote:{name:'冷知识 → 赞同／不赞同', description:'点击某条冷知识下方的“👍”或“👎”，两种投票合并统计。'},
+  trivia_share:{name:'冷知识 → 分享图片', description:'点击某条冷知识的“分享”，并成功生成分享图片。'},
+  donation_qr_open:{name:'支持 → 查看赞赏码', description:'在“微信赞赏”区域点击“查看赞赏码”；表示打开二维码，不代表已付款。'},
+  support_page_view:{name:'支持 → 页面访问', description:'打开“支持”页面时自动记录，没有独立操作按钮。', group:'auto'},
+  routes_query:{name:'阵容路线 → 每天的主流阵容', description:'原页面加载某职业、某个 Day 的主流阵容。', group:'retired'},
+  routes_summary:{name:'阵容路线 → Day 概览加载', description:'原页面打开或切换职业时自动加载各 Day 的概览。', group:'retired'},
+  routes_latest:{name:'阵容路线 → 统计版本加载', description:'原页面打开或切换职业时自动获取统计版本。', group:'retired'},
+  routes_node_detail:{name:'阵容路线 → 节点详情', description:'历史路线画布中，点击阵容节点打开详情。', group:'retired'},
+  routes_expand:{name:'阵容路线 → 展开分支', description:'历史路线画布中，展开节点分支；选择起点时也可能自动展开。', group:'retired'},
+  routes_cores:{name:'阵容路线 → 旧版核心列表', description:'更早版本的核心列表加载，后续页面已无对应入口。', group:'retired'},
+  routes_detail:{name:'阵容路线 → 旧版核心路线详情', description:'更早版本的单个核心路线详情加载，不是“查看路线详情”按钮的点击量。', group:'retired'}
 };
 
 function fmtN(n) {
@@ -173,9 +197,25 @@ function escapeHtml(value) {
 function renderFeatureUsage(features) {
   if (!features.length) return '<tr><td colspan="7" style="color:#6b7280;text-align:center;padding:20px">暂无功能事件数据</td></tr>';
   return features.map(f => {
+    const info = Object.hasOwn(FEATURE_INFO, f.feature) ? FEATURE_INFO[f.feature] : {
+      name:f.feature, description:'尚未配置前台位置说明，请核对该统计项。'
+    };
     const rate = f.uses ? (f.successes / f.uses * 100).toFixed(1) : '0.0';
-    return `<tr><td>${escapeHtml(FEATURE_NAMES[f.feature] || f.feature)}</td><td>${f.uses}</td><td>${f.uv}</td><td>${f.successes}</td><td>${f.empty_results}</td><td>${f.errors}</td><td>${rate}%</td></tr>`;
+    return `<tr data-feature="${escapeHtml(f.feature)}"><td class="feature-info"><div class="feature-name">${escapeHtml(info.name)}</div><div class="feature-description">${escapeHtml(info.description)}</div></td><td>${f.uses}</td><td>${f.uv}</td><td>${f.successes}</td><td>${f.empty_results}</td><td>${f.errors}</td><td>${rate}%</td></tr>`;
   }).join('');
+}
+
+function renderFeatureGroups(features) {
+  const groups = {active:[], auto:[], retired:[]};
+  features.forEach(f => {
+    const info = Object.hasOwn(FEATURE_INFO, f.feature) ? FEATURE_INFO[f.feature] : null;
+    groups[info?.group || 'active'].push(f);
+  });
+  document.getElementById('feature-usage-body').innerHTML = renderFeatureUsage(groups.active);
+  document.getElementById('feature-auto-body').innerHTML = renderFeatureUsage(groups.auto);
+  document.getElementById('feature-retired-body').innerHTML = renderFeatureUsage(groups.retired);
+  document.getElementById('feature-auto-count').textContent = `${groups.auto.length} 项`;
+  document.getElementById('feature-retired-count').textContent = `${groups.retired.length} 项`;
 }
 
 async function loadStats() {
@@ -251,14 +291,31 @@ function renderStats(d) {
     </div>
   `;
   el.innerHTML = `
-    <div class="section">
+    <div class="section" id="feature-usage-section">
       <div class="section-title">核心功能使用排行（统计周期内）</div>
-      <div class="table-card">
-        <table class="tbl">
-          <thead><tr><th>功能</th><th>使用次数</th><th>独立用户</th><th>成功</th><th>空结果</th><th>错误</th><th>成功率</th></tr></thead>
+      <p class="feature-note">功能名称按“前台页面 → 区域／操作”对应，名称下方说明具体位置与触发方式。次数按请求或事件记录，不等于按钮点击量；同一访客同一功能 10 秒内去重，前端缓存命中时可能不新增。职业概况、卡牌榜包含首次自动加载。</p>
+      <div class="table-card feature-table-wrap">
+        <table class="tbl feature-table">
+          <thead><tr><th>前台位置／操作</th><th>使用次数</th><th>独立用户</th><th>成功</th><th>空结果</th><th>错误</th><th>成功率</th></tr></thead>
           <tbody id="feature-usage-body"></tbody>
         </table>
       </div>
+      <details class="feature-extra" id="feature-auto-section">
+        <summary>页面访问与自动加载（不计入上方排行） · <span id="feature-auto-count"></span></summary>
+        <p class="feature-note">以下为单独记录的页面访问与辅助加载，不代表独立的功能操作。</p>
+        <div class="table-card feature-table-wrap"><table class="tbl feature-table">
+          <thead><tr><th>前台位置／触发方式</th><th>记录次数</th><th>独立用户</th><th>成功</th><th>空结果</th><th>错误</th><th>成功率</th></tr></thead>
+          <tbody id="feature-auto-body"></tbody>
+        </table></div>
+      </details>
+      <details class="feature-extra" id="feature-retired-section">
+        <summary>已下线功能（历史数据） · <span id="feature-retired-count"></span></summary>
+        <p class="feature-note">阵容路线暂时下线，以下仅保留所选统计周期内的历史记录，不计入上方排行，也不代表当前有可用入口。</p>
+        <div class="table-card feature-table-wrap"><table class="tbl feature-table">
+          <thead><tr><th>原前台位置／操作</th><th>历史次数</th><th>独立用户</th><th>成功</th><th>空结果</th><th>错误</th><th>成功率</th></tr></thead>
+          <tbody id="feature-retired-body"></tbody>
+        </table></div>
+      </details>
     </div>
 
     <div class="section">
@@ -309,9 +366,8 @@ function renderStats(d) {
   `;
 
   // 功能使用排行
-  const featureBody = document.getElementById('feature-usage-body');
   const features = d.feature_usage || [];
-  featureBody.innerHTML = renderFeatureUsage(features);
+  renderFeatureGroups(features);
 
   // 趋势图
   const daily = d.daily || [];
