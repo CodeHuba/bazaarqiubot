@@ -11,6 +11,7 @@ from typing import List, Dict, Optional
 from pathlib import Path
 from . import translations as _trans
 from .data_client import CURRENT_SEASON_ID, CURRENT_PHASE, RUNS_SEASON_ID
+from .run_card_filters import ENCHANTMENTS, normalize_run_card_filters
 
 
 ALIAS_FILE = "/opt/qiubot/data/bz_aliases.json"
@@ -245,8 +246,10 @@ class RunsQuery:
               page: int = 1,
               page_size: int = 5,
               rank_filter: str = "all",
-              day: Optional[int] = None) -> Dict:
+              day: Optional[int] = None,
+              card_filters: Optional[List[Dict]] = None) -> Dict:
         """查询 runs；先完成筛选和分页，只为当前页构建展示数据。"""
+        card_filters = normalize_run_card_filters(card_filters)
         if not self.conn:
             self.load()
 
@@ -269,6 +272,36 @@ class RunsQuery:
             params.append(min_wins)
         if rank_filter == 'legendary':
             where.append("player_rank='Legendary'")
+
+        # Each EXISTS binds card ID and enchantment to the same item instance.
+        # Unconstrained cards retain the legacy ability to match skills as well.
+        resolved_card_filters = []
+        for card_filter in card_filters:
+            ids = self.find_card_ids(card_filter['name'])
+            if not ids:
+                return {'runs': [], 'total': 0, 'page': 1, 'pages': 0}
+            placeholders = ','.join('?' for _ in ids)
+            enchantment = card_filter['enchantment']
+            resolved_card_filters.append((set(ids), enchantment))
+
+            def card_exists(column, with_enchantment=False):
+                # Guard both malformed JSON and non-object entries in old records.
+                item = "CASE WHEN entry.type='object' THEN entry.value ELSE '{}' END"
+                condition = f"json_extract({item}, '$.cardId') IN ({placeholders})"
+                if with_enchantment:
+                    condition += f" AND json_extract({item}, '$.enchantment')=?"
+                return (
+                    f"EXISTS (SELECT 1 FROM json_each(CASE WHEN json_valid({column}) "
+                    f"THEN {column} ELSE '[]' END) AS entry WHERE {condition})"
+                )
+
+            if enchantment is not None:
+                where.append(card_exists('items_json', with_enchantment=True))
+                params.extend([*ids, enchantment])
+            else:
+                where.append('(' + card_exists('items_json') + ' OR ' +
+                             card_exists('skills_json') + ')')
+                params.extend([*ids, *ids])
 
         base_sql = " FROM runs WHERE " + " AND ".join(where)
         card_ids_sets = []
@@ -341,6 +374,8 @@ class RunsQuery:
             except (TypeError, ValueError, json.JSONDecodeError):
                 # 展示数据损坏时保留该 run，其卡牌列表降级为空。
                 items = []
+            if not isinstance(items, list):
+                items = []
             item_names = []
             card_imgs = []
             card_details = []
@@ -365,6 +400,13 @@ class RunsQuery:
                     'name_en': en,
                     'img': image_url,
                     'size': self.size_map.get(cid) or image_info.get('size') or 'Small',
+                    'enchantment': it.get('enchantment'),
+                    'enchantment_zh': ENCHANTMENTS.get(it.get('enchantment'), '')
+                        if isinstance(it.get('enchantment'), str) else '',
+                    'matched': any(
+                        cid in ids and (enchantment is None or it.get('enchantment') == enchantment)
+                        for ids, enchantment in resolved_card_filters
+                    ),
                 })
 
             screenshot_full = ('https://usercontent.bzdb.network' + screenshot) if screenshot else ''

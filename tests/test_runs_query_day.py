@@ -131,4 +131,4 @@ def test_api_runs_accepts_any_positive_game_day_before_querying():
     validation = "if day is not None and day < 1:"
     assert validation in function
     assert "1 <= day <= 10" not in function
-    assert function.index(validation) < function.index("client = RunsQuery()")
+    assert function.index(validation) < function.index("client = RunsQuery(db_path=RUNS_DB_PATH)")

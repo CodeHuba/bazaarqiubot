@@ -49,6 +49,7 @@ from ocr_worker import start_worker, enqueue_run
 # start_worker()  # 已改为凌晨批量处理
 
 from plugins.bazaar_plugin.runs_query import RunsQuery
+from plugins.bazaar_plugin.run_card_filters import normalize_run_card_filters
 from plugins.bazaar_plugin.data_client import RUNS_SEASON_ID, CURRENT_PHASE
 from day_stats_builder import (
     _build_daily_node_rankings,
@@ -1940,6 +1941,11 @@ def api_runs():
     hero = request.args.get('hero', '').strip() or None
     cards_raw = request.args.get('cards', '').strip()
     cards = [c.strip() for c in cards_raw.split('+') if c.strip()] or None
+    try:
+        card_filters = normalize_run_card_filters(request.args.get('card_filters'))
+    except ValueError as exc:
+        return jsonify({'error': str(exc)}), 400
+    log_cards = (cards or []) + [entry['name'] for entry in card_filters]
     days = request.args.get('days', type=int)
     day = request.args.get('day', type=int)
     if day is not None and day < 1:
@@ -1949,7 +1955,7 @@ def api_runs():
     rank_filter = request.args.get('rank', 'all')
 
     try:
-        client = RunsQuery()
+        client = RunsQuery(db_path=RUNS_DB_PATH)
         client.load()
         if hero:
             resolved = client.resolve_hero(hero)
@@ -1957,15 +1963,18 @@ def api_runs():
                 return jsonify({'error': f'未识别的英雄: {hero}'}), 400
             hero = resolved
         result = client.query(hero=hero, cards=cards, days=days, min_wins=min_wins,
-                              page=page, rank_filter=rank_filter, day=day)
+                              page=page, rank_filter=rank_filter, day=day,
+                              card_filters=card_filters)
         ip = _mask_ip(request.headers.get('X-Forwarded-For', request.remote_addr).split(',')[0].strip())
-        _log_query('runs', {'hero': hero, 'cards': cards, 'days': days, 'day': day,
+        _log_query('runs', {'hero': hero, 'cards': log_cards, 'card_filters': card_filters,
+                            'days': days, 'day': day,
                             'min_wins': min_wins, 'page': page, 'rank': rank_filter},
                    ip, result.get('total', 0), True)
         return jsonify(result)
     except Exception as e:
         ip = _mask_ip(request.headers.get('X-Forwarded-For', request.remote_addr).split(',')[0].strip())
-        _log_query('runs', {'hero': hero, 'cards': cards_raw, 'days': days, 'day': day,
+        _log_query('runs', {'hero': hero, 'cards': log_cards, 'card_filters': card_filters,
+                            'days': days, 'day': day,
                             'min_wins': min_wins, 'page': page}, ip, 0, False)
         return jsonify({'error': str(e)}), 500
 
