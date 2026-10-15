@@ -92,7 +92,7 @@ ATTRIBUTE_UNIT_ZH = {
 # GameData 的时间属性统一以毫秒存储；游戏原生 Tooltip 展示时转换为秒。
 # 冷却修改类效果在不同版本的数据中使用过以下属性名。
 MS_ATTRS = {
-    "SlowAmount", "FreezeAmount", "HasteAmount", "ChargeAmount", "ReloadAmount",
+    "SlowAmount", "FreezeAmount", "HasteAmount", "ChargeAmount",
     "CooldownMax", "FlatCooldownReduction",
 }
 
@@ -308,6 +308,8 @@ def render_tooltip(
     abilities: dict,
     auras: dict,
     tier_attrs: dict,
+    *,
+    strict_static: bool = False,
 ) -> str:
     """渲染 tooltip 模板，替换 {ability.X} / {aura.X} 占位符。
     逻辑对齐 BazaarGameClient TooltipComponentAbility，支持 {A ?? B} coalesce。
@@ -327,7 +329,7 @@ def render_tooltip(
         parts = ph.strip().split(".")
         if len(parts) < 2:
             return ATTRIBUTE_UNIT_ZH.get(ph.strip(), "")
-        if len(parts) > 2 and parts[2] in {"targets", "ref"}:
+        if len(parts) > 2 and parts[2] in {"targets", "ref", "mod"}:
             return ""
         prefix, value_id = parts[0], parts[1]
         collection = abilities if prefix == "ability" else auras if prefix == "aura" else {}
@@ -361,12 +363,14 @@ def render_tooltip(
             if ab is None:
                 return None
             action = ab.get("Action", {})
+            if strict_static and _preview_requires_context(action):
+                return None
             atype = action.get("$type", "")
             if sub == "targets":
                 targets_attr = ACTION_TARGETS_MAP.get(atype)
                 if targets_attr and targets_attr in tier_attrs:
                     return fmt_val(tier_attrs[targets_attr])
-                return "0"
+                return None if strict_static else "0"
             if sub == "ref":
                 val = action.get("Value", {})
                 if isinstance(val, dict):
@@ -392,15 +396,17 @@ def render_tooltip(
             v, ak = extract_value(action, tier_attrs)
             if v is None:
                 # 原版 GetValue() 对未知/缺失属性通过 TryGetAttributeValue(...).GetValueOrDefault() 返回 0。
-                return "0"
+                return None if strict_static else "0"
             return fmt_val(v, ak)
 
         elif prefix == "aura":
             aura = auras.get(ab_id)
             if aura is None:
                 # 原生组件不存在时不会把 token 原样写回文本。
-                return ""
+                return None if strict_static else ""
             action = aura.get("Action", {})
+            if strict_static and _preview_requires_context(action):
+                return None
             if sub == "targets":
                 # 原版 TooltipComponentAura.Resolve() 对 Targets 明确返回 null，
                 # 由组件渲染为空字符串，而不是保留占位符。
@@ -422,7 +428,7 @@ def render_tooltip(
                 return ""
             v, ak = extract_value(action, tier_attrs)
             if v is None:
-                return ""
+                return None if strict_static else ""
             return fmt_val(v, ak)
 
         return None
@@ -440,6 +446,13 @@ def render_tooltip(
 
     def replace_ph(m: re.Match) -> str:
         ph = m.group(1)
+        if strict_static and "??" in ph:
+            # An unknown runtime branch is not known to be zero. Do not select its fallback.
+            for branch in ph.split("??"):
+                parts = branch.strip().split(".")
+                source = abilities if parts[0] == "ability" else auras if parts[0] == "aura" else {}
+                if len(parts) > 1 and _preview_requires_context((source.get(parts[1]) or {}).get("Action", {})):
+                    return m.group(0)
         if "??" in ph:
             left, right = ph.split("??", 1)
             left_value = _coalesce_value(resolve_single(left.strip()))
@@ -458,6 +471,22 @@ def render_tooltip(
         return r + unit if should_add_implicit_units and unit and not has_explicit_unit(m.start(), m.end()) else r
 
     return re.sub(r"\{([^}]+)\}", replace_ph, text)
+
+
+def _preview_requires_context(value: Any) -> bool:
+    """Conservatively reject runtime references only for the website's static preview."""
+    if isinstance(value, list):
+        return any(_preview_requires_context(item) for item in value)
+    if not isinstance(value, dict):
+        return False
+    kind = value.get("$type", "")
+    if "ReferenceValue" in kind:
+        if kind != "TReferenceValueCardAttribute":
+            return True
+        target = value.get("Target") or {}
+        if target and (target.get("$type") != "TTargetCardSelf" or target.get("Conditions")):
+            return True
+    return any(_preview_requires_context(item) for item in value.values())
 
 
 def _get_quest_reward_attributes(reward: dict, tier_name: str) -> dict:

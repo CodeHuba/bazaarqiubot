@@ -1711,6 +1711,8 @@ input[type="file"] {
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
   <link rel="stylesheet" href="/static/query-progress.css">
   <script src="/static/query-progress.js"></script>
+<link rel="stylesheet" href="/static/card-preview.css?v=1">
+<script src="/static/card-preview.js?v=1"></script>
 </head>
 <body>
 <nav class="navbar">
@@ -1851,7 +1853,7 @@ function _wrRenderList(items) {
     const enPart = (it.en && it.en !== it.zh)
       ? `<span class="wr-ms-name-en">${it.en}</span>` : '';
       const imagePart = it.img ? `<img class="wr-ms-img size-${it.size || 'Small'}" src="${it.img}" alt="${it.zh}" loading="lazy" onerror="this.style.display='none'">` : '';
-    return `<div class="wr-ms-item${sel}" data-idx="${i}"
+    return `<div class="wr-ms-item${sel}" ${window.BazaarCardPreview?.attrs(it,true)||''} data-idx="${i}"
         onmousedown="event.preventDefault();_wrSelect(_wrItems[${i}])">
       ${imagePart}<div class="wr-ms-names">
         <span class="wr-ms-name-zh">${it.zh}</span>${enPart}
@@ -2055,7 +2057,7 @@ async function queryWinrate() {
 
 function renderWinrateCompare(results, hero, days, rank) {
   if (!results.length) return;
-  const cardArts = (data) => (data.card_details || []).map(c => c.img ? `<img class="wr-card-art size-${c.size || 'Small'}" src="${c.img}" alt="${c.name}" loading="lazy" onerror="this.style.display='none'">` : '').join('');
+  const cardArts = (data) => (data.card_details || []).map(c => `<span class="bcp-trigger" ${window.BazaarCardPreview?.attrs(c)||''}>${c.img ? `<img class="wr-card-art size-${c.size || 'Small'}" src="${c.img}" alt="${c.name}" loading="lazy" onerror="this.style.display='none'">` : escapeHtml(c.name||'卡牌')}</span>`).join('');
 
   const filterDesc = [
     hero ? ('英雄: ' + hero) : '',

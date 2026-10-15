@@ -1577,6 +1577,8 @@ input[type="file"] {
 
   <link rel="stylesheet" href="/static/query-progress.css">
   <script src="/static/query-progress.js"></script>
+<link rel="stylesheet" href="/static/card-preview.css?v=1">
+<script src="/static/card-preview.js?v=1"></script>
 </head>
 <body>
 <nav class="navbar">
@@ -1756,7 +1758,7 @@ function renderRunCardSuggestions() {
     menu.innerHTML = runCardSuggestions.map((card, index) => {
       const image = card.img ? `<img src="${escapeRunCardText(card.img)}" alt="" loading="lazy">` : '';
       const english = card.en && card.en !== card.zh ? `<small>${escapeRunCardText(card.en)}</small>` : '';
-      return `<button type="button" class="runs-card-option${index === runCardActiveIndex ? ' active' : ''}" role="option" onmousedown="event.preventDefault()" onclick="selectRunCardSuggestion(${index})">${image}<span class="runs-card-option-text"><strong>${escapeRunCardText(card.zh)}</strong>${english}</span></button>`;
+      return `<button type="button" class="runs-card-option${index === runCardActiveIndex ? ' active' : ''}" ${window.BazaarCardPreview?.attrs(card,true)||''} role="option" onmousedown="event.preventDefault()" onclick="selectRunCardSuggestion(${index})">${image}<span class="runs-card-option-text"><strong>${escapeRunCardText(card.zh)}</strong>${english}</span></button>`;
     }).join('');
   }
   menu.classList.add('open');
@@ -1986,7 +1988,7 @@ function renderRuns(data, page, params) {
     const cardsHtml = cardList.length ? visibleCards.map(c => {
       const img = c.img ? `<img class="size-${escapeRunCardText(c.size || 'Small')}" src="${escapeRunCardText(c.img)}" alt="${escapeRunCardText(c.name)}" loading="lazy" onerror="this.style.display='none'">` : '';
       const enchantment = c.enchantment ? `<span class="run-card-enchantment">${escapeRunCardText(c.enchantment_zh || RUN_ENCHANTMENTS[c.enchantment] || c.enchantment)}</span>` : '';
-      return `<span class="run-card-chip${c.matched ? ' is-filter-match' : ''}">${img}${escapeRunCardText(c.name)}${enchantment}</span>`;
+      return `<span class="run-card-chip bcp-trigger${c.matched ? ' is-filter-match' : ''}" ${window.BazaarCardPreview?.attrs(c)||''}>${img}${escapeRunCardText(c.name)}${enchantment}</span>`;
     }).join('') + (cardList.length>visibleCards.length ? `<span class="run-card-chip">+${cardList.length-visibleCards.length}</span>` : '') : escapeHtml((r.items || []).slice(0,5).join('、'));
     const screenshot = r.screenshot ? `<div style="margin:8px 0 2px"><img src="${r.screenshot}" style="max-width:100%;border-radius:6px;border:1px solid #1f2937" loading="lazy" onerror="this.style.display='none'"></div>` : '';
     const timeStr = r.created_at ? new Date(r.created_at).toLocaleString('zh-CN', {timeZone:'Asia/Shanghai',month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}) : '';
@@ -2581,9 +2583,9 @@ function renderCompCard(data) {
       const sizeCls = 'size-' + (c.size || 'Small');
       if (c.img) {
         const cls = c.is_new ? 'comp-card-chip has-img is-new' : 'comp-card-chip has-img';
-        return `<span class="${cls}"><img class="comp-card-img ${sizeCls}" src="${c.img}" alt="${c.name_zh}" loading="lazy" onerror="this.style.display='none'">${c.name_zh}</span>`;
+        return `<span class="${cls} bcp-trigger" ${window.BazaarCardPreview?.attrs(c)||''}><img class="comp-card-img ${sizeCls}" src="${c.img}" alt="${c.name_zh}" loading="lazy" onerror="this.style.display='none'">${c.name_zh}</span>`;
       }
-      return `<span class="${c.is_new ? 'comp-card-chip is-new' : 'comp-card-chip'}">${c.name_zh}</span>`;
+      return `<span class="${c.is_new ? 'comp-card-chip is-new' : 'comp-card-chip'} bcp-trigger" ${window.BazaarCardPreview?.attrs(c)||''}>${c.name_zh}</span>`;
     }).join('');
   }
 
@@ -2714,7 +2716,7 @@ function renderCompRecommendations(data) {
       const cards = (cfg.cards || []).map(c => {
         const cls = c.cardId === data.card_id ? 'comp-card-chip has-img comp-anchor' : 'comp-card-chip has-img';
         const img = c.img ? '<img class="comp-card-img size-' + (c.size || 'Small') + '" src="' + c.img + '" alt="' + c.name_zh + '" loading="lazy" onerror="this.style.display=\'none\'">' : '';
-        return '<span class="' + cls + '">' + img + c.name_zh + '</span>';
+        return '<span class="' + cls + ' bcp-trigger" ' + (window.BazaarCardPreview?.attrs(c)||'') + '>' + img + c.name_zh + '</span>';
       }).join('');
       const coreCards = (cfg.core_cards || []).map(c => c.name_zh).join('、');
       const variantCards = (cfg.variant_cards || []).map(c => c.name_zh).join('、');

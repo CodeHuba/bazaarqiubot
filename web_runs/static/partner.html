@@ -1493,6 +1493,8 @@ input[type="file"] {
 
   <link rel="stylesheet" href="/static/query-progress.css">
   <script src="/static/query-progress.js"></script>
+<link rel="stylesheet" href="/static/card-preview.css?v=1">
+<script src="/static/card-preview.js?v=1"></script>
 </head>
 <body>
 <nav class="navbar">
@@ -1719,8 +1721,8 @@ function renderPartner(data) {
       const nameEn = p.name_en && p.name_en !== p.name ? `<div class="topcard-name-en">${p.name_en}</div>` : '';
       return `<div class="partner-item">
         <span class="partner-rank">${medals[i]}</span>
-        ${imgHtml}
-        <div class="topcard-name" style="flex:1">
+        <span class="bcp-trigger" ${window.BazaarCardPreview?.attrs(p)||''}>${imgHtml}</span>
+        <div class="topcard-name bcp-trigger" ${window.BazaarCardPreview?.attrs(p)||''} style="flex:1">
           <div class="topcard-name-zh">${p.name}</div>
           ${nameEn}
         </div>

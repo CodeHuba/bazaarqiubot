@@ -57,6 +57,7 @@ from day_stats_builder import (
     _build_daily_route_direction_details,
 )
 from web_runs.day_snapshot_store import DaySnapshotStore
+from card_preview_api import create_card_preview_blueprint
 
 INGEST_TOKEN = os.getenv('BAZAAR_INGEST_TOKEN', '')
 RUNS_DB_PATH = os.getenv('RUNS_DB_PATH', '/opt/qiubot/data/bazaar_runs.db')
@@ -233,6 +234,7 @@ def _mask_ip(ip):
     return f"{p[0]}.{p[1]}.*.*" if len(p) == 4 else ip
 
 app = Flask(__name__, static_folder='static')
+app.register_blueprint(create_card_preview_blueprint(data_label=CURRENT_PHASE))
 app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024
 _card_art_proxy_locks: dict[str, threading.Lock] = {}
 # 线上仅通过 Caddy 单层反代访问；由 Caddy 覆盖 X-Forwarded-For 后再解析真实客户端地址。
