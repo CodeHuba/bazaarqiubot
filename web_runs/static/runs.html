@@ -2,6 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
+<script src="/static/theme.js?v=1"></script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>阵容查询 | 巴扎丘Bot</title>
 <meta name="description" content="查询 The Bazaar 天梯真实阵容与对局构成。">
@@ -24,28 +25,28 @@
 /* CSS 变量 - 色彩系统 */
 :root {
   /* 主色 */
-  --bg-deep: #090A2A;
-  --bg-surface: #171047;
-  --neon-magenta: #F438B8;
-  --neon-cyan: #26D9F2;
-  --neon-violet: #8A4DFF;
-  --neon-teal: #36E3C1;
-  --neon-coral: #FF536A;
-  --neon-gold: #F5C76A;
-  --text-primary: #F5F4FF;
-  --text-secondary: #B5B3D7;
+  --bg-deep: var(--theme-bg, #090A2A);
+  --bg-surface: var(--theme-surface, #171047);
+  --neon-magenta: var(--theme-magenta, #F438B8);
+  --neon-cyan: var(--theme-cyan, #26D9F2);
+  --neon-violet: var(--theme-violet, #8A4DFF);
+  --neon-teal: var(--theme-teal, #36E3C1);
+  --neon-coral: var(--theme-coral, #FF536A);
+  --neon-gold: var(--theme-gold, #F5C76A);
+  --text-primary: var(--theme-text, #F5F4FF);
+  --text-secondary: var(--theme-muted, #B5B3D7);
 
   /* 功能色 */
-  --border-dim: rgba(138, 77, 255, 0.15);
-  --border-bright: rgba(38, 217, 242, 0.4);
-  --glow-magenta: 0 0 20px rgba(244, 56, 184, 0.5);
-  --glow-cyan: 0 0 20px rgba(38, 217, 242, 0.5);
-  --glow-violet: 0 0 16px rgba(138, 77, 255, 0.4);
+  --border-dim: rgba(var(--theme-violet-rgb, 138, 77, 255), 0.15);
+  --border-bright: rgba(var(--theme-cyan-rgb, 38, 217, 242), 0.4);
+  --glow-magenta: 0 0 20px rgba(var(--theme-magenta-rgb, 244, 56, 184), 0.5);
+  --glow-cyan: 0 0 20px rgba(var(--theme-cyan-rgb, 38, 217, 242), 0.5);
+  --glow-violet: 0 0 16px rgba(var(--theme-violet-rgb, 138, 77, 255), 0.4);
 
   /* 胜率渐变 */
-  --win-high: #36E3C1;
-  --win-mid: #F5C76A;
-  --win-low: #FF536A;
+  --win-high: var(--theme-teal, #36E3C1);
+  --win-mid: var(--theme-gold, #F5C76A);
+  --win-low: var(--theme-coral, #FF536A);
 }
 
 /* 全局重置 */
@@ -60,8 +61,8 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif;
   background: var(--bg-deep);
   background-image:
-    linear-gradient(rgba(138, 77, 255, 0.03) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(138, 77, 255, 0.03) 1px, transparent 1px);
+    linear-gradient(rgba(var(--theme-violet-rgb, 138, 77, 255), 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(var(--theme-violet-rgb, 138, 77, 255), 0.03) 1px, transparent 1px);
   background-size: 24px 24px;
   color: var(--text-primary);
   min-height: 100vh;
@@ -82,8 +83,8 @@ body::before {
     0deg,
     transparent,
     transparent 2px,
-    rgba(38, 217, 242, 0.02) 2px,
-    rgba(38, 217, 242, 0.02) 4px
+    rgba(var(--theme-cyan-rgb, 38, 217, 242), 0.02) 2px,
+    rgba(var(--theme-cyan-rgb, 38, 217, 242), 0.02) 4px
   );
   pointer-events: none;
   z-index: 1;
@@ -104,7 +105,7 @@ body::before {
   align-items: center;
   height: 64px;
   gap: 32px;
-  box-shadow: 0 4px 24px rgba(244, 56, 184, 0.15);
+  box-shadow: 0 4px 24px rgba(var(--theme-magenta-rgb, 244, 56, 184), 0.15);
 }
 
 .logo {
@@ -150,12 +151,12 @@ body::before {
 .nav-tab:hover {
   color: var(--text-primary);
   border-color: var(--border-bright);
-  background: rgba(38, 217, 242, 0.08);
+  background: rgba(var(--theme-cyan-rgb, 38, 217, 242), 0.08);
 }
 
 .nav-tab.active {
   color: var(--text-primary);
-  background: linear-gradient(135deg, rgba(244, 56, 184, 0.15), rgba(38, 217, 242, 0.15));
+  background: linear-gradient(135deg, rgba(var(--theme-magenta-rgb, 244, 56, 184), 0.15), rgba(var(--theme-cyan-rgb, 38, 217, 242), 0.15));
   border-color: var(--neon-magenta);
   box-shadow: var(--glow-magenta);
 }
@@ -200,12 +201,12 @@ body::before {
 /* 筛选卡片 - 品红主边框 + 青色角标 */
 .form-card {
   background: var(--bg-surface);
-  border: 1px solid rgba(244, 56, 184, 0.35);
+  border: 1px solid rgba(var(--theme-magenta-rgb, 244, 56, 184), 0.35);
   border-radius: 8px;
   padding: 20px 24px;
   margin-bottom: 24px;
   position: relative;
-  box-shadow: inset 0 0 40px rgba(244, 56, 184, 0.04);
+  box-shadow: inset 0 0 40px rgba(var(--theme-magenta-rgb, 244, 56, 184), 0.04);
 }
 
 /* 青色角标 */
@@ -272,8 +273,8 @@ body::before {
 
 /* 输入框 / 下拉框 */
 input, select {
-  background: rgba(9, 10, 42, 0.8);
-  border: 1px solid rgba(138, 77, 255, 0.3);
+  background: rgba(var(--theme-bg-rgb, 9, 10, 42), 0.8);
+  border: 1px solid rgba(var(--theme-violet-rgb, 138, 77, 255), 0.3);
   border-radius: 6px;
   padding: 9px 14px;
   color: var(--text-primary);
@@ -285,34 +286,34 @@ input, select {
 }
 
 input:hover, select:hover {
-  border-color: rgba(38, 217, 242, 0.5);
+  border-color: rgba(var(--theme-cyan-rgb, 38, 217, 242), 0.5);
 }
 
 input:focus, select:focus {
   border-color: var(--neon-cyan);
-  box-shadow: 0 0 0 2px rgba(38, 217, 242, 0.15);
-  background: rgba(9, 10, 42, 1);
+  box-shadow: 0 0 0 2px rgba(var(--theme-cyan-rgb, 38, 217, 242), 0.15);
+  background: rgba(var(--theme-bg-rgb, 9, 10, 42), 1);
 }
 
 input::placeholder {
-  color: rgba(181, 179, 215, 0.4);
+  color: rgba(var(--theme-muted-rgb, 181, 179, 215), 0.4);
 }
 
 /* 阵容查询：可连续添加多张卡牌的联想标签输入框 */
 .runs-card-picker { position:relative; min-width:0; max-width:none; }
-.runs-card-picker-box { height:40px; min-height:40px; padding:5px 9px; display:flex; align-items:center; flex-wrap:nowrap; gap:6px; overflow-x:auto; overflow-y:hidden; background:rgba(9,10,42,.8); border:1px solid rgba(138,77,255,.3); border-radius:6px; cursor:text; transition:.2s; scrollbar-width:thin; }
-.runs-card-picker-box:focus-within { border-color:var(--neon-cyan); box-shadow:0 0 0 2px rgba(38,217,242,.15); }
+.runs-card-picker-box { height:40px; min-height:40px; padding:5px 9px; display:flex; align-items:center; flex-wrap:nowrap; gap:6px; overflow-x:auto; overflow-y:hidden; background:rgba(var(--theme-bg-rgb, 9, 10, 42), .8); border:1px solid rgba(var(--theme-violet-rgb, 138, 77, 255), .3); border-radius:6px; cursor:text; transition:.2s; scrollbar-width:thin; }
+.runs-card-picker-box:focus-within { border-color:var(--neon-cyan); box-shadow:0 0 0 2px rgba(var(--theme-cyan-rgb, 38, 217, 242), .15); }
 .runs-card-tags { display:flex; align-items:center; gap:6px; flex:none; }
-.runs-card-tag { display:inline-flex; align-items:center; gap:5px; padding:4px 7px; border:1px solid rgba(38,217,242,.45); border-radius:5px; color:var(--text-primary); background:rgba(38,217,242,.1); font-size:13px; line-height:1; white-space:nowrap; flex:none; }
+.runs-card-tag { display:inline-flex; align-items:center; gap:5px; padding:4px 7px; border:1px solid rgba(var(--theme-cyan-rgb, 38, 217, 242), .45); border-radius:5px; color:var(--text-primary); background:rgba(var(--theme-cyan-rgb, 38, 217, 242), .1); font-size:13px; line-height:1; white-space:nowrap; flex:none; }
 .runs-card-tag button { border:0; background:transparent; color:var(--text-secondary); cursor:pointer; font-size:16px; line-height:1; padding:0; }
 .runs-card-tag button:hover { color:var(--neon-coral); }
-.runs-card-tag .runs-enchantment-select { width:auto; min-width:88px; height:24px; padding:1px 18px 1px 4px; border:0; border-left:1px solid rgba(38,217,242,.3); border-radius:0; font:inherit; font-size:11px; color:var(--neon-gold); background-color:transparent; cursor:pointer; }
+.runs-card-tag .runs-enchantment-select { width:auto; min-width:88px; height:24px; padding:1px 18px 1px 4px; border:0; border-left:1px solid rgba(var(--theme-cyan-rgb, 38, 217, 242), .3); border-radius:0; font:inherit; font-size:11px; color:var(--neon-gold); background-color:transparent; cursor:pointer; }
 #runs-card-search { flex:1 1 130px; min-width:120px; width:auto; padding:4px 2px; border:0; box-shadow:none; background:transparent; }
 #runs-card-search:focus { border:0; box-shadow:none; background:transparent; }
-.runs-card-suggestions { display:none; position:absolute; z-index:120; left:0; right:0; top:calc(100% + 5px); max-height:330px; overflow:auto; padding:5px; border:1px solid rgba(38,217,242,.45); border-radius:8px; background:#100c35; box-shadow:0 14px 32px rgba(0,0,0,.45); }
+.runs-card-suggestions { display:none; position:absolute; z-index:120; left:0; right:0; top:calc(100% + 5px); max-height:330px; overflow:auto; padding:5px; border:1px solid rgba(var(--theme-cyan-rgb, 38, 217, 242), .45); border-radius:8px; background:var(--theme-surface, #100c35); box-shadow:0 14px 32px rgba(0,0,0,.45); }
 .runs-card-suggestions.open { display:block; }
 .runs-card-option { width:100%; padding:8px 10px; border:0; border-radius:6px; background:transparent; color:var(--text-primary); cursor:pointer; display:flex; align-items:center; gap:9px; text-align:left; }
-.runs-card-option:hover,.runs-card-option.active { background:rgba(38,217,242,.13); }
+.runs-card-option:hover,.runs-card-option.active { background:rgba(var(--theme-cyan-rgb, 38, 217, 242), .13); }
 .runs-card-option img { width:42px; height:42px; object-fit:contain; flex:none; }
 .runs-card-option-text { min-width:0; display:flex; flex-direction:column; }
 .runs-card-option-text small { color:var(--text-secondary); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
@@ -344,22 +345,22 @@ select option {
 .btn-primary {
   background: linear-gradient(135deg, var(--neon-magenta), var(--neon-violet));
   color: #fff;
-  box-shadow: 0 4px 16px rgba(244, 56, 184, 0.4);
+  box-shadow: 0 4px 16px rgba(var(--theme-magenta-rgb, 244, 56, 184), 0.4);
 }
 
 .btn-primary:hover {
   transform: translateY(-1px);
-  box-shadow: 0 6px 24px rgba(244, 56, 184, 0.6);
+  box-shadow: 0 6px 24px rgba(var(--theme-magenta-rgb, 244, 56, 184), 0.6);
   filter: brightness(1.1);
 }
 
 .btn-primary:active {
   transform: translateY(0);
-  box-shadow: 0 2px 8px rgba(244, 56, 184, 0.4);
+  box-shadow: 0 2px 8px rgba(var(--theme-magenta-rgb, 244, 56, 184), 0.4);
 }
 
 .btn-primary:disabled {
-  background: rgba(138, 77, 255, 0.15);
+  background: rgba(var(--theme-violet-rgb, 138, 77, 255), 0.15);
   color: var(--text-secondary);
   cursor: not-allowed;
   box-shadow: none;
@@ -388,8 +389,8 @@ select option {
   border-radius: 4px;
   font-size: 13px;
   cursor: pointer;
-  border: 1px solid rgba(38, 217, 242, 0.2);
-  background: rgba(38, 217, 242, 0.05);
+  border: 1px solid rgba(var(--theme-cyan-rgb, 38, 217, 242), 0.2);
+  background: rgba(var(--theme-cyan-rgb, 38, 217, 242), 0.05);
   color: var(--text-secondary);
   transition: all 0.2s;
   font-weight: 500;
@@ -398,13 +399,13 @@ select option {
 .chip:hover {
   border-color: var(--neon-cyan);
   color: var(--neon-cyan);
-  background: rgba(38, 217, 242, 0.12);
-  box-shadow: 0 0 8px rgba(38, 217, 242, 0.3);
+  background: rgba(var(--theme-cyan-rgb, 38, 217, 242), 0.12);
+  box-shadow: 0 0 8px rgba(var(--theme-cyan-rgb, 38, 217, 242), 0.3);
 }
 
 .chip .cnt {
   font-size: 10px;
-  color: rgba(181, 179, 215, 0.5);
+  color: rgba(var(--theme-muted-rgb, 181, 179, 215), 0.5);
   margin-left: 4px;
 }
 
@@ -414,13 +415,13 @@ select option {
 
 /* 青色主边框 + 品红角标 */
 .result-card {
-  background: rgba(23, 16, 71, 0.7);
-  border: 1px solid rgba(38, 217, 242, 0.3);
+  background: rgba(var(--theme-surface-rgb, 23, 16, 71), 0.7);
+  border: 1px solid rgba(var(--theme-cyan-rgb, 38, 217, 242), 0.3);
   border-radius: 8px;
   overflow: hidden;
   margin-bottom: 24px;
   position: relative;
-  box-shadow: 0 0 0 0 transparent, inset 0 0 32px rgba(38, 217, 242, 0.03);
+  box-shadow: 0 0 0 0 transparent, inset 0 0 32px rgba(var(--theme-cyan-rgb, 38, 217, 242), 0.03);
   transition: box-shadow 0.3s;
 }
 
@@ -439,30 +440,30 @@ select option {
 }
 
 .result-card:hover {
-  box-shadow: 0 0 20px rgba(38, 217, 242, 0.12);
+  box-shadow: 0 0 20px rgba(var(--theme-cyan-rgb, 38, 217, 242), 0.12);
 }
 
 .result-header {
   padding: 12px 20px;
-  border-bottom: 1px solid rgba(38, 217, 242, 0.15);
+  border-bottom: 1px solid rgba(var(--theme-cyan-rgb, 38, 217, 242), 0.15);
   font-size: 13px;
   color: var(--text-secondary);
   display: flex;
   justify-content: space-between;
   align-items: center;
-  background: rgba(9, 10, 42, 0.4);
+  background: rgba(var(--theme-bg-rgb, 9, 10, 42), 0.4);
 }
 
 .total {
   color: var(--neon-cyan);
   font-weight: 700;
-  text-shadow: 0 0 8px rgba(38, 217, 242, 0.6);
+  text-shadow: 0 0 8px rgba(var(--theme-cyan-rgb, 38, 217, 242), 0.6);
 }
 
 /* 阵容列表项 */
 .run-item {
   padding: 12px 20px;
-  border-bottom: 1px solid rgba(138, 77, 255, 0.1);
+  border-bottom: 1px solid rgba(var(--theme-violet-rgb, 138, 77, 255), 0.1);
   display: flex;
   gap: 12px;
   align-items: center;
@@ -470,7 +471,7 @@ select option {
 }
 
 .run-item:hover {
-  background: rgba(244, 56, 184, 0.05);
+  background: rgba(var(--theme-magenta-rgb, 244, 56, 184), 0.05);
 }
 
 .run-item:last-child {
@@ -483,9 +484,9 @@ select option {
   font-size: 12px;
   font-weight: 700;
   white-space: nowrap;
-  background: rgba(244, 56, 184, 0.12);
+  background: rgba(var(--theme-magenta-rgb, 244, 56, 184), 0.12);
   color: var(--neon-magenta);
-  border: 1px solid rgba(244, 56, 184, 0.35);
+  border: 1px solid rgba(var(--theme-magenta-rgb, 244, 56, 184), 0.35);
 }
 
 .run-meta {
@@ -501,12 +502,12 @@ select option {
 }
 
 .run-items{display:flex;flex-wrap:wrap;gap:5px;align-items:center;min-width:0;}
-.run-card-chip{display:inline-flex;align-items:center;gap:4px;padding:2px 6px;border:1px solid rgba(138,77,255,.25);border-radius:4px;background:rgba(138,77,255,.08);font-size:11px;color:var(--text-primary);white-space:nowrap;}
+.run-card-chip{display:inline-flex;align-items:center;gap:4px;padding:2px 6px;border:1px solid rgba(var(--theme-violet-rgb, 138, 77, 255), .25);border-radius:4px;background:rgba(var(--theme-violet-rgb, 138, 77, 255), .08);font-size:11px;color:var(--text-primary);white-space:nowrap;}
 .run-card-chip img{object-fit:contain;border-radius:2px;flex-shrink:0;display:block;}
 .run-card-chip img.size-Small{width:12px;height:24px;}
 .run-card-chip img.size-Medium{width:24px;height:24px;}
 .run-card-chip img.size-Large{width:36px;height:24px;}
-.run-card-chip.is-filter-match{border-color:var(--neon-cyan);background:rgba(38,217,242,.13);}
+.run-card-chip.is-filter-match{border-color:var(--neon-cyan);background:rgba(var(--theme-cyan-rgb, 38, 217, 242), .13);}
 .run-card-enchantment{color:var(--neon-gold);font-size:10px;}
 
 /* 胜率徽章 */
@@ -538,7 +539,7 @@ select option {
 .page-btn {
   padding: 6px 14px;
   border-radius: 4px;
-  border: 1px solid rgba(138, 77, 255, 0.3);
+  border: 1px solid rgba(var(--theme-violet-rgb, 138, 77, 255), 0.3);
   background: transparent;
   color: var(--text-secondary);
   cursor: pointer;
@@ -551,7 +552,7 @@ select option {
 .page-btn:hover {
   border-color: var(--neon-violet);
   color: var(--neon-violet);
-  background: rgba(138, 77, 255, 0.1);
+  background: rgba(var(--theme-violet-rgb, 138, 77, 255), 0.1);
 }
 
 .page-btn.active {
@@ -568,8 +569,8 @@ select option {
 
 /* 胜率查询 - 偏电光青 */
 .winrate-card {
-  background: rgba(23, 16, 71, 0.7);
-  border: 1px solid rgba(38, 217, 242, 0.3);
+  background: rgba(var(--theme-surface-rgb, 23, 16, 71), 0.7);
+  border: 1px solid rgba(var(--theme-cyan-rgb, 38, 217, 242), 0.3);
   border-radius: 8px;
   padding: 36px;
   text-align: center;
@@ -607,7 +608,7 @@ select option {
 }
 
 .winrate-bar-wrap {
-  background: rgba(138, 77, 255, 0.1);
+  background: rgba(var(--theme-violet-rgb, 138, 77, 255), 0.1);
   border-radius: 4px;
   height: 8px;
   width: 320px;
@@ -620,7 +621,7 @@ select option {
   content: '';
   position: absolute;
   inset: 0;
-  border: 1px solid rgba(38, 217, 242, 0.2);
+  border: 1px solid rgba(var(--theme-cyan-rgb, 38, 217, 242), 0.2);
   border-radius: 4px;
 }
 
@@ -671,8 +672,8 @@ select option {
   text-transform: uppercase;
   letter-spacing: 0.1em;
   padding: 10px 20px 8px;
-  border-bottom: 1px solid rgba(54, 227, 193, 0.15);
-  background: rgba(54, 227, 193, 0.04);
+  border-bottom: 1px solid rgba(var(--theme-teal-rgb, 54, 227, 193), 0.15);
+  background: rgba(var(--theme-teal-rgb, 54, 227, 193), 0.04);
 }
 
 .partner-item {
@@ -680,12 +681,12 @@ select option {
   align-items: center;
   gap: 14px;
   padding: 12px 20px;
-  border-bottom: 1px solid rgba(138, 77, 255, 0.1);
+  border-bottom: 1px solid rgba(var(--theme-violet-rgb, 138, 77, 255), 0.1);
   transition: background 0.15s;
 }
 
 .partner-item:hover {
-  background: rgba(54, 227, 193, 0.05);
+  background: rgba(var(--theme-teal-rgb, 54, 227, 193), 0.05);
 }
 
 .partner-item:last-child {
@@ -720,7 +721,7 @@ select option {
 
 .partner-bar-wrap {
   width: 80px;
-  background: rgba(138, 77, 255, 0.1);
+  background: rgba(var(--theme-violet-rgb, 138, 77, 255), 0.1);
   border-radius: 4px;
   height: 5px;
   overflow: hidden;
@@ -743,8 +744,8 @@ select option {
 }
 
 .topcard-hero-card {
-  background: rgba(23, 16, 71, 0.7);
-  border: 1px solid rgba(138, 77, 255, 0.35);
+  background: rgba(var(--theme-surface-rgb, 23, 16, 71), 0.7);
+  border: 1px solid rgba(var(--theme-violet-rgb, 138, 77, 255), 0.35);
   border-radius: 8px;
   overflow: hidden;
   position: relative;
@@ -767,8 +768,8 @@ select option {
   align-items: center;
   justify-content: space-between;
   padding: 12px 18px;
-  border-bottom: 1px solid rgba(138, 77, 255, 0.2);
-  background: rgba(9, 10, 42, 0.5);
+  border-bottom: 1px solid rgba(var(--theme-violet-rgb, 138, 77, 255), 0.2);
+  background: rgba(var(--theme-bg-rgb, 9, 10, 42), 0.5);
 }
 
 .topcard-hero-name {
@@ -788,12 +789,12 @@ select option {
   align-items: center;
   gap: 12px;
   padding: 10px 18px;
-  border-bottom: 1px solid rgba(138, 77, 255, 0.08);
+  border-bottom: 1px solid rgba(var(--theme-violet-rgb, 138, 77, 255), 0.08);
   transition: background 0.15s;
 }
 
 .topcard-item:hover {
-  background: rgba(138, 77, 255, 0.05);
+  background: rgba(var(--theme-violet-rgb, 138, 77, 255), 0.05);
 }
 
 .topcard-item:last-child {
@@ -852,7 +853,7 @@ select option {
 
 .topcard-bar-wrap {
   width: 60px;
-  background: rgba(138, 77, 255, 0.1);
+  background: rgba(var(--theme-violet-rgb, 138, 77, 255), 0.1);
   border-radius: 4px;
   height: 4px;
   overflow: hidden;
@@ -890,8 +891,8 @@ select option {
 .fb-textarea {
   width: 100%;
   min-height: 100px;
-  background: rgba(9, 10, 42, 0.8);
-  border: 1px solid rgba(255, 83, 106, 0.3);
+  background: rgba(var(--theme-bg-rgb, 9, 10, 42), 0.8);
+  border: 1px solid rgba(var(--theme-coral-rgb, 255, 83, 106), 0.3);
   border-radius: 6px;
   padding: 12px;
   color: var(--text-primary);
@@ -905,8 +906,8 @@ select option {
 
 .fb-textarea:focus {
   border-color: var(--neon-coral);
-  box-shadow: 0 0 0 2px rgba(255, 83, 106, 0.15);
-  background: rgba(9, 10, 42, 1);
+  box-shadow: 0 0 0 2px rgba(var(--theme-coral-rgb, 255, 83, 106), 0.15);
+  background: rgba(var(--theme-bg-rgb, 9, 10, 42), 1);
 }
 
 .fb-contact-input {
@@ -919,12 +920,12 @@ select option {
   background: linear-gradient(135deg, var(--neon-coral), var(--neon-magenta));
   color: #fff;
   font-weight: 700;
-  box-shadow: 0 4px 16px rgba(255, 83, 106, 0.4);
+  box-shadow: 0 4px 16px rgba(var(--theme-coral-rgb, 255, 83, 106), 0.4);
 }
 
 .fb-submit-btn:hover {
   transform: translateY(-1px);
-  box-shadow: 0 6px 24px rgba(255, 83, 106, 0.6);
+  box-shadow: 0 6px 24px rgba(var(--theme-coral-rgb, 255, 83, 106), 0.6);
   filter: brightness(1.1);
 }
 
@@ -936,8 +937,8 @@ select option {
 }
 
 .fb-card {
-  background: rgba(23, 16, 71, 0.7);
-  border: 1px solid rgba(255, 83, 106, 0.3);
+  background: rgba(var(--theme-surface-rgb, 23, 16, 71), 0.7);
+  border: 1px solid rgba(var(--theme-coral-rgb, 255, 83, 106), 0.3);
   border-radius: 8px;
   padding: 16px 20px;
   margin-bottom: 12px;
@@ -976,13 +977,13 @@ select option {
   gap: 10px;
   margin-top: 10px;
   padding-top: 10px;
-  border-top: 1px solid rgba(138, 77, 255, 0.15);
+  border-top: 1px solid rgba(var(--theme-violet-rgb, 138, 77, 255), 0.15);
 }
 
 .fb-like-btn {
   padding: 4px 12px;
   border-radius: 4px;
-  border: 1px solid rgba(255, 83, 106, 0.3);
+  border: 1px solid rgba(var(--theme-coral-rgb, 255, 83, 106), 0.3);
   background: transparent;
   color: var(--text-secondary);
   cursor: pointer;
@@ -998,13 +999,13 @@ select option {
 .fb-like-btn:hover {
   border-color: var(--neon-coral);
   color: var(--neon-coral);
-  background: rgba(255, 83, 106, 0.08);
+  background: rgba(var(--theme-coral-rgb, 255, 83, 106), 0.08);
 }
 
 .fb-like-btn.liked {
   border-color: var(--neon-coral);
   color: var(--neon-coral);
-  background: rgba(255, 83, 106, 0.15);
+  background: rgba(var(--theme-coral-rgb, 255, 83, 106), 0.15);
 }
 
 /* 通用状态 - Loading / Empty / Error */
@@ -1050,8 +1051,8 @@ select option {
 }
 
 .error-msg {
-  background: rgba(255, 83, 106, 0.08);
-  border: 1px solid rgba(255, 83, 106, 0.35);
+  background: rgba(var(--theme-coral-rgb, 255, 83, 106), 0.08);
+  border: 1px solid rgba(var(--theme-coral-rgb, 255, 83, 106), 0.35);
   border-radius: 6px;
   padding: 12px 16px;
   color: var(--neon-coral);
@@ -1078,7 +1079,7 @@ select option {
 
 .run-link:hover {
   color: var(--neon-teal);
-  text-shadow: 0 0 8px rgba(38, 217, 242, 0.5);
+  text-shadow: 0 0 8px rgba(var(--theme-cyan-rgb, 38, 217, 242), 0.5);
 }
 
 /* Footer */
@@ -1090,7 +1091,7 @@ body {
 footer {
   margin-top: auto;
   padding: 30px 20px;
-  border-top: 1px solid rgba(138, 77, 255, 0.2);
+  border-top: 1px solid rgba(var(--theme-violet-rgb, 138, 77, 255), 0.2);
   text-align: center;
   color: var(--text-secondary);
   font-size: 12px;
@@ -1107,7 +1108,7 @@ footer a {
 
 footer a:hover {
   color: var(--neon-teal);
-  text-shadow: 0 0 8px rgba(38, 217, 242, 0.5);
+  text-shadow: 0 0 8px rgba(var(--theme-cyan-rgb, 38, 217, 242), 0.5);
 }
 
 /* 移动端适配 (< 768px) */
@@ -1249,11 +1250,11 @@ footer a:hover {
 
 .fb-form-card {
   background: var(--bg-surface);
-  border: 1px solid rgba(255, 83, 106, 0.35);
+  border: 1px solid rgba(var(--theme-coral-rgb, 255, 83, 106), 0.35);
   border-radius: 8px;
   padding: 20px;
   position: relative;
-  box-shadow: inset 0 0 40px rgba(255, 83, 106, 0.04);
+  box-shadow: inset 0 0 40px rgba(var(--theme-coral-rgb, 255, 83, 106), 0.04);
   position: sticky;
   top: 80px;
 }
@@ -1272,7 +1273,7 @@ footer a:hover {
 
 .fb-success {
   display: none;
-  background: rgba(54, 227, 193, 0.12);
+  background: rgba(var(--theme-teal-rgb, 54, 227, 193), 0.12);
   border: 1px solid var(--neon-teal);
   border-radius: 6px;
   padding: 10px 14px;
@@ -1298,7 +1299,7 @@ footer a:hover {
 }
 
 .fb-upload-hint {
-  border: 1px dashed rgba(255, 83, 106, 0.3);
+  border: 1px dashed rgba(var(--theme-coral-rgb, 255, 83, 106), 0.3);
   border-radius: 6px;
   padding: 10px;
   text-align: center;
@@ -1310,7 +1311,7 @@ footer a:hover {
 
 .fb-upload-hint:hover {
   border-color: var(--neon-coral);
-  background: rgba(255, 83, 106, 0.05);
+  background: rgba(var(--theme-coral-rgb, 255, 83, 106), 0.05);
 }
 
 .fb-preview {
@@ -1319,14 +1320,14 @@ footer a:hover {
   max-height: 200px;
   border-radius: 6px;
   margin-top: 10px;
-  border: 1px solid rgba(138, 77, 255, 0.2);
+  border: 1px solid rgba(var(--theme-violet-rgb, 138, 77, 255), 0.2);
 }
 
 .fb-load-more {
   width: 100%;
   padding: 10px;
   border-radius: 6px;
-  border: 1px solid rgba(255, 83, 106, 0.3);
+  border: 1px solid rgba(var(--theme-coral-rgb, 255, 83, 106), 0.3);
   background: transparent;
   color: var(--text-secondary);
   cursor: pointer;
@@ -1339,7 +1340,7 @@ footer a:hover {
 .fb-load-more:hover {
   border-color: var(--neon-coral);
   color: var(--neon-coral);
-  background: rgba(255, 83, 106, 0.08);
+  background: rgba(var(--theme-coral-rgb, 255, 83, 106), 0.08);
 }
 
 .masonry {
@@ -1405,7 +1406,7 @@ input[type="file"] {
 .fb-comment-btn {
   padding: 4px 12px;
   border-radius: 4px;
-  border: 1px solid rgba(255, 83, 106, 0.3);
+  border: 1px solid rgba(var(--theme-coral-rgb, 255, 83, 106), 0.3);
   background: transparent;
   color: var(--text-secondary);
   cursor: pointer;
@@ -1418,14 +1419,14 @@ input[type="file"] {
 .fb-comment-btn:hover {
   border-color: var(--neon-coral);
   color: var(--neon-coral);
-  background: rgba(255, 83, 106, 0.08);
+  background: rgba(var(--theme-coral-rgb, 255, 83, 106), 0.08);
 }
 
 /* 回复按钮 - 更小，品红风格 */
 .fb-reply-btn {
   padding: 3px 10px;
   border-radius: 4px;
-  border: 1px solid rgba(244, 56, 184, 0.25);
+  border: 1px solid rgba(var(--theme-magenta-rgb, 244, 56, 184), 0.25);
   background: transparent;
   color: var(--text-secondary);
   cursor: pointer;
@@ -1438,7 +1439,7 @@ input[type="file"] {
 .fb-reply-btn:hover {
   border-color: var(--neon-magenta);
   color: var(--neon-magenta);
-  background: rgba(244, 56, 184, 0.08);
+  background: rgba(var(--theme-magenta-rgb, 244, 56, 184), 0.08);
 }
 
 /* 发送按钮 - 青色风格 */
@@ -1453,20 +1454,20 @@ input[type="file"] {
   font-weight: 700;
   transition: all 0.2s;
   font-family: inherit;
-  box-shadow: 0 2px 10px rgba(38, 217, 242, 0.3);
+  box-shadow: 0 2px 10px rgba(var(--theme-cyan-rgb, 38, 217, 242), 0.3);
 }
 
 .fb-comment-submit:hover {
   transform: translateY(-1px);
-  box-shadow: 0 4px 16px rgba(38, 217, 242, 0.5);
+  box-shadow: 0 4px 16px rgba(var(--theme-cyan-rgb, 38, 217, 242), 0.5);
   filter: brightness(1.1);
 }
 
 /* 评论输入框 */
 .fb-comment-input {
   flex: 1;
-  background: rgba(9, 10, 42, 0.8);
-  border: 1px solid rgba(38, 217, 242, 0.2);
+  background: rgba(var(--theme-bg-rgb, 9, 10, 42), 0.8);
+  border: 1px solid rgba(var(--theme-cyan-rgb, 38, 217, 242), 0.2);
   border-radius: 6px;
   padding: 7px 12px;
   color: var(--text-primary);
@@ -1479,11 +1480,11 @@ input[type="file"] {
 
 .fb-comment-input:focus {
   border-color: var(--neon-cyan);
-  box-shadow: 0 0 0 2px rgba(38, 217, 242, 0.1);
+  box-shadow: 0 0 0 2px rgba(var(--theme-cyan-rgb, 38, 217, 242), 0.1);
 }
 
 .fb-comment-input::placeholder {
-  color: rgba(181, 179, 215, 0.4);
+  color: rgba(var(--theme-muted-rgb, 181, 179, 215), 0.4);
 }
 
 /* 评论区域容器 */
@@ -1498,16 +1499,16 @@ input[type="file"] {
 .fb-comment-list {
   margin-top: 10px;
   padding: 10px 0 0;
-  border-top: 1px solid rgba(138, 77, 255, 0.1);
+  border-top: 1px solid rgba(var(--theme-violet-rgb, 138, 77, 255), 0.1);
 }
 
 .fb-comment-item {
   padding: 8px 12px;
-  border-left: 2px solid rgba(38, 217, 242, 0.2);
+  border-left: 2px solid rgba(var(--theme-cyan-rgb, 38, 217, 242), 0.2);
   margin-bottom: 8px;
   font-size: 13px;
   color: var(--text-primary);
-  background: rgba(9, 10, 42, 0.3);
+  background: rgba(var(--theme-bg-rgb, 9, 10, 42), 0.3);
   border-radius: 0 4px 4px 0;
 }
 
@@ -1523,39 +1524,39 @@ input[type="file"] {
 .variant-rate{font-size:14px;font-weight:800;}
 .variant-count{font-size:12px;color:var(--text-secondary);}
 /* ===== 阵容分析视图 ===== */
-.view-toggle{display:flex;gap:0;border:1px solid rgba(138,77,255,.35);border-radius:6px;overflow:hidden;margin-bottom:16px;}
+.view-toggle{display:flex;gap:0;border:1px solid rgba(var(--theme-violet-rgb, 138, 77, 255), .35);border-radius:6px;overflow:hidden;margin-bottom:16px;}
 .view-toggle-btn{flex:1;padding:7px 0;font-size:13px;font-weight:600;cursor:pointer;border:none;background:transparent;color:var(--text-secondary);transition:all .2s;}
-.view-toggle-btn.active{background:rgba(138,77,255,.25);color:var(--text-primary);}
+.view-toggle-btn.active{background:rgba(var(--theme-violet-rgb, 138, 77, 255), .25);color:var(--text-primary);}
 .comp-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:14px;}
-.comp-summary-card{padding:12px 14px;background:rgba(23,16,71,.7);border:1px solid rgba(38,217,242,.24);border-radius:7px;}
+.comp-summary-card{padding:12px 14px;background:rgba(var(--theme-surface-rgb, 23, 16, 71), .7);border:1px solid rgba(var(--theme-cyan-rgb, 38, 217, 242), .24);border-radius:7px;}
 .comp-summary-label{font-size:11px;color:var(--text-secondary);}
 .comp-summary-value{font-size:18px;font-weight:800;color:var(--neon-cyan);overflow-wrap:anywhere;}
 .comp-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:12px 0;}
 .comp-sort-tabs{display:flex;gap:6px;flex-wrap:wrap;}
-.comp-sort-btn{padding:5px 11px;border:1px solid rgba(138,77,255,.35);border-radius:4px;background:transparent;color:var(--text-secondary);cursor:pointer;font-family:inherit;}
-.comp-sort-btn.active{color:#fff;background:rgba(138,77,255,.28);border-color:var(--neon-violet);}
-.comp-idea-card{background:rgba(23,16,71,.72);border:1px solid rgba(138,77,255,.35);border-radius:8px;padding:16px;margin-bottom:12px;position:relative;}
+.comp-sort-btn{padding:5px 11px;border:1px solid rgba(var(--theme-violet-rgb, 138, 77, 255), .35);border-radius:4px;background:transparent;color:var(--text-secondary);cursor:pointer;font-family:inherit;}
+.comp-sort-btn.active{color:#fff;background:rgba(var(--theme-violet-rgb, 138, 77, 255), .28);border-color:var(--neon-violet);}
+.comp-idea-card{background:rgba(var(--theme-surface-rgb, 23, 16, 71), .72);border:1px solid rgba(var(--theme-violet-rgb, 138, 77, 255), .35);border-radius:8px;padding:16px;margin-bottom:12px;position:relative;}
 .comp-idea-head{display:flex;align-items:flex-start;gap:12px;justify-content:space-between;}
 .comp-idea-title{font-size:14px;font-weight:800;margin-bottom:8px;}
 .comp-metrics{display:flex;gap:12px;text-align:right;flex-shrink:0;}
 .comp-metric strong{display:block;font-size:16px;}
 .comp-metric span{font-size:10px;color:var(--text-secondary);}
-.comp-anchor{border-color:var(--neon-magenta)!important;background:rgba(244,56,184,.22)!important;box-shadow:0 0 8px rgba(244,56,184,.3);}
+.comp-anchor{border-color:var(--neon-magenta)!important;background:rgba(var(--theme-magenta-rgb, 244, 56, 184), .22)!important;box-shadow:0 0 8px rgba(var(--theme-magenta-rgb, 244, 56, 184), .3);}
 .comp-anchor::after{content:'查询卡';font-size:9px;color:var(--neon-magenta);margin-left:3px;}
-.comp-details{margin-top:12px;padding-top:12px;border-top:1px solid rgba(138,77,255,.2);}
+.comp-details{margin-top:12px;padding-top:12px;border-top:1px solid rgba(var(--theme-violet-rgb, 138, 77, 255), .2);}
 .comp-detail-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;}
-.comp-link-btn{display:inline-flex;padding:4px 10px;border:1px solid rgba(38,217,242,.35);border-radius:4px;color:var(--neon-cyan);text-decoration:none;font-size:11px;background:transparent;cursor:pointer;font-family:inherit;}
+.comp-link-btn{display:inline-flex;padding:4px 10px;border:1px solid rgba(var(--theme-cyan-rgb, 38, 217, 242), .35);border-radius:4px;color:var(--neon-cyan);text-decoration:none;font-size:11px;background:transparent;cursor:pointer;font-family:inherit;}
 .comp-note{font-size:11px;color:var(--text-secondary);margin-top:6px;}
-.comp-system-toggle{margin-top:16px;border-top:1px solid rgba(138,77,255,.2);padding-top:12px;}
+.comp-system-toggle{margin-top:16px;border-top:1px solid rgba(var(--theme-violet-rgb, 138, 77, 255), .2);padding-top:12px;}
 @media(max-width:900px){.page-runs #panel-runs > .form-card > .form-row{grid-template-columns:repeat(2,minmax(0,1fr));}.page-runs #panel-runs > .form-card > .form-row .runs-card-picker{grid-column:span 2;}.page-runs #panel-runs > .form-card > .form-row > .btn{margin-top:0;}}
 @media(max-width:700px){.page-runs #panel-runs > .form-card > .form-row{grid-template-columns:1fr;}.page-runs #panel-runs > .form-card > .form-row .runs-card-picker{grid-column:auto;}.runs-card-picker{min-width:0;max-width:100%;}.comp-summary{grid-template-columns:repeat(2,minmax(0,1fr));}.comp-idea-head{flex-direction:column}.comp-metrics{text-align:left}.comp-toolbar{align-items:flex-start;flex-direction:column}}
-.comp-group{background:rgba(23,16,71,.7);border:1px solid rgba(138,77,255,.3);border-radius:8px;margin-bottom:14px;overflow:hidden;transition:all .2s;position:relative;}
-.comp-group::before{content:'';position:absolute;top:-1px;right:-1px;width:12px;height:12px;background:var(--neon-violet,#8a4dff);clip-path:polygon(100% 0,0 0,100% 100%);border-radius:0 8px 0 0;}
-.comp-group:hover{border-color:rgba(138,77,255,.55);box-shadow:0 0 16px rgba(138,77,255,.2);}
-.comp-group-header{padding:14px 20px;display:flex;align-items:center;gap:14px;cursor:pointer;user-select:none;background:rgba(9,10,42,.35);}
-.comp-card-chip{padding:3px 9px;border-radius:4px;font-size:12px;font-weight:600;background:rgba(138,77,255,.12);color:var(--text-primary);border:1px solid rgba(138,77,255,.3);white-space:nowrap;}
+.comp-group{background:rgba(var(--theme-surface-rgb, 23, 16, 71), .7);border:1px solid rgba(var(--theme-violet-rgb, 138, 77, 255), .3);border-radius:8px;margin-bottom:14px;overflow:hidden;transition:all .2s;position:relative;}
+.comp-group::before{content:'';position:absolute;top:-1px;right:-1px;width:12px;height:12px;background:var(--neon-violet,var(--theme-violet, #8a4dff));clip-path:polygon(100% 0,0 0,100% 100%);border-radius:0 8px 0 0;}
+.comp-group:hover{border-color:rgba(var(--theme-violet-rgb, 138, 77, 255), .55);box-shadow:0 0 16px rgba(var(--theme-violet-rgb, 138, 77, 255), .2);}
+.comp-group-header{padding:14px 20px;display:flex;align-items:center;gap:14px;cursor:pointer;user-select:none;background:rgba(var(--theme-bg-rgb, 9, 10, 42), .35);}
+.comp-card-chip{padding:3px 9px;border-radius:4px;font-size:12px;font-weight:600;background:rgba(var(--theme-violet-rgb, 138, 77, 255), .12);color:var(--text-primary);border:1px solid rgba(var(--theme-violet-rgb, 138, 77, 255), .3);white-space:nowrap;}
 .comp-card-chip.has-img{padding:3px 6px;display:flex;align-items:center;gap:4px;}
-.comp-card-chip.is-new{background:rgba(244,56,184,0.25);border-color:rgba(244,56,184,0.8);color:#F438B8;font-weight:700;box-shadow:0 0 6px rgba(244,56,184,0.4);}
+.comp-card-chip.is-new{background:rgba(var(--theme-magenta-rgb, 244, 56, 184), 0.25);border-color:rgba(var(--theme-magenta-rgb, 244, 56, 184), 0.8);color:var(--theme-magenta, #F438B8);font-weight:700;box-shadow:0 0 6px rgba(var(--theme-magenta-rgb, 244, 56, 184), 0.4);}
 .comp-card-img{width:auto;height:32px;object-fit:contain;border-radius:3px;flex-shrink:0;display:block;}
 /* #bz db 原图按卡牌 Size 区分比例：Small / Medium / Large。保持原始比例，不裁切。 */
 .comp-card-img.size-Small{width:16px;height:32px;}
@@ -1563,9 +1564,9 @@ input[type="file"] {
 .comp-card-img.size-Large{width:48px;height:32px;}
 .comp-expand-icon{font-size:13px;color:var(--text-secondary);transition:transform .3s;flex-shrink:0;}
 .comp-group.expanded>.comp-group-header .comp-expand-icon{transform:rotate(180deg);}
-.comp-variants{display:none;padding:14px 20px;border-top:1px solid rgba(138,77,255,.15);}
+.comp-variants{display:none;padding:14px 20px;border-top:1px solid rgba(var(--theme-violet-rgb, 138, 77, 255), .15);}
 .comp-group.expanded>.comp-variants{display:block;}
-.comp-variant-item{padding:12px;background:rgba(9,10,42,.5);border-radius:6px;margin-bottom:10px;border:1px solid rgba(138,77,255,.2);}
+.comp-variant-item{padding:12px;background:rgba(var(--theme-bg-rgb, 9, 10, 42), .5);border-radius:6px;margin-bottom:10px;border:1px solid rgba(var(--theme-violet-rgb, 138, 77, 255), .2);}
 .comp-variant-item:last-child{margin-bottom:0;}
 .comp-rep-cards{display:flex;flex-wrap:wrap;gap:6px;align-items:center;}
 .comp-stats{display:flex;align-items:center;gap:12px;flex-shrink:0;}
@@ -1579,6 +1580,7 @@ input[type="file"] {
   <script src="/static/query-progress.js"></script>
 <link rel="stylesheet" href="/static/card-preview.css?v=1">
 <script src="/static/card-preview.js?v=1"></script>
+<link rel="stylesheet" href="/static/theme.css?v=1">
 </head>
 <body>
 <nav class="navbar">
@@ -1871,9 +1873,9 @@ function showError(id, msg) {
 }
 
 function winrateColor(r) {
-  if (r >= 0.7) return '#10b981';
-  if (r >= 0.5) return '#f59e0b';
-  return '#ef4444';
+  if (r >= 0.7) return 'var(--theme-teal, #10b981)';
+  if (r >= 0.5) return 'var(--theme-gold, #f59e0b)';
+  return 'var(--theme-coral, #ef4444)';
 }
 
 async function queryRuns(page) {
@@ -1990,7 +1992,7 @@ function renderRuns(data, page, params) {
       const enchantment = c.enchantment ? `<span class="run-card-enchantment">${escapeRunCardText(c.enchantment_zh || RUN_ENCHANTMENTS[c.enchantment] || c.enchantment)}</span>` : '';
       return `<span class="run-card-chip bcp-trigger${c.matched ? ' is-filter-match' : ''}" ${window.BazaarCardPreview?.attrs(c)||''}>${img}${escapeRunCardText(c.name)}${enchantment}</span>`;
     }).join('') + (cardList.length>visibleCards.length ? `<span class="run-card-chip">+${cardList.length-visibleCards.length}</span>` : '') : escapeHtml((r.items || []).slice(0,5).join('、'));
-    const screenshot = r.screenshot ? `<div style="margin:8px 0 2px"><img src="${r.screenshot}" style="max-width:100%;border-radius:6px;border:1px solid #1f2937" loading="lazy" onerror="this.style.display='none'"></div>` : '';
+    const screenshot = r.screenshot ? `<div style="margin:8px 0 2px"><img src="${r.screenshot}" style="max-width:100%;border-radius:6px;border:1px solid var(--theme-border, #1f2937)" loading="lazy" onerror="this.style.display='none'"></div>` : '';
     const timeStr = r.created_at ? new Date(r.created_at).toLocaleString('zh-CN', {timeZone:'Asia/Shanghai',month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}) : '';
     return `<div class="run-item" style="flex-direction:column;align-items:flex-start">
       <div style="display:flex;gap:12px;align-items:center;width:100%">
@@ -2058,7 +2060,7 @@ function renderWinrate(data) {
   const color = winrateColor(rate);
   const pct = (rate*100).toFixed(1);
   const title = card_names.join(' + ') || '查询卡牌';
-  let notFoundHtml = not_found && not_found.length ? `<div style="color:#f87171;font-size:12px;margin-top:12px">未识别: ${not_found.join(', ')}</div>` : '';
+  let notFoundHtml = not_found && not_found.length ? `<div style="color:var(--theme-coral, #f87171);font-size:12px;margin-top:12px">未识别: ${not_found.join(', ')}</div>` : '';
   document.getElementById('wr-result').innerHTML = `
     <div class="winrate-card">
       <div class="winrate-title">${title} 的10胜率</div>
@@ -2192,9 +2194,9 @@ const RANK_ICONS = ['🥇','🥈','🥉','4️⃣','5️⃣','6️⃣','7️⃣'
 window._topcardLoaded = false;
 
 function tcRateColor(r) {
-  if (r >= 0.6) return '#10b981';
-  if (r >= 0.45) return '#f59e0b';
-  return '#ef4444';
+  if (r >= 0.6) return 'var(--theme-teal, #10b981)';
+  if (r >= 0.45) return 'var(--theme-gold, #f59e0b)';
+  return 'var(--theme-coral, #ef4444)';
 }
 
 async function loadTopcard() {
@@ -2503,9 +2505,9 @@ function setViewMode(mode) {
 }
 
 function rateColorComp(r) {
-  if (r >= 0.7) return '#10b981';
-  if (r >= 0.5) return '#f59e0b';
-  return '#ef4444';
+  if (r >= 0.7) return 'var(--theme-teal, #10b981)';
+  if (r >= 0.5) return 'var(--theme-gold, #f59e0b)';
+  return 'var(--theme-coral, #ef4444)';
 }
 
 const HERO_ZH_COMP = {Vanessa:'瓦内莎',Dooley:'杜利',Mak:'马克',Pygmalien:'皮格马利翁',Stelle:'斯黛尔',Jules:'朱尔斯',Karnok:'卡诺克','The Dragons':'双龙'};
@@ -2569,11 +2571,11 @@ function renderCompCard(data) {
     if (!url) return '';
     const fullUrl = url.startsWith('http') ? url : 'https://usercontent.bzdb.network' + url;
     return `<div style="margin-top:8px">
-      <button onclick="toggleScreenshotComp('${id}')" style="background:none;border:1px solid rgba(38,217,242,0.3);border-radius:4px;color:var(--text-secondary);font-size:11px;padding:3px 10px;cursor:pointer;font-family:inherit;transition:all 0.2s;" onmouseover="this.style.borderColor='var(--neon-cyan)';this.style.color='var(--neon-cyan)'" onmouseout="this.style.borderColor='rgba(38,217,242,0.3)';this.style.color='var(--text-secondary)'">
+      <button onclick="toggleScreenshotComp('${id}')" style="background:none;border:1px solid rgba(var(--theme-cyan-rgb, 38, 217, 242), 0.3);border-radius:4px;color:var(--text-secondary);font-size:11px;padding:3px 10px;cursor:pointer;font-family:inherit;transition:all 0.2s;" onmouseover="this.style.borderColor='var(--neon-cyan)';this.style.color='var(--neon-cyan)'" onmouseout="this.style.borderColor='rgba(38,217,242,0.3)';this.style.color='var(--text-secondary)'">
         📷 查看截图 <span id="${id}-icon">▼</span>
       </button>
       <div id="${id}" style="display:none;margin-top:8px">
-        <img src="${fullUrl}" style="max-width:100%;border-radius:6px;border:1px solid rgba(138,77,255,0.3)" loading="lazy" onerror="this.parentElement.style.display='none'">
+        <img src="${fullUrl}" style="max-width:100%;border-radius:6px;border:1px solid rgba(var(--theme-violet-rgb, 138, 77, 255), 0.3)" loading="lazy" onerror="this.parentElement.style.display='none'">
       </div>
     </div>`;
   }
@@ -2613,8 +2615,8 @@ function renderCompCard(data) {
     return l3list.map((l3, k) => {
       const id = `${prefix}-l3-${k}`;
       const cfgHtml = renderConfigs(l3.configs, id);
-      return `<div class="comp-group" id="${id}" style="margin:8px 0;border-color:rgba(38,217,242,0.25)">
-        <div class="comp-group-header" onclick="document.getElementById('${id}').classList.toggle('expanded')" style="background:rgba(9,10,42,0.5);padding:10px 16px">
+      return `<div class="comp-group" id="${id}" style="margin:8px 0;border-color:rgba(var(--theme-cyan-rgb, 38, 217, 242), 0.25)">
+        <div class="comp-group-header" onclick="document.getElementById('${id}').classList.toggle('expanded')" style="background:rgba(var(--theme-bg-rgb, 9, 10, 42), 0.5);padding:10px 16px">
           <span style="font-size:12px;color:var(--text-secondary);flex-shrink:0">L3</span>
           <div class="comp-rep-cards" style="flex:1">${chips(l3.core_cards)}</div>
           <div class="comp-stats">
@@ -2636,8 +2638,8 @@ function renderCompCard(data) {
       const id = `${prefix}-l2-${j}`;
       const l3Html = renderL3(l2.l3_variants, id);
       const l2InnerHtml = l3Html || renderConfigs(l2.configs, id);
-      return `<div class="comp-group" id="${id}" style="margin:8px 0;border-color:rgba(244,56,184,0.25)">
-        <div class="comp-group-header" onclick="document.getElementById('${id}').classList.toggle('expanded')" style="background:rgba(9,10,42,0.45);padding:10px 16px">
+      return `<div class="comp-group" id="${id}" style="margin:8px 0;border-color:rgba(var(--theme-magenta-rgb, 244, 56, 184), 0.25)">
+        <div class="comp-group-header" onclick="document.getElementById('${id}').classList.toggle('expanded')" style="background:rgba(var(--theme-bg-rgb, 9, 10, 42), 0.45);padding:10px 16px">
           <span style="font-size:12px;color:var(--text-secondary);flex-shrink:0">L2</span>
           <div class="comp-rep-cards" style="flex:1">${chips(l2.core_cards)}</div>
           <div class="comp-stats">
@@ -2730,16 +2732,16 @@ function renderCompRecommendations(data) {
 
 </script>
 
-<footer style="padding:30px 20px;border-top:1px solid #1f2937;text-align:center;color:#6b7280;font-size:13px">
+<footer style="padding:30px 20px;border-top:1px solid var(--theme-border, #1f2937);text-align:center;color:var(--theme-dim, #6b7280);font-size:13px">
   <div style="margin-bottom:12px">
-    <a href="/static/privacy.html" style="color:#60a5fa;text-decoration:none;margin:0 15px" target="_blank">隐私政策</a>
+    <a href="/static/privacy.html" style="color:var(--theme-link, #60a5fa);text-decoration:none;margin:0 15px" target="_blank">隐私政策</a>
     <span style="margin:0 5px">|</span>
-    <a href="https://github.com/CodeHuba/QiuBot" style="color:#60a5fa;text-decoration:none;margin:0 15px" target="_blank">GitHub</a>
+    <a href="https://github.com/CodeHuba/QiuBot" style="color:var(--theme-link, #60a5fa);text-decoration:none;margin:0 15px" target="_blank">GitHub</a>
     <span style="margin:0 5px">|</span>
-    <span style="color:#9ca3af;margin:0 15px">反馈QQ群：<a href="https://qm.qq.com/q/1102189995" target="_blank" style="color:var(--neon-coral);text-shadow:0 0 8px rgba(255,83,106,0.5)">1102189995</a></span>
+    <span style="color:var(--theme-muted, #9ca3af);margin:0 15px">反馈QQ群：<a href="https://qm.qq.com/q/1102189995" target="_blank" style="color:var(--neon-coral);text-shadow:0 0 8px rgba(var(--theme-coral-rgb, 255, 83, 106), 0.5)">1102189995</a></span>
   </div>
-  <div style="color:#4b5563">
-    <a href="https://beian.miit.gov.cn/" target="_blank" style="color:#4b5563;text-decoration:none">浙ICP备2026066685号</a>
+  <div style="color:var(--theme-dim, #4b5563)">
+    <a href="https://beian.miit.gov.cn/" target="_blank" style="color:var(--theme-dim, #4b5563);text-decoration:none">浙ICP备2026066685号</a>
   </div>
   <div style="margin-top:8px;font-size:12px">© 2026 BazaarQiuBot - The Bazaar 中文社区数据服务</div>
 </footer>

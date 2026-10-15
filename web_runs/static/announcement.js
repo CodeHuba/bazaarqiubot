@@ -32,29 +32,29 @@
           @keyframes annFadeIn{from{opacity:0}to{opacity:1}}
           @keyframes annSlideUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
           #announcement-box{animation:annSlideUp .25s ease}
-          #announcement-body h1,#announcement-body h2,#announcement-body h3{color:#f3f4f6;margin:.8em 0 .4em}
-          #announcement-body p{margin:.5em 0;line-height:1.7;color:#d1d5db}
-          #announcement-body a{color:#60a5fa;text-decoration:underline}
-          #announcement-body ul,#announcement-body ol{padding-left:1.4em;color:#d1d5db}
+          #announcement-body h1,#announcement-body h2,#announcement-body h3{color:var(--theme-text, #f3f4f6);margin:.8em 0 .4em}
+          #announcement-body p{margin:.5em 0;line-height:1.7;color:var(--theme-muted, #d1d5db)}
+          #announcement-body a{color:var(--theme-link, #60a5fa);text-decoration:underline}
+          #announcement-body ul,#announcement-body ol{padding-left:1.4em;color:var(--theme-muted, #d1d5db)}
           #announcement-body li{margin:.3em 0}
-          #announcement-body code{background:#1f2937;padding:2px 6px;border-radius:4px;font-size:.9em;color:#f59e0b}
-          #announcement-body blockquote{border-left:3px solid #374151;margin:.5em 0;padding:.4em 1em;color:#9ca3af}
-          #announcement-body strong{color:#f9fafb}
+          #announcement-body code{background:var(--theme-border, #1f2937);padding:2px 6px;border-radius:4px;font-size:.9em;color:var(--theme-gold, #f59e0b)}
+          #announcement-body blockquote{border-left:3px solid var(--theme-border-strong, #374151);margin:.5em 0;padding:.4em 1em;color:var(--theme-muted, #9ca3af)}
+          #announcement-body strong{color:var(--theme-text, #f9fafb)}
         </style>
-        <div id="announcement-box" style="background:#111827;border:1px solid #374151;border-radius:12px;max-width:560px;width:100%;max-height:80vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,0.6)">
-          <div style="padding:18px 22px 14px;border-bottom:1px solid #1f2937;display:flex;align-items:center;justify-content:space-between;flex-shrink:0">
+        <div id="announcement-box" style="background:var(--theme-surface, #111827);border:1px solid var(--theme-border-strong, #374151);border-radius:12px;max-width:560px;width:100%;max-height:80vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,0.6)">
+          <div style="padding:18px 22px 14px;border-bottom:1px solid var(--theme-border, #1f2937);display:flex;align-items:center;justify-content:space-between;flex-shrink:0">
             <div style="display:flex;align-items:center;gap:10px">
               <span style="font-size:20px">📢</span>
-              <span style="font-size:16px;font-weight:700;color:#f9fafb">${ann.title.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</span>
+              <span style="font-size:16px;font-weight:700;color:var(--theme-text, #f9fafb)">${ann.title.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</span>
             </div>
-            <button id="ann-close-btn" style="background:none;border:none;color:#6b7280;font-size:22px;cursor:pointer;line-height:1;padding:0 2px" aria-label="关闭">×</button>
+            <button id="ann-close-btn" style="background:none;border:none;color:var(--theme-dim, #6b7280);font-size:22px;cursor:pointer;line-height:1;padding:0 2px" aria-label="关闭">×</button>
           </div>
           <div id="announcement-body" style="padding:18px 22px;overflow-y:auto;flex:1;font-size:14px">
             ${renderMarkdown(ann.content)}
           </div>
-          <div style="padding:12px 22px 16px;border-top:1px solid #1f2937;display:flex;align-items:center;justify-content:flex-end;gap:10px;flex-shrink:0">
-            <button id="ann-dismiss-btn" style="padding:7px 18px;background:transparent;color:#6b7280;border:1px solid #374151;border-radius:6px;font-size:13px;cursor:pointer">今日不再显示</button>
-            <button id="ann-confirm-btn" style="padding:7px 22px;background:#f59e0b;color:#0a0e1a;border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer">我知道了</button>
+          <div style="padding:12px 22px 16px;border-top:1px solid var(--theme-border, #1f2937);display:flex;align-items:center;justify-content:flex-end;gap:10px;flex-shrink:0">
+            <button id="ann-dismiss-btn" style="padding:7px 18px;background:transparent;color:var(--theme-dim, #6b7280);border:1px solid var(--theme-border-strong, #374151);border-radius:6px;font-size:13px;cursor:pointer">今日不再显示</button>
+            <button id="ann-confirm-btn" style="padding:7px 22px;background:var(--theme-gold, #f59e0b);color:var(--theme-bg, #0a0e1a);border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer">我知道了</button>
           </div>
         </div>`;
 
