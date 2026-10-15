@@ -1773,6 +1773,8 @@ input[type="range"]::-moz-range-thumb{width:18px;height:18px;background:var(--ne
   <link rel="stylesheet" href="/static/query-progress.css">
   <script src="/static/query-progress.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<link rel="stylesheet" href="/static/card-preview.css?v=1">
+<script src="/static/card-preview.js?v=1"></script>
 </head>
 <body>
 
@@ -2213,8 +2215,8 @@ function renderTopcard(data){
     const imgHtml = imgUrl ? `<img class="comp-card-img ${sizeCls}" src="${imgUrl}" alt="${item.name_zh}" loading="lazy" onerror="this.style.display='none'">` : '';
     return `<div class="topcard-item">
       <span class="topcard-rank">${medals[i]||i+1}</span>
-      ${imgHtml}
-      <div class="topcard-name">
+      <span class="bcp-trigger" ${window.BazaarCardPreview?.attrs(item)||''}>${imgHtml}</span>
+      <div class="topcard-name bcp-trigger" ${window.BazaarCardPreview?.attrs(item)||''}>
         <div class="topcard-name-zh">${item.name_zh}</div>
         <div class="topcard-name-en">${item.name_en}</div>
       </div>
@@ -2266,7 +2268,7 @@ function tierCardHtml(card, tierName, insufficient=false){
   const safeName=tierEscape(card.name), safeImg=tierSafeUrl(card.img);
   const img=safeImg?`<img class="tier-card-img size-${tierEscape(card.size||'Small')}" src="${tierEscape(safeImg)}" alt="${safeName}" loading="lazy" onerror="this.style.display='none'">`:'';
   const payload=encodeURIComponent(JSON.stringify(card)).replace(/'/g,'%27');
-  return `<button class="tier-card" style="--tier-color:${color}" onclick="openTierDetail(JSON.parse(decodeURIComponent('${payload}')),'${tierName||'数据不足'}')">${img}<span class="tier-card-name">${safeName}</span><span class="tier-card-stats">出场 ${(card.appearance_rate*100).toFixed(1)}% · 10胜 ${(card.win_rate*100).toFixed(1)}%</span><span class="tier-card-count">${card.appearance_count} 次</span></button>`;
+  return `<button class="tier-card bcp-trigger" ${window.BazaarCardPreview?.attrs(card,true)||''} style="--tier-color:${color}" onclick="openTierDetail(JSON.parse(decodeURIComponent('${payload}')),'${tierName||'数据不足'}')">${img}<span class="tier-card-name">${safeName}</span><span class="tier-card-stats">出场 ${(card.appearance_rate*100).toFixed(1)}% · 10胜 ${(card.win_rate*100).toFixed(1)}%</span><span class="tier-card-count">${card.appearance_count} 次</span></button>`;
 }
 function renderTierTable(data){
   const groups=(data.tiers||[]).map(group=>`<section class="tier-section"><header style="--tier-color:${TIER_META[group.name]?.[0]||'#B5B3D7'}"><strong>${tierEscape(group.name)}</strong><span>${tierEscape(TIER_META[group.name]?.[1]||'')} · ${group.cards.length} 张</span></header><div class="tier-grid">${group.cards.map(card=>tierCardHtml(card,group.name)).join('')||'<span class="tier-empty">暂无卡牌</span>'}</div></section>`).join('');
@@ -2280,6 +2282,7 @@ function openTierDetail(card,tier){
   const safeName=tierEscape(card.name), safeImg=tierSafeUrl(card.img);
   modal.innerHTML=`<div class="tier-modal-box"><button class="tier-modal-close" onclick="this.closest('.tier-modal').remove()">×</button>${safeImg?`<img src="${tierEscape(safeImg)}" alt="${safeName}">`:''}<h2>${safeName}</h2><div class="tier-modal-badge">${tierEscape(tier)}</div><p>出场 ${card.appearance_count} 次 · 出场率 ${(card.appearance_rate*100).toFixed(1)}%</p><p>10 胜 ${card.ten_win} 次 · 10 胜率 ${(card.win_rate*100).toFixed(1)}%</p><p>${tierEscape(explain)}</p></div>`;
   modal.onclick=e=>{if(e.target===modal)modal.remove();}; document.body.appendChild(modal);
+  window.BazaarCardPreview?.mount(modal.querySelector('.tier-modal-box'),card);
 }
 function tierShareImageUrl(url){
   const safe=tierSafeUrl(url);
@@ -2457,9 +2460,9 @@ function renderComp(data){
       const cls = c.is_new ? 'comp-card-chip is-new' : 'comp-card-chip';
       if(c.img){
         const sizeCls='size-'+(c.size||'Small');
-        return `<span class="${cls} has-img"><img class="comp-card-img ${sizeCls}" src="${c.img}" alt="${c.name_zh}" loading="lazy" onerror="this.style.display='none'">${c.name_zh}</span>`;
+        return `<span class="${cls} has-img bcp-trigger" ${window.BazaarCardPreview?.attrs(c)||''}><img class="comp-card-img ${sizeCls}" src="${c.img}" alt="${c.name_zh}" loading="lazy" onerror="this.style.display='none'">${c.name_zh}</span>`;
       }
-      return `<span class="${cls}">${c.name_zh}</span>`;
+      return `<span class="${cls} bcp-trigger" ${window.BazaarCardPreview?.attrs(c)||''}>${c.name_zh}</span>`;
     }).join('');
   }
 
