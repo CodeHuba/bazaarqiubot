@@ -306,6 +306,7 @@ input::placeholder {
 .runs-card-tag { display:inline-flex; align-items:center; gap:5px; padding:4px 7px; border:1px solid rgba(38,217,242,.45); border-radius:5px; color:var(--text-primary); background:rgba(38,217,242,.1); font-size:13px; line-height:1; white-space:nowrap; flex:none; }
 .runs-card-tag button { border:0; background:transparent; color:var(--text-secondary); cursor:pointer; font-size:16px; line-height:1; padding:0; }
 .runs-card-tag button:hover { color:var(--neon-coral); }
+.runs-card-tag .runs-enchantment-select { width:auto; min-width:88px; height:24px; padding:1px 18px 1px 4px; border:0; border-left:1px solid rgba(38,217,242,.3); border-radius:0; font:inherit; font-size:11px; color:var(--neon-gold); background-color:transparent; cursor:pointer; }
 #runs-card-search { flex:1 1 130px; min-width:120px; width:auto; padding:4px 2px; border:0; box-shadow:none; background:transparent; }
 #runs-card-search:focus { border:0; box-shadow:none; background:transparent; }
 .runs-card-suggestions { display:none; position:absolute; z-index:120; left:0; right:0; top:calc(100% + 5px); max-height:330px; overflow:auto; padding:5px; border:1px solid rgba(38,217,242,.45); border-radius:8px; background:#100c35; box-shadow:0 14px 32px rgba(0,0,0,.45); }
@@ -505,6 +506,8 @@ select option {
 .run-card-chip img.size-Small{width:12px;height:24px;}
 .run-card-chip img.size-Medium{width:24px;height:24px;}
 .run-card-chip img.size-Large{width:36px;height:24px;}
+.run-card-chip.is-filter-match{border-color:var(--neon-cyan);background:rgba(38,217,242,.13);}
+.run-card-enchantment{color:var(--neon-gold);font-size:10px;}
 
 /* 胜率徽章 */
 .win-badge {
@@ -1629,7 +1632,7 @@ input[type="file"] {
         </div>
         <input id="runs-cards" type="hidden" value="">
         <div class="runs-card-suggestions" id="runs-card-suggestions" role="listbox"></div>
-        <div class="runs-card-help">选择后可继续输入下一张；阵容分析一次只支持一张核心卡</div>
+        <div class="runs-card-help">先从联想列表选择卡牌，再点“不限附魔”选择附魔；多张卡需同时满足</div>
       </div>
       <div class="form-group">
         <label>最近天数</label>
@@ -1661,6 +1664,7 @@ let lastQuery = 0;
 let activeRunsController = null;
 let activeRunsRequestId = 0;
 let selectedRunCards = [];
+const RUN_ENCHANTMENTS = {Deadly:'致命',Fiery:'炽焰',Golden:'黄金',Heavy:'沉重',Icy:'寒冰',Obsidian:'黑曜石',Radiant:'辉耀',Restorative:'回复',Shielded:'护盾',Shiny:'闪亮',Toxic:'毒素',Turbo:'疾速',Mossy:'长青'};
 let runCardSuggestions = [];
 let runCardActiveIndex = -1;
 let cardSearchTimer = null;
@@ -1670,17 +1674,39 @@ let cardSearchRequestId = 0;
 function escapeRunCardText(value) {
   return String(value || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
-function syncRunCards() {
-  document.getElementById('runs-cards').value = selectedRunCards.join('+');
-  document.getElementById('runs-card-tags').innerHTML = selectedRunCards.map((name, index) =>
-    `<span class="runs-card-tag">${escapeRunCardText(name)}<button type="button" aria-label="删除 ${escapeRunCardText(name)}" onclick="event.stopPropagation();removeRunCard(${index})">×</button></span>`
-  ).join('');
+function showRunFileNotice() {
+  if (location.protocol !== 'file:') return false;
+  showError('runs-error', '当前是直接打开的本地文件，无法访问卡牌搜索和阵容查询接口。请通过 <a href="http://127.0.0.1:1027/runs" style="color:var(--neon-cyan)">本地 HTTP 预览</a> 打开本页。');
+  return true;
 }
-function addRunCard(name) {
+function syncRunCards() {
+  document.getElementById('runs-cards').value = selectedRunCards.map(card => card.name).join('+');
+  document.getElementById('runs-card-tags').innerHTML = selectedRunCards.map((card, index) => {
+    const options = '<option value="">不限附魔</option>' + Object.entries(RUN_ENCHANTMENTS).map(([value, label]) =>
+      `<option value="${value}"${card.enchantment === value ? ' selected' : ''}>${label}</option>`).join('');
+    return `<span class="runs-card-tag">${escapeRunCardText(card.name)}<select class="runs-enchantment-select" aria-label="${escapeRunCardText(card.name)}的附魔" onclick="event.stopPropagation()" onchange="setRunCardEnchantment(${index},this.value)">${options}</select><button type="button" aria-label="删除 ${escapeRunCardText(card.name)}" onclick="event.stopPropagation();removeRunCard(${index})">×</button></span>`;
+  }).join('');
+}
+function addRunCard(name, enchantment = null) {
   name = String(name || '').trim();
-  if (!name || selectedRunCards.includes(name)) return;
-  selectedRunCards.push(name);
+  if (!name || selectedRunCards.some(card => card.name === name && card.enchantment === enchantment)) return;
+  if (selectedRunCards.length >= 20) { showError('runs-error', '最多支持 20 个卡牌筛选条件'); return; }
+  selectedRunCards.push({name, enchantment});
   syncRunCards();
+}
+function setRunCardEnchantment(index, value) {
+  const enchantment = value || null;
+  if (enchantment && !Object.hasOwn(RUN_ENCHANTMENTS, enchantment)) return;
+  const card = selectedRunCards[index];
+  if (!card) return;
+  if (selectedRunCards.some((other, i) => i !== index && other.name === card.name && other.enchantment === enchantment)) {
+    showError('runs-error', '已存在相同的卡牌和附魔条件');
+  } else {
+    card.enchantment = enchantment;
+    showError('runs-error', '');
+  }
+  syncRunCards();
+  document.querySelectorAll('.runs-enchantment-select')[index]?.focus();
 }
 function removeRunCard(index) {
   selectedRunCards.splice(index, 1);
@@ -1695,7 +1721,18 @@ function readLegacyCardsParam(search) {
 }
 function restoreRunCards(value) {
   selectedRunCards = [];
-  String(value || '').split('+').map(v => v.trim()).filter(Boolean).forEach(addRunCard);
+  String(value || '').split('+').map(v => v.trim()).filter(Boolean).forEach(name => addRunCard(name));
+  syncRunCards();
+}
+function restoreRunCardFilters(value) {
+  const filters = JSON.parse(value);
+  if (!Array.isArray(filters) || filters.length > 20 || filters.some(card =>
+    !card || typeof card.name !== 'string' || !card.name.trim() || card.name.length > 160 ||
+    (card.enchantment != null && (typeof card.enchantment !== 'string' || !Object.hasOwn(RUN_ENCHANTMENTS, card.enchantment))))) {
+    throw new Error('无效的卡牌附魔筛选链接');
+  }
+  selectedRunCards = [];
+  filters.forEach(card => addRunCard(card.name, card.enchantment ?? null));
   syncRunCards();
 }
 function closeRunCardSuggestions() {
@@ -1734,6 +1771,7 @@ function selectRunCardSuggestion(index) {
   document.getElementById('runs-card-search').focus();
 }
 async function searchRunCards(query) {
+  if (showRunFileNotice()) return;
   if (cardSearchController) cardSearchController.abort();
   const requestId = ++cardSearchRequestId;
   cardSearchController = new AbortController();
@@ -1742,7 +1780,7 @@ async function searchRunCards(query) {
     const res = await fetch('/api/card_search?q=' + encodeURIComponent(query), {signal:cardSearchController.signal});
     const rows = await res.json();
     if (requestId !== cardSearchRequestId || input.value.trim() !== query) return;
-    runCardSuggestions = (Array.isArray(rows) ? rows : []).filter(card => !selectedRunCards.includes(card.zh || card.en));
+    runCardSuggestions = (Array.isArray(rows) ? rows : []).filter(card => !selectedRunCards.some(selected => selected.name === (card.zh || card.en) && selected.enchantment === null));
     runCardActiveIndex = runCardSuggestions.length ? 0 : -1;
     renderRunCardSuggestions();
   } catch (error) {
@@ -1780,6 +1818,7 @@ function initRunCardPicker() {
 // 初始化视图状态
 document.addEventListener('DOMContentLoaded', () => {
   initRunCardPicker();
+  if (showRunFileNotice()) return;
   document.getElementById('comp-result').style.display = 'none';
   document.getElementById('comp-result').innerHTML = '<div class="result-card"><div class="empty">输入卡牌名称后点击查询，即可查看阵容分析</div></div>';
   const params = new URLSearchParams(location.search);
@@ -1787,12 +1826,20 @@ document.addEventListener('DOMContentLoaded', () => {
   const cards = readLegacyCardsParam(location.search);
   const rank = params.get('rank');
   if (hero) document.getElementById('runs-hero').value = hero;
-  if (cards) restoreRunCards(cards);
+  try {
+    if (params.has('card_filters')) restoreRunCardFilters(params.get('card_filters'));
+    else if (cards) restoreRunCards(cards);
+  } catch (_) {
+    showError('runs-error', '无效的卡牌附魔筛选链接，请重新选择卡牌和附魔');
+    return;
+  }
+  if (params.get('days')) document.getElementById('runs-days').value = params.get('days');
   if (rank && document.querySelector(`#runs-rank option[value="${CSS.escape(rank)}"]`)) {
     document.getElementById('runs-rank').value = rank;
   }
-  if (params.get('auto') === '1' && (hero || cards)) {
-    setTimeout(() => queryRuns(1), 0);
+  if (params.get('auto') === '1') {
+    const page = Math.max(1, parseInt(params.get('page'), 10) || 1);
+    setTimeout(() => queryRuns(page), 0);
   }
 });
 
@@ -1828,6 +1875,7 @@ function winrateColor(r) {
 }
 
 async function queryRuns(page) {
+  if (showRunFileNotice()) return;
   if (activeRunsController) {
     activeRunsController.abort();
     activeRunsController = null;
@@ -1838,6 +1886,7 @@ async function queryRuns(page) {
   showError('runs-error', '');
   const hero = document.getElementById('runs-hero').value;
   const cards = document.getElementById('runs-cards').value.trim();
+  const cardFilters = selectedRunCards.map(card => ({...card}));
   const wins = '10';
   const days = document.getElementById('runs-days').value;
   const rank = document.getElementById('runs-rank').value;
@@ -1880,7 +1929,7 @@ async function queryRuns(page) {
   }, 200);
   const params = new URLSearchParams({min_wins: wins, page, rank});
   if (hero) params.set('hero', hero);
-  if (cards) params.set('cards', cards);
+  if (cardFilters.length) params.set('card_filters', JSON.stringify(cardFilters));
   if (days) params.set('days', days);
   const timeoutId = setTimeout(() => controller.abort(), 30000);
   try {
@@ -1902,7 +1951,12 @@ async function queryRuns(page) {
     await new Promise(resolve => setTimeout(resolve, 300));
     if (requestId !== activeRunsRequestId) return;
     if (data.error) { showError('runs-error', data.error); _runsEl.innerHTML=''; return; }
-    renderRuns(data, page, {hero, cards, wins, days});
+    const resultPage = data.page || page;
+    const shareParams = new URLSearchParams(params);
+    shareParams.set('page', resultPage);
+    shareParams.set('auto', '1');
+    history.replaceState(null, '', location.pathname + '?' + shareParams);
+    renderRuns(data, resultPage, {hero, cards, wins, days});
   } catch(e) {
     if (requestId !== activeRunsRequestId) return;
     const message = e.name === 'AbortError'
@@ -1927,10 +1981,13 @@ function renderRuns(data, page, params) {
   let items = runs.map(r => {
     const day = r.wins + r.losses;
     const cardList = r.cards || [];
-    const cardsHtml = cardList.length ? cardList.slice(0,8).map(c => {
-      const img = c.img ? `<img class="size-${c.size || 'Small'}" src="${c.img}" alt="${c.name}" loading="lazy" onerror="this.style.display='none'">` : '';
-      return `<span class="run-card-chip">${img}${c.name}</span>`;
-    }).join('') + (cardList.length>8 ? `<span class="run-card-chip">+${cardList.length-8}</span>` : '') : escapeHtml((r.items || []).slice(0,5).join('、'));
+    // Keep every matching instance visible, even when it is beyond the eighth item.
+    const visibleCards = cardList.filter((card, index) => index < 8 || card.matched);
+    const cardsHtml = cardList.length ? visibleCards.map(c => {
+      const img = c.img ? `<img class="size-${escapeRunCardText(c.size || 'Small')}" src="${escapeRunCardText(c.img)}" alt="${escapeRunCardText(c.name)}" loading="lazy" onerror="this.style.display='none'">` : '';
+      const enchantment = c.enchantment ? `<span class="run-card-enchantment">${escapeRunCardText(c.enchantment_zh || RUN_ENCHANTMENTS[c.enchantment] || c.enchantment)}</span>` : '';
+      return `<span class="run-card-chip${c.matched ? ' is-filter-match' : ''}">${img}${escapeRunCardText(c.name)}${enchantment}</span>`;
+    }).join('') + (cardList.length>visibleCards.length ? `<span class="run-card-chip">+${cardList.length-visibleCards.length}</span>` : '') : escapeHtml((r.items || []).slice(0,5).join('、'));
     const screenshot = r.screenshot ? `<div style="margin:8px 0 2px"><img src="${r.screenshot}" style="max-width:100%;border-radius:6px;border:1px solid #1f2937" loading="lazy" onerror="this.style.display='none'"></div>` : '';
     const timeStr = r.created_at ? new Date(r.created_at).toLocaleString('zh-CN', {timeZone:'Asia/Shanghai',month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}) : '';
     return `<div class="run-item" style="flex-direction:column;align-items:flex-start">
@@ -1950,9 +2007,12 @@ function renderRuns(data, page, params) {
   let pagination = '';
   if (pages > 1) {
     const btns = [];
-    for (let i = 1; i <= Math.min(pages, 10); i++) {
+    const startPage = Math.max(1, Math.min(page - 4, pages - 9));
+    if (startPage > 1) btns.push('<button class="page-btn" onclick="queryRuns(1)">首页</button>');
+    for (let i = startPage; i <= Math.min(pages, startPage + 9); i++) {
       btns.push(`<button class="page-btn${i===page?' active':''}" onclick="queryRuns(${i})">${i}</button>`);
     }
+    if (startPage + 9 < pages) btns.push(`<button class="page-btn" onclick="queryRuns(${pages})">末页</button>`);
     pagination = `<div class="pagination">${btns.join('')}</div>`;
   }
 
@@ -2453,7 +2513,11 @@ async function queryComp() {
     document.getElementById('comp-result').innerHTML = '<div class="result-card"><div class="empty">阵容分析一次只能选择一张核心卡，请保留一张卡牌后再查询</div></div>';
     return;
   }
-  const card = selectedRunCards[0];
+  if (selectedRunCards[0].enchantment) {
+    document.getElementById('comp-result').innerHTML = '<div class="result-card"><div class="empty">附魔筛选目前仅支持阵容列表；查看阵容分析请将核心卡改为不限附魔</div></div>';
+    return;
+  }
+  const card = selectedRunCards[0].name;
   const hero = document.getElementById('runs-hero').value;
   const rank = document.getElementById('runs-rank').value;
   if (!card) {
