@@ -5,6 +5,7 @@ BazaarDB Runs 查询模块
 
 import json
 import math
+import os
 import sqlite3
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional
@@ -12,6 +13,7 @@ from pathlib import Path
 from . import translations as _trans
 from .data_client import CURRENT_SEASON_ID, CURRENT_PHASE, RUNS_SEASON_ID
 from .run_card_filters import ENCHANTMENTS, normalize_run_card_filters
+from .run_instances import json_value, terminal_instances
 
 
 ALIAS_FILE = "/opt/qiubot/data/bz_aliases.json"
@@ -116,7 +118,11 @@ class RunsQuery:
             self.zh_to_en = {v: k for k, v in data.items()}
 
         # 加载卡牌尺寸映射（从 GameData.db）
-        gamedata_path = Path(__file__).parent / 'cache' / 'GameData.db'
+        candidates = [Path(__file__).parent / 'cache' / 'GameData.db',
+                      Path(__file__).resolve().parents[2] / 'cache' / 'GameData.db']
+        configured = os.getenv('GAMEDATA_DB', '').strip()
+        gamedata_path = Path(configured).expanduser() if configured else next(
+            (path for path in candidates if path.is_file()), candidates[0])
         if gamedata_path.exists():
             try:
                 import sqlite3 as _sl2, json as _j2
@@ -253,9 +259,10 @@ class RunsQuery:
         if not self.conn:
             self.load()
 
+        columns = {row[1] for row in self.conn.execute('PRAGMA table_info(runs)')}
         select_columns = (
             "id, hero, username, created_at, items_json, skills_json, combats_json, "
-            "stat_wins, stat_losses, screenshot_url"
+            "stat_wins, stat_losses, screenshot_url, season, phase, NULL AS raw_json"
         )
         where = ["season=?", "phase=?"]
         params = [RUNS_SEASON_ID, CURRENT_PHASE]
@@ -287,7 +294,10 @@ class RunsQuery:
             def card_exists(column, with_enchantment=False):
                 # Guard both malformed JSON and non-object entries in old records.
                 item = "CASE WHEN entry.type='object' THEN entry.value ELSE '{}' END"
-                condition = f"json_extract({item}, '$.cardId') IN ({placeholders})"
+                identity = f"json_extract({item}, '$.cardId')"
+                if column == 'skills_json':
+                    identity = f"COALESCE({identity}, json_extract({item}, '$.skillId'))"
+                condition = f"{identity} IN ({placeholders})"
                 if with_enchantment:
                     condition += f" AND json_extract({item}, '$.enchantment')=?"
                 return (
@@ -343,8 +353,8 @@ class RunsQuery:
                         if isinstance(it, dict) and it.get('cardId')
                     }
                     run_card_ids.update(
-                        sk.get('cardId') for sk in skills
-                        if isinstance(sk, dict) and sk.get('cardId')
+                        sk.get('cardId') or sk.get('skillId') for sk in skills
+                        if isinstance(sk, dict) and (sk.get('cardId') or sk.get('skillId'))
                     )
                     if not all(run_card_ids & card_set for card_set in card_ids_sets):
                         continue
@@ -366,73 +376,86 @@ class RunsQuery:
             offset = (page - 1) * page_size
             page_rows = matched_rows[offset:offset + page_size]
 
-        runs = []
-        for row in page_rows:
-            run_id, hero_name, username, created_at, items_json, _, combats_json, wins, losses, screenshot = row
-            try:
-                items = json.loads(items_json or '[]')
-            except (TypeError, ValueError, json.JSONDecodeError):
-                # 展示数据损坏时保留该 run，其卡牌列表降级为空。
-                items = []
-            if not isinstance(items, list):
-                items = []
-            item_names = []
-            card_imgs = []
-            card_details = []
-            for it in items:
-                if not isinstance(it, dict):
-                    continue
-                cid = it.get('cardId')
-                if not cid:
-                    continue
-                info = self._safe_mapping_info(cid)
-                image_info = self._card_image_info(cid)
-                en = info.get('name') or image_info.get('internalName') or cid
-                zh = image_info.get('name') or self.get_zh_name(en)
-                display_name = zh if zh != en else en
-                item_names.append(display_name)
-                card_imgs.append(self.tex_map.get(en, ''))
-                # 阵容列表不能在请求线程串行探测 CDN；浏览器加载失败时自行降级。
-                image_url = image_info.get('artLarge') or image_info.get('art') or ''
-                card_details.append({
-                    'cardId': cid,
-                    'name': display_name,
-                    'name_en': en,
-                    'img': image_url,
-                    'size': self.size_map.get(cid) or image_info.get('size') or 'Small',
-                    'enchantment': it.get('enchantment'),
-                    'enchantment_zh': ENCHANTMENTS.get(it.get('enchantment'), '')
-                        if isinstance(it.get('enchantment'), str) else '',
-                    'matched': any(
-                        cid in ids and (enchantment is None or it.get('enchantment') == enchantment)
-                        for ids, enchantment in resolved_card_filters
-                    ),
-                })
+        # Large raw records are read only after pagination, in one indexed query.
+        if page_rows and 'raw_json' in columns:
+            placeholders = ','.join('?' for _ in page_rows)
+            raw = dict(self.conn.execute(
+                f'SELECT id, raw_json FROM runs WHERE id IN ({placeholders})',
+                [row[0] for row in page_rows]))
+            page_rows = [(*row[:-1], raw.get(row[0])) for row in page_rows]
+        runs = [self._display_run(row, resolved_card_filters, day) for row in page_rows]
+        return {'runs': runs, 'total': total, 'page': page, 'pages': pages,
+                'scope': {'season': RUNS_SEASON_ID, 'phase': CURRENT_PHASE},
+                'min_wins': min_wins}
 
-            screenshot_full = ('https://usercontent.bzdb.network' + screenshot) if screenshot else ''
-            if day is not None:
-                reached_days = [
-                    combat.get('d') for combat in json.loads(combats_json or '[]')
-                    if isinstance(combat, dict) and isinstance(combat.get('d'), int)
-                ]
+    def get_run(self, run_id: str) -> Optional[Dict]:
+        """Read one public terminal record in its original season, independent of filters."""
+        if not self.conn:
+            self.load()
+        columns = {row[1] for row in self.conn.execute('PRAGMA table_info(runs)')}
+        row = self.conn.execute(
+            'SELECT id, hero, username, created_at, items_json, skills_json, combats_json, '
+            'stat_wins, stat_losses, screenshot_url, season, phase, ' +
+            ('raw_json' if 'raw_json' in columns else 'NULL AS raw_json') +
+            ' FROM runs WHERE id=?', (run_id,)
+        ).fetchone()
+        return self._display_run(row) if row else None
+
+    def _display_run(self, row, resolved_card_filters=(), day=None):
+        (run_id, hero, username, created_at, items_json, skills_json, combats_json,
+         wins, losses, screenshot, season, phase, raw_json) = row
+        raw = json_value(raw_json, {})
+
+        def display(instance, skill=False):
+            cid = instance['cardId']
+            info = self._safe_mapping_info(cid)
+            image = self._card_image_info(cid)
+            en = info.get('name') or image.get('internalName') or cid
+            tier = instance.get('tier')
+            if isinstance(tier, str):
+                tier = {t.lower(): t for t in ('Bronze', 'Silver', 'Gold', 'Diamond', 'Legendary')}.get(tier.lower())
             else:
-                reached_days = None
-            runs.append({
-                'id': run_id,
-                'hero': hero_name,
-                'username': username,
-                'created_at': created_at,
-                'wins': wins or 0,
-                'losses': losses or 0,
-                'reached_days': reached_days,
-                'items': item_names,
-                'cards': card_details,
-                'card_imgs': card_imgs,
-                'screenshot': screenshot_full,
-                'url': f"https://bazaardb.gg/run/tracker/{run_id}"
-            })
+                tier = None
+            if instance.get('isLegendary') is True:
+                tier = 'Legendary'
+            enchantment = instance.get('enchantment')
+            enchantment = enchantment if isinstance(enchantment, str) else None
+            return {
+                'cardId': cid, 'name': image.get('name') or self.get_zh_name(en), 'name_en': en,
+                'img': image.get('artLarge') or image.get('art') or '',
+                'size': 'Skill' if skill else self.size_map.get(cid) or image.get('size') or 'Small',
+                'type': 'Skill' if skill else 'Item', 'tier': tier,
+                'isLegendary': instance.get('isLegendary') is True,
+                'slotPosition': instance.get('slotPosition'),
+                'enchantment': enchantment, 'enchantment_zh': ENCHANTMENTS.get(enchantment, ''),
+                'matched': any(cid in ids and (wanted is None or enchantment == wanted)
+                               for ids, wanted in resolved_card_filters),
+            }
 
-        return {'runs': runs, 'total': total, 'page': page, 'pages': pages}
+        items = terminal_instances(items_json, raw, 'items')
+        # Sort only when every instance has a trustworthy position.
+        if items and all(type(it.get('slotPosition')) is int and it['slotPosition'] >= 0 for it in items):
+            items.sort(key=lambda it: it['slotPosition'])
+        cards = [display(it) for it in items]
+        skills = [display(sk, True) for sk in terminal_instances(skills_json, raw, 'skills')]
+        combats = json_value(combats_json, [])
+        reached_days = [c['d'] for c in combats if isinstance(c, dict) and
+                        type(c.get('d')) is int and c['d'] > 0] if isinstance(combats, list) else []
+        screenshot_full = ''
+        if isinstance(screenshot, str):
+            if screenshot.startswith('/') and not screenshot.startswith('//'):
+                screenshot_full = 'https://usercontent.bzdb.network' + screenshot
+            elif screenshot.startswith('https://usercontent.bzdb.network/'):
+                screenshot_full = screenshot
+        return {
+            'id': run_id, 'hero': hero, 'username': username, 'created_at': created_at,
+            'wins': wins or 0, 'losses': losses or 0, 'season': season, 'phase': phase,
+            'day': max(reached_days, default=None),
+            'reached_days': reached_days if day is not None else None,
+            'items': [c['name'] for c in cards], 'cards': cards, 'skills': skills,
+            'card_imgs': [self.tex_map.get(c['name_en'], '') for c in cards],
+            'screenshot': screenshot_full, 'url': f'https://bazaardb.gg/run/tracker/{run_id}',
+        }
 
     def format_result(self, result: Dict, query_desc: str = "", raw_cmd: str = "") -> str:
         """格式化查询结果"""

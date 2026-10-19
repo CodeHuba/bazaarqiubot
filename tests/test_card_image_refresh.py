@@ -120,3 +120,49 @@ def test_invalid_cached_cards_are_replaced_with_empty_dict(tmp_path, monkeypatch
     result_cards = cached_cards if isinstance(cached_cards, dict) else {}
 
     assert result_cards == {}
+
+
+def freezer_native():
+    return {'Id': '6254a491-e424-4573-bb8d-a7d51a26144d', 'Type': 'Item',
+            'InternalName': 'Walk-In Freezer', 'Size': 'Large',
+            'Localization': {'Title': {'Text': 'Freezer'}}}
+
+
+def test_display_name_resolves_cards_with_different_internal_name(monkeypatch):
+    module = load_fetch_module(monkeypatch)
+    native = freezer_native()
+    expected = {'Id': native['Id'], 'Type': 'Item'}
+    calls = []
+    module.bdb.query_card_by_name = lambda name: calls.append(name) or (expected if name == 'Freezer' else None)
+    assert module.query_native_card(native) == expected
+    assert calls == ['Freezer']
+
+
+def test_same_named_event_or_fuzzy_match_cannot_replace_item(monkeypatch):
+    module = load_fetch_module(monkeypatch)
+    native = freezer_native()
+    expected = {'Id': native['Id'], 'Type': 'Item'}
+    module.bdb.query_card_by_name = lambda name: ({'Id': 'event-freezer', 'Type': 'EventEncounter'}
+                                                if name == 'Freezer' else expected)
+    assert module.query_native_card(native) == expected
+    module.bdb.query_card_by_name = lambda name: {'Id': 'other-item', 'Type': 'Item'}
+    assert module.query_native_card(native) is None
+
+
+def test_lookup_handles_missing_or_invalid_localization(monkeypatch):
+    module = load_fetch_module(monkeypatch)
+    assert module.card_lookup_names({'InternalName': 'Freezer', 'Localization': []}) == ['Freezer']
+    assert module.card_lookup_names({'InternalName': 'Freezer', 'Localization': {'Title': {'Text': 'Freezer'}}}) == ['Freezer']
+    module.bdb.query_card_by_name = lambda name: (_ for _ in ()).throw(AssertionError('must not query without ID'))
+    assert module.query_native_card({'InternalName': 'Freezer'}) is None
+
+
+def test_cache_record_uses_searchable_display_name_and_keeps_native_identity(monkeypatch):
+    module = load_fetch_module(monkeypatch)
+    module.trans.has_chinese = lambda name: name == '冷库'
+    module.trans.get_zh = lambda name: '冷库' if name == 'Freezer' else None
+    record = module.card_image_record(freezer_native(), {'Title': {'Text': 'Freezer'}, 'Art': 'art', 'ArtLarge': 'large'})
+    assert record['name'] == '冷库'
+    assert record['internalName'] == 'Freezer'
+    assert record['nativeInternalName'] == 'Walk-In Freezer'
+    assert record['size'] == 'Large'

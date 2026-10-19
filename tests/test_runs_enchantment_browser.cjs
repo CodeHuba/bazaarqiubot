@@ -71,8 +71,9 @@ test('per-card enchantments survive queries, page changes, reloads, and analysis
   assert.equal(requests[0].searchParams.get('days'), '7');
   assert.equal(requests[0].searchParams.has('cards'), false);
   assert.equal(await page.locator('.is-filter-match .run-card-enchantment').textContent(), '炽焰');
-  assert.match(await page.locator('.run-items').textContent(), /悠悠球/);
-  assert.equal(await page.locator('.run-card-chip').count(), 10); // 8 + matching tenth + hidden-count chip.
+  assert.match(await page.locator('.is-filter-match').getAttribute('title'), /悠悠球/);
+  assert.doesNotMatch(await page.locator('.run-items').textContent(), /悠悠球/);
+  assert.equal(await page.locator('.run-card-chip').count(), 10); // Every item remains visible.
   await page.evaluate(() => { lastQuery = 0; });
   await page.getByRole('button', {name: '2', exact: true}).click();
   await page.waitForFunction(() => location.search.includes('page=2'));

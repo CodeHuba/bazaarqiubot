@@ -1,0 +1,58 @@
+/* Terminal run cards. Quality colors match Zaza Space. */
+.run-item.run-result {display:block;padding:20px;min-width:0;}
+.run-result-head {display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px;}
+.run-result-head .run-meta {min-width:140px;}
+.run-result-head .run-title {margin:0;font-size:14px;overflow-wrap:anywhere;}
+.run-result-time,.run-data-note,.run-query-summary {color:var(--text-secondary);font-size:12px;}
+.run-query-summary {padding:10px 20px;border-bottom:1px solid var(--theme-border);overflow-wrap:anywhere;}
+.run-section {margin:12px 0;min-width:0;}
+.run-section-label {display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:12px;color:var(--text-secondary);}
+.run-section-count {font-size:11px;opacity:.7;}
+.run-items.run-art-list {display:flex;flex-wrap:wrap;align-items:flex-start;gap:12px;padding:4px;}
+.run-art-list .run-card-chip {position:relative;display:inline-flex;flex-direction:column;padding:0;gap:4px;white-space:normal;border:0;border-radius:4px;background:none;flex-shrink:0;color:inherit;vertical-align:top;}
+.run-art-list .run-card-chip.is-filter-match {background:none;}
+.run-art-list .run-card-chip[hidden] {display:none;}
+.run-art-list .run-card-chip.is-filter-match:after {content:'✓';position:absolute;right:-7px;top:-7px;display:grid;place-items:center;width:16px;height:16px;border-radius:50%;background:var(--neon-cyan,#26d9f2);color:#090a2a;font-size:11px;font-weight:900;box-shadow:0 0 0 2px var(--bg-card,#171047);}
+.run-art {--quality:#797c91;--art-height:56px;position:relative;display:grid;place-items:center;width:calc(var(--art-height)*var(--units)/2);height:var(--art-height);outline:2px solid var(--quality);outline-offset:0;border-radius:5px;background:var(--theme-error-bg,#151124);box-shadow:0 3px 8px #0005;overflow:hidden;}
+.run-art-list .run-art img {display:block;width:100%;height:100%;object-fit:contain;border-radius:3px;}
+.run-art.tier-bronze {--quality:#b87d50;}.run-art.tier-silver {--quality:#c3cbd6;}.run-art.tier-gold {--quality:#e5b43c;}.run-art.tier-diamond {--quality:var(--theme-cyan,#68d6ec);}.run-art.tier-legendary {--quality:var(--theme-violet,#b285ed);}
+.run-art.is-skill {--art-height:36px;width:var(--art-height);border-radius:50%;}
+.run-art-missing {font-size:10px;text-align:center;color:var(--text-secondary,#b5b3d7);line-height:1.2;}
+.run-art img + .run-art-missing {display:none;}
+.run-art.is-missing img {display:none;}.run-art.is-missing .run-art-missing {display:block;}
+.run-card-chip:focus-visible {outline:2px solid var(--neon-cyan,#26d9f2);outline-offset:5px;}
+.run-art-list .run-card-enchantment {position:absolute;left:50%;bottom:0;transform:translate(-50%,40%);z-index:1;background:var(--theme-surface,#171047);padding:0 3px;border:1px solid var(--theme-border,#554477);border-radius:3px;font-size:9px;line-height:13px;white-space:nowrap;color:var(--neon-gold,#f5c76a);}
+.run-skills-list {display:grid;grid-template-columns:repeat(auto-fill,36px);gap:12px;max-height:96px;overflow:hidden;padding:4px;}
+.run-skills-list.is-expanded {max-height:none;overflow:visible;}
+.run-action {border:1px solid var(--theme-border,rgba(138,77,255,.35));border-radius:5px;padding:6px 12px;background:transparent;color:var(--neon-cyan,#26d9f2);font:inherit;font-size:12px;text-decoration:none;cursor:pointer;}
+.run-action:hover {background:rgba(var(--theme-cyan-rgb,38,217,242),.1);}.run-action:disabled {opacity:.55;cursor:wait;}
+.run-actions {display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:14px;}
+.run-skills-toggle {margin-top:8px;}
+.run-screenshot {margin-top:16px;width:100%;}
+.run-screenshot img {display:block;max-width:100%;height:auto;border-radius:6px;border:1px solid var(--theme-border,#554477);}
+.run-screenshot img[hidden] {display:none;}
+.run-screenshot-status {margin:5px 0;color:var(--text-secondary);font-size:12px;}
+.run-share-dialog {position:fixed;inset:0;margin:auto;width:min(720px,calc(100vw - 24px));max-height:calc(100dvh - 32px);padding:20px;border:1px solid var(--theme-border,#554477);border-radius:12px;background:var(--theme-surface,#171047);color:var(--text-primary,#f5f4ff);overflow:auto;}
+.run-share-dialog::backdrop {background:#000a;}
+.run-share-heading {display:flex;align-items:center;justify-content:space-between;gap:12px;}.run-share-heading h2 {margin:0;font-size:18px;}
+.run-share-url {width:100%;box-sizing:border-box;margin:12px 0 0;padding:9px;border:1px solid var(--theme-border,#554477);border-radius:4px;background:var(--theme-bg,#090a2a);color:inherit;font:inherit;font-size:12px;}
+.run-share-preview {margin-top:16px;}.run-share-preview img {display:block;max-width:100%;height:auto;border-radius:8px;}
+.run-share-status {font-size:13px;color:var(--text-secondary);margin:12px 0 0;}
+.run-share-sheet {box-sizing:border-box;width:800px;padding:32px;background:#090a2a;color:#f5f4ff;font:15px/1.5 system-ui,'Microsoft YaHei',sans-serif;--text-secondary:#b5b3d7;--theme-surface:#171047;--theme-error-bg:#151124;--theme-cyan:#68d6ec;--theme-violet:#b285ed;--theme-border:#49365c;--neon-gold:#f5c76a;}
+.run-share-sheet h2 {margin:0 0 4px;font-size:28px;}
+.run-share-sheet h2 {overflow-wrap:anywhere;}
+.run-share-header {display:flex;align-items:flex-start;justify-content:space-between;gap:24px;margin-bottom:24px;}
+.run-share-info {flex:1;min-width:0;}
+.run-share-record {display:flex;align-items:center;gap:12px;margin:6px 0;}
+.run-share-sheet .win-badge {color:#36e3c1;font-size:24px;}
+.run-share-sheet .run-section {margin:20px 0 0;}
+.run-share-sheet .run-art {--art-height:100px;box-sizing:border-box;border:3px solid var(--quality);outline:0;}.run-share-sheet .run-art.is-skill {--art-height:52px;}
+/* Canvas export does not implement CSS outline or object-fit. */
+.run-share-sheet .run-art img {width:auto;height:auto;max-width:100%;max-height:100%;}
+.run-share-sheet .run-art-list {gap:16px;}.run-share-sheet .run-card-enchantment {font-size:11px;line-height:16px;}
+.run-share-sheet .run-card-chip {cursor:default;}.run-share-sheet .run-share-skill-grid {display:flex;flex-wrap:wrap;}
+.run-share-qr {flex-shrink:0;}
+.run-share-qr img {display:block;width:128px;height:auto;}
+.run-share-watermark {margin-top:24px;text-align:center;color:#77799e;font-size:12px;letter-spacing:1px;}
+.run-share-render-host {position:absolute;left:-12000px;top:0;pointer-events:none;}
+@media(max-width:600px){.run-item.run-result{padding:16px 12px;}.run-result-head{gap:8px;}.run-result-head .run-meta{flex-basis:calc(100% - 95px);}.run-result-head .win-badge{margin-left:auto;}.run-art{--art-height:48px;}.run-items.run-art-list{gap:10px;}.run-share-dialog{padding:16px;}}
