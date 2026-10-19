@@ -57,6 +57,47 @@ def image_urls_are_current(card_info: dict, current_version: str) -> bool:
     )
 
 
+def card_lookup_names(native: dict) -> list[str]:
+    """The upstream public name can differ from the game's internal identifier."""
+    localization = native.get('Localization')
+    title = localization.get('Title') if isinstance(localization, dict) else None
+    display_name = title.get('Text') if isinstance(title, dict) else None
+    names = []
+    for name in (display_name, native.get('InternalName')):
+        if isinstance(name, str) and name.strip() and name.strip() not in names:
+            names.append(name.strip())
+    return names
+
+
+def query_native_card(native: dict) -> dict | None:
+    """Resolve by display/internal names, accepting only the exact native card ID."""
+    if not native.get('Id'):
+        return None
+    for name in card_lookup_names(native):
+        card = bdb.query_card_by_name(name)
+        if (isinstance(card, dict) and card.get('Id') == native['Id']
+                and card.get('Type') == native.get('Type')):
+            return card
+    return None
+
+
+def card_image_record(native: dict, card: dict) -> dict:
+    names = card_lookup_names(native)
+    canonical_name = names[0] if names else native['Id']
+    title = card.get('Title')
+    zh_name = title.get('Text') if isinstance(title, dict) else None
+    if not isinstance(zh_name, str) or not trans.has_chinese(zh_name):
+        zh_name = trans.get_zh(canonical_name) or trans.get_zh(native.get('InternalName', '')) or canonical_name
+    return {
+        'id': native['Id'], 'internalName': canonical_name,
+        'nativeInternalName': native.get('InternalName', ''), 'name': zh_name,
+        'type': native.get('Type', ''), 'size': native.get('Size', ''),
+        'art': card.get('Art', ''), 'artLarge': card.get('ArtLarge', ''),
+        'artBlur': card.get('ArtBlur', ''), 'artKey': native.get('ArtKey', ''),
+        'uri': card.get('Uri', ''),
+    }
+
+
 BATCH_SIZE = 100  # 每批休息一次
 BATCH_REST = (30, 60)  # 每批后休息 30~60s
 REQUEST_INTERVAL = (1.5, 2.5)  # 请求间隔
@@ -146,7 +187,7 @@ def main():
 
         print(f'[{idx}/{len(targets)}] {internal_name[:35]:35s} ... ', end='', flush=True)
         try:
-            card_info = bdb.query_card_by_name(internal_name)
+            card_info = query_native_card(data)
             
             # 检测限流
             if card_info is None:
@@ -156,28 +197,14 @@ def main():
                     time.sleep(RETRY_WAIT)
                     retry_count = 0
                     # 重试
-                    card_info = bdb.query_card_by_name(internal_name)
+                    card_info = query_native_card(data)
                 else:
                     retry_count += 1
             else:
                 retry_count = 0
             
             if card_info and image_urls_are_current(card_info, IMAGE_VERSION):
-                zh_name = (card_info.get('Title') or {}).get('Text', '')
-                if not zh_name or not trans.has_chinese(zh_name):
-                    zh_name = trans.get_zh(internal_name) or internal_name
-                
-                result['cards'][card_id] = {
-                    'id': card_id,
-                    'internalName': internal_name,
-                    'name': zh_name,
-                    'type': card_type,
-                    'art': card_info.get('Art', ''),
-                    'artLarge': card_info.get('ArtLarge', ''),
-                    'artBlur': card_info.get('ArtBlur', ''),
-                    'artKey': art_key,
-                    'uri': card_info.get('Uri', '')
-                }
+                result['cards'][card_id] = card_image_record(data, card_info)
                 result['meta']['fetched'] += 1
                 print('✓')
             else:
