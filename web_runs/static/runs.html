@@ -1581,6 +1581,8 @@ input[type="file"] {
 <link rel="stylesheet" href="/static/card-preview.css?v=1">
 <script src="/static/card-preview.js?v=1"></script>
 <link rel="stylesheet" href="/static/theme.css?v=1">
+<link rel="stylesheet" href="/static/runs-list.css?v=20261016-center">
+<script src="/static/runs-list.js?v=20261016"></script>
 </head>
 <body>
 <nav class="navbar">
@@ -1826,6 +1828,10 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('comp-result').style.display = 'none';
   document.getElementById('comp-result').innerHTML = '<div class="result-card"><div class="empty">输入卡牌名称后点击查询，即可查看阵容分析</div></div>';
   const params = new URLSearchParams(location.search);
+  if (params.has('run')) {
+    window.BazaarRuns.loadRun(params.get('run'));
+    return;
+  }
   const hero = params.get('hero');
   const cards = readLegacyCardsParam(location.search);
   const rank = params.get('rank');
@@ -1880,6 +1886,7 @@ function winrateColor(r) {
 
 async function queryRuns(page) {
   if (showRunFileNotice()) return;
+  window.BazaarRuns.cancelDetail();
   if (activeRunsController) {
     activeRunsController.abort();
     activeRunsController = null;
@@ -1960,7 +1967,7 @@ async function queryRuns(page) {
     shareParams.set('page', resultPage);
     shareParams.set('auto', '1');
     history.replaceState(null, '', location.pathname + '?' + shareParams);
-    renderRuns(data, resultPage, {hero, cards, wins, days});
+    renderRuns(data, resultPage, {hero, cards, wins, days, rank});
   } catch(e) {
     if (requestId !== activeRunsRequestId) return;
     const message = e.name === 'AbortError'
@@ -1981,32 +1988,7 @@ function renderRuns(data, page, params) {
     document.getElementById('runs-result').innerHTML = '<div class="result-card"><div class="empty">未找到符合条件的阵容</div></div>';
     return;
   }
-  const heroZh = {Vanessa:'瓦内莎',Dooley:'杜利',Mak:'马克',Pygmalien:'皮格马利翁',Stelle:'斯黛尔',Jules:'朱尔斯',Karnok:'卡诺克','The Dragons':'双龙'};
-  let items = runs.map(r => {
-    const day = r.wins + r.losses;
-    const cardList = r.cards || [];
-    // Keep every matching instance visible, even when it is beyond the eighth item.
-    const visibleCards = cardList.filter((card, index) => index < 8 || card.matched);
-    const cardsHtml = cardList.length ? visibleCards.map(c => {
-      const img = c.img ? `<img class="size-${escapeRunCardText(c.size || 'Small')}" src="${escapeRunCardText(c.img)}" alt="${escapeRunCardText(c.name)}" loading="lazy" onerror="this.style.display='none'">` : '';
-      const enchantment = c.enchantment ? `<span class="run-card-enchantment">${escapeRunCardText(c.enchantment_zh || RUN_ENCHANTMENTS[c.enchantment] || c.enchantment)}</span>` : '';
-      return `<span class="run-card-chip bcp-trigger${c.matched ? ' is-filter-match' : ''}" ${window.BazaarCardPreview?.attrs(c)||''}>${img}${escapeRunCardText(c.name)}${enchantment}</span>`;
-    }).join('') + (cardList.length>visibleCards.length ? `<span class="run-card-chip">+${cardList.length-visibleCards.length}</span>` : '') : escapeHtml((r.items || []).slice(0,5).join('、'));
-    const screenshot = r.screenshot ? `<div style="margin:8px 0 2px"><img src="${r.screenshot}" style="max-width:100%;border-radius:6px;border:1px solid var(--theme-border, #1f2937)" loading="lazy" onerror="this.style.display='none'"></div>` : '';
-    const timeStr = r.created_at ? new Date(r.created_at).toLocaleString('zh-CN', {timeZone:'Asia/Shanghai',month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}) : '';
-    return `<div class="run-item" style="flex-direction:column;align-items:flex-start">
-      <div style="display:flex;gap:12px;align-items:center;width:100%">
-        <span class="run-hero">${heroZh[r.hero]||r.hero}</span>
-        <div class="run-meta">
-          <div class="run-title">Day${day} · ${r.username||'匿名'}${timeStr ? ' · <span style="color:var(--text-secondary);font-size:11px">' + timeStr + '</span>' : ''}</div>
-          <div class="run-items">${cardsHtml}</div>
-        </div>
-        <span class="win-badge">${r.wins}胜${r.losses}负</span>
-        <a class="run-link" href="${r.url}" target="_blank">查看 →</a>
-      </div>
-      ${screenshot}
-    </div>`;
-  }).join('');
+  const items = window.BazaarRuns.renderRows(runs);
 
   let pagination = '';
   if (pages > 1) {
@@ -2023,9 +2005,10 @@ function renderRuns(data, page, params) {
   document.getElementById('runs-result').innerHTML = `
     <div class="result-card">
       <div class="result-header">
-        <span>阵容列表</span>
+        <span>${Number(data.min_wins ?? params.wins) === 10 ? '10 胜阵容列表' : '阵容列表'}</span>
         <span class="total">共 ${total} 条结果（第 ${page}/${pages} 页）${params.day ? ` · 打到 Day ${params.day}` : ''}</span>
       </div>
+      ${window.BazaarRuns.querySummary(data, params)}
       ${items}
       ${pagination}
     </div>`;

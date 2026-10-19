@@ -1937,6 +1937,28 @@ def api_routes_core(core_id):
     return _day_stats_core_route_response(core_id)
 
 
+@app.route('/api/runs/<run_id>', methods=['GET'])
+@rate_limit
+def api_run_detail(run_id):
+    # Public run IDs are opaque identifiers, never SQL or paths.
+    if not re.fullmatch(r'[A-Za-z0-9_-]{1,128}', run_id):
+        return jsonify({'error': '无效的对局链接'}), 400
+    client = None
+    try:
+        client = RunsQuery(db_path=RUNS_DB_PATH)
+        run = client.get_run(run_id)
+        if run is None:
+            return jsonify({'error': '这条对局不存在或已移除，可返回阵容查询查找其他阵容'}), 404
+        return jsonify({'run': run})
+    except Exception:
+        app.logger.exception('Public run detail unavailable')
+        return jsonify({'error': '对局暂时无法读取，请稍后重试'}), 503
+    finally:
+        if client is not None and client.conn is not None:
+            client.conn.close()
+
+
+
 @app.route('/api/runs', methods=['GET'])
 @rate_limit
 def api_runs():
