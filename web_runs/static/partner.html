@@ -1497,13 +1497,13 @@ input[type="file"] {
 <link rel="stylesheet" href="/static/card-preview.css?v=1">
 <script src="/static/card-preview.js?v=1"></script>
 <link rel="stylesheet" href="/static/theme.css?v=1">
+<script src="/static/search-tracking.js?v=20261016-search"></script>
 </head>
 <body>
 <nav class="navbar">
   <a href="/runs" class="logo">巴扎丘Bot</a>
   <div class="nav-tabs">
     <a href="/runs" class="nav-tab">阵容查询</a>
-    <a href="/routes" class="nav-tab">阵容路线</a>
     <a href="/winrate" class="nav-tab">胜率查询</a>
     <a href="/partner" class="nav-tab active">最佳搭档</a>
     <a href="/topcard" class="nav-tab">职业榜单</a>
@@ -1695,7 +1695,7 @@ async function queryPartner() {
   const params = new URLSearchParams({card, rank});
   if (days) params.set('days', days);
   try {
-    const res = await fetch('/api/partner?' + params);
+    const res = await (window.BazaarSearch ? BazaarSearch.query('partner', '/api/partner?' + params) : fetch('/api/partner?' + params));
     const data = await res.json();
     if (data.error) { showError('pt-error', data.error); document.getElementById('pt-result').innerHTML=''; return; }
     renderPartner(data);

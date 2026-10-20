@@ -64,7 +64,16 @@ class RunsQuery:
 
     def load(self):
         """加载数据库、映射表和翻译"""
-        self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
+        if self.conn is None:
+            self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
+        from .runs_metadata import apply_cached
+        apply_cached(self, self._load_metadata, Path(__file__).parent/'cache', ALIAS_FILE)
+
+    def metadata_version(self):
+        from .runs_metadata import source_version
+        return source_version(self, Path(__file__).parent/'cache', ALIAS_FILE)
+
+    def _load_metadata(self):
         try:
             with open(self.mapping_path, 'r', encoding='utf-8') as f:
                 self.card_mapping = json.load(f) or {}

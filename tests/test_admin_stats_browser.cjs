@@ -61,20 +61,20 @@ for (const mode of ['normal', 'missing-library', 'chart-error']) {
         }
         await page.waitForFunction(days =>
           document.querySelector('#hot-cards-body').textContent.includes(`card-${days}`), days);
-        assert.equal(await page.locator('.kpi-value').first().textContent(), String(days * 10));
+        assert.equal(await page.locator('#monitor-kpis .kpi-value').first().textContent(), String(days * 10));
         assert.equal(await page.locator('[data-days].active').getAttribute('data-days'), String(days));
         assert.match(await page.locator('#api-detail-body').textContent(), /\/api\/runs/);
         assert.match(await page.locator('#tab-pv-list').textContent(), /阵容查询/);
         assert.match(await page.locator('#update-time').textContent(), new RegExp(`近 ${days} 天`));
-        assert.equal(await page.locator('#main-content > .error-msg').count(), 0);
+        assert.equal(await page.locator('#main-content.error-msg').count(), 0);
         if (mode === 'normal') {
           assert.deepEqual(await page.evaluate(() => ({
             version: Chart.version,
             charts: Object.keys(Chart.instances).length,
             counts: Chart.getChart('trend-chart').data.datasets[0].data,
-          })), { version: '4.4.0', charts: 2, counts: [days * 10] });
+          })), { version: '4.4.0', charts: 1, counts: [days * 10] });
         } else {
-          assert.equal(await page.locator('.chart-wrap [role="status"]').count(), 2);
+          assert.equal(await page.locator('#trend-chart-wrap [role="status"]').count(), 1);
         }
       }
       // Programmatic calls must also work without the browser's implicit event.
@@ -87,7 +87,7 @@ for (const mode of ['normal', 'missing-library', 'chart-error']) {
       // Real API failures should still be reported rather than hidden by chart fallback.
       await page.route('**/api/stats/overview?*', route => route.fulfill({ status: 500, json: { error: 'database error' } }));
       await page.evaluate(() => loadStats());
-      assert.match(await page.locator('#main-content > .error-msg').textContent(), /请求失败/);
+      assert.match(await page.locator('#main-content.error-msg').textContent(), /请求失败/);
     } finally {
       await browser.close();
     }

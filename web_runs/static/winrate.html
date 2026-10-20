@@ -1715,13 +1715,13 @@ input[type="file"] {
 <link rel="stylesheet" href="/static/card-preview.css?v=1">
 <script src="/static/card-preview.js?v=1"></script>
 <link rel="stylesheet" href="/static/theme.css?v=1">
+<script src="/static/search-tracking.js?v=20261016-search"></script>
 </head>
 <body>
 <nav class="navbar">
   <a href="/runs" class="logo">巴扎丘Bot</a>
   <div class="nav-tabs">
     <a href="/runs" class="nav-tab">阵容查询</a>
-    <a href="/routes" class="nav-tab">阵容路线</a>
     <a href="/winrate" class="nav-tab active">胜率查询</a>
     <a href="/partner" class="nav-tab">最佳搭档</a>
     <a href="/topcard" class="nav-tab">职业榜单</a>
@@ -2046,7 +2046,7 @@ async function queryWinrate() {
     const params = new URLSearchParams({cards, rank, multi: '1'});
     if (hero) params.set('hero', hero);
     if (days) params.set('days', days);
-    const res = await fetch('/api/winrate?' + params);
+    const res = await (window.BazaarSearch ? BazaarSearch.query('winrate', '/api/winrate?' + params) : fetch('/api/winrate?' + params));
     const resp = await res.json();
     if (resp.error) { showError('wr-error', resp.error); document.getElementById('wr-result').innerHTML=''; return; }
     // multi=1 返回 {results, phase}，兼容旧格式数组

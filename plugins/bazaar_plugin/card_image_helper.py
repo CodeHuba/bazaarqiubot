@@ -9,6 +9,9 @@ from typing import Optional
 
 _CACHE_FILE = Path(__file__).resolve().parent / 'cache' / 'card_images.json'
 _CACHE = None
+_CACHE_SIGNATURE = None
+_CACHE_SOURCE = None
+_CACHE_CHECKED_AT = 0
 _URL_STATUS_CACHE: dict[str, tuple[float, bool]] = {}
 _URL_STATUS_TTL = 3600
 
@@ -46,13 +49,23 @@ def _url_is_reachable(url: str) -> bool:
     return ok
 
 
-def _load():
-    global _CACHE
-    if _CACHE is None:
+def _load(*, force=False):
+    global _CACHE, _CACHE_SIGNATURE, _CACHE_SOURCE, _CACHE_CHECKED_AT
+    now = time.monotonic()
+    if not force and _CACHE is not None and _CACHE_SOURCE == str(_CACHE_FILE) and now-_CACHE_CHECKED_AT < 1:
+        return _CACHE
+    try:
+        stat = _CACHE_FILE.stat()
+        signature = (str(_CACHE_FILE.resolve()), stat.st_mtime_ns, stat.st_size, stat.st_ino)
+    except OSError:
+        signature = (str(_CACHE_FILE.resolve()), None)
+    if _CACHE is None or (_CACHE_SIGNATURE is not None and signature != _CACHE_SIGNATURE):
         try:
             _CACHE = json.loads(_CACHE_FILE.read_text(encoding='utf-8'))
         except Exception:
             _CACHE = {'cards': {}}
+    _CACHE_SIGNATURE = signature
+    _CACHE_SOURCE, _CACHE_CHECKED_AT = str(_CACHE_FILE), now
     return _CACHE
 
 

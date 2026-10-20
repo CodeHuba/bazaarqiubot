@@ -22,6 +22,9 @@ load_dotenv("/opt/qiubot/.env")
 from functools import wraps
 from flask import Flask, request, jsonify, send_from_directory, send_file, abort, Response
 from werkzeug.middleware.proxy_fix import ProxyFix
+from search_analytics import (PATHS as SEARCH_PATHS, init_search_schema, issue_receipt, record_search, search_rankings)
+from comp_analytics import create_comp_analytics_blueprint, init_comp_analytics
+from acquisition import create_acquisition_blueprint, init_acquisition
 from analytics import (
     FeatureEventWriter, aggregate_hot_card_queries, init_analytics_db,
     intraday as feature_intraday, overview as feature_overview,
@@ -63,6 +66,7 @@ INGEST_TOKEN = os.getenv('BAZAAR_INGEST_TOKEN', '')
 RUNS_DB_PATH = os.getenv('RUNS_DB_PATH', '/opt/qiubot/data/bazaar_runs.db')
 DAY_SNAPSHOT_DB_PATH = os.getenv('DAY_SNAPSHOT_DB_PATH', '/opt/qiubot/data/bazaar_day_snapshots.db')
 DAY_STATS_DB_PATH = os.getenv('DAY_STATS_DB_PATH', '/opt/qiubot/data/bazaar_day_stats.db')
+ROUTES_MAINTENANCE = os.getenv('ROUTES_MAINTENANCE', '0') == '1'
 ENABLE_DAY_SNAPSHOT_QUEUE = os.getenv('ENABLE_DAY_SNAPSHOT_QUEUE', '0') == '1'
 SNAPSHOT_LEASE_MINUTES = int(os.getenv('SNAPSHOT_LEASE_MINUTES', '10'))
 _day_snapshot_store = DaySnapshotStore(DAY_SNAPSHOT_DB_PATH)
@@ -273,6 +277,7 @@ def _build_card_search_index():
                 # 启动时禁止逐张联网探测；直接使用本地 card_images.json 缓存。
                 'img': image_info.get('artLarge') or image_info.get('art') or '',
                 'size': rq.size_map.get(card_id) or image_info.get('size') or 'Small',
+                'type': image_info.get('type') or info.get('type') or '',
             })
         _card_search_index = items
         print(f'[card_search] 索引构建完成，共 {len(items)} 张卡牌', flush=True)
@@ -502,6 +507,28 @@ def _init_stats_tables():
 _init_stats_tables()
 
 STATS_DB = os.getenv('STATS_DB_PATH', '/opt/qiubot/data/stats.db')
+try:
+    init_acquisition(STATS_DB)
+except _sqlite3.Error:
+    app.logger.warning('Acquisition analytics initialization unavailable')
+app.register_blueprint(create_acquisition_blueprint(
+    stats_path=lambda: STATS_DB, admin_authorized=lambda: _stats_authorized(),
+))
+try:
+    init_comp_analytics(STATS_DB)
+except _sqlite3.Error:
+    app.logger.warning('Composition analytics initialization unavailable')
+app.register_blueprint(create_comp_analytics_blueprint(
+    stats_path=lambda: STATS_DB, admin_authorized=lambda: _stats_authorized(),
+))
+_search_receipt_secret = os.getenv('SEARCH_ANALYTICS_SECRET') or os.getenv('STATS_PASSWORD') or secrets.token_hex(32)
+try:
+    init_search_schema(STATS_DB)
+    _search_analytics_ready = True
+except Exception as _search_init_error:
+    _search_analytics_ready = False
+    print(f'[search analytics] 初始化失败: {type(_search_init_error).__name__}', flush=True)
+
 try:
     init_analytics_db(STATS_DB)
     _feature_event_writer = FeatureEventWriter(STATS_DB)
@@ -835,13 +862,34 @@ def _feature_outcome(response):
 def before_request():
     g.start_time = time.time()
     g.fingerprint = request.headers.get('X-Fingerprint', '')
+    if ROUTES_MAINTENANCE and (request.path == '/routes' or request.path.startswith('/api/routes/')):
+        if request.path.startswith('/api/'):
+            return jsonify({'error': '阵容路线正在进行赛季更新，暂时下线', 'maintenance': True}), 503
+        return Response('阵容路线正在进行赛季更新，暂时下线', status=503, mimetype='text/plain; charset=utf-8')
 
 @app.after_request
 def after_request(response):
+    if request.method == 'GET' and request.path in SEARCH_PATHS:
+        response.vary.add('X-Search-Action')
+        if request.headers.get('X-Search-Action') == 'user':
+            try:
+                if getattr(g, 'search_resolution_failed', False):
+                    raise ValueError('查询名称未完成验证')
+                search_result = response.get_json(silent=True)
+                if getattr(g, 'search_unrecognized', False) and isinstance(search_result, dict):
+                    search_result = dict(search_result, not_found=True)
+                response.headers['X-Search-Receipt'] = issue_receipt(
+                    SEARCH_PATHS[request.path], dict(request.args), search_result,
+                    response.status_code, _search_receipt_secret, _resolve_search_card,
+                    RUNS_SEASON_ID, CURRENT_PHASE, getattr(g, 'search_resolved_cards', None),
+                )
+            except Exception as exc:
+                # Receipt generation cannot affect the actual query response.
+                app.logger.warning('Search analytics receipt unavailable: %s', type(exc).__name__)
     if hasattr(g, 'start_time'):
         duration_ms = int((time.time() - g.start_time) * 1000)
         endpoint = request.endpoint
-        _user_api_paths = ('/api/runs', '/api/winrate', '/api/partner', '/api/heroes', '/api/suggestions', '/api/card_img', '/api/topcard', '/api/card-tier', '/api/feedback', '/api/routes')
+        _user_api_paths = ('/api/comp/card', '/api/runs', '/api/winrate', '/api/partner', '/api/heroes', '/api/suggestions', '/api/card_img', '/api/topcard', '/api/card-tier', '/api/feedback', '/api/routes')
         if endpoint and endpoint.startswith('api_') and request.path.startswith(_user_api_paths):
             _log_api_call(
                 endpoint=request.path,
@@ -940,6 +988,69 @@ def _log_feedback_action(action, feedback_id, ip, fingerprint):
     except: pass
 
 # 新增埋点 API
+_search_name_index = {}
+_search_name_source = None
+
+def _resolve_search_card(name):
+    global _search_name_source, _search_name_index
+    if _search_name_source is not _card_search_index:
+        names = {}
+        for row in _card_search_index:
+            en, zh = row.get('en') or '', row.get('zh') or ''
+            if en or zh:
+                item = ((en or zh).casefold(), zh or en)
+                for alias in (en, zh):
+                    if alias:
+                        names[alias.strip().casefold()] = item
+        _search_name_source, _search_name_index = _card_search_index, names
+    result = _search_name_index.get(name.strip().casefold())
+    if result:
+        return result
+    try:
+        from plugins.bazaar_plugin.translations import get_zh
+        return _search_name_index.get(str(get_zh(name) or '').strip().casefold())
+    except Exception:
+        return None
+
+@app.route('/api/track/search', methods=['POST'])
+def api_track_search():
+    if not _search_analytics_ready:
+        return jsonify({'error': '搜索统计暂不可用'}), 503
+    if request.content_length and request.content_length > 40000:
+        return jsonify({'error': '搜索记录过大'}), 413
+    try:
+        result = record_search(STATS_DB, request.get_json(silent=True), getattr(g, 'fingerprint', ''),
+                               _search_receipt_secret, _resolve_search_card, RUNS_SEASON_ID, CURRENT_PHASE)
+        return jsonify(result)
+    except (ValueError, TypeError, KeyError):
+        return jsonify({'error': '搜索记录格式或查询凭据无效'}), 400
+    except _sqlite3.Error:
+        return jsonify({'error': '搜索统计暂不可用'}), 503
+
+@app.route('/api/stats/search', methods=['GET'])
+@require_stats_auth
+def api_stats_search():
+    if not _search_analytics_ready:
+        return jsonify({'error': '搜索统计暂不可用'}), 503
+    try:
+        data = search_rankings(
+            STATS_DB, days=request.args.get('days', 7), board=request.args.get('board', 'cards'),
+            feature=request.args.get('feature', 'all'), offset=request.args.get('offset', 0),
+            limit=request.args.get('limit', 20), hero=request.args.get('hero', ''),
+            rank=request.args.get('rank', ''), day=request.args.get('day'),
+            enchantment=request.args.get('enchantment', ''), combos=request.args.get('combos') == '1',
+            item=request.args.get('item'),
+        )
+        response = jsonify(data)
+        response.cache_control.private = True
+        response.cache_control.no_store = True
+        return response
+    except (ValueError, TypeError):
+        return jsonify({'error': '搜索排行筛选条件无效'}), 400
+    except _sqlite3.Error:
+        return jsonify({'error': '搜索统计暂不可用'}), 503
+
+
 @app.route('/api/track/pv', methods=['POST'])
 def api_track_pv():
     data = request.get_json(silent=True) or {}
@@ -1989,6 +2100,22 @@ def api_runs():
         result = client.query(hero=hero, cards=cards, days=days, min_wins=min_wins,
                               page=page, rank_filter=rank_filter, day=day,
                               card_filters=card_filters)
+        if request.headers.get('X-Search-Action') == 'user':
+            try:
+                # Query() returns total=0 for unknown cards and for no matching runs.
+                # Its in-memory resolver distinguishes them without another run query.
+                g.search_resolved_cards = {}
+                for name in log_cards:
+                    ids = client.find_card_ids(name)
+                    if not ids:
+                        g.search_unrecognized = True
+                        continue
+                    labels = {client.card_display_info(card_id).get('name') for card_id in ids}
+                    if len(labels) == 1 and next(iter(labels)):
+                        g.search_resolved_cards[name.strip().casefold()] = next(iter(labels))
+            except Exception:
+                g.search_resolution_failed = True
+                app.logger.warning('Search card resolution unavailable')
         ip = _mask_ip(request.headers.get('X-Forwarded-For', request.remote_addr).split(',')[0].strip())
         _log_query('runs', {'hero': hero, 'cards': log_cards, 'card_filters': card_filters,
                             'days': days, 'day': day,
@@ -2137,6 +2264,8 @@ def api_card_search():
         q_lower = q.lower().replace(' ', '')
         results = []
         for item in _card_search_index:
+            if request.args.get('type') == 'item' and str(item.get('type', '')).lower() != 'item':
+                continue
             zh_norm = item['zh'].replace(' ', '')
             en_norm = item['en'].lower().replace(' ', '')
             if q_lower in zh_norm or q_lower in en_norm:
@@ -2332,6 +2461,8 @@ def api_ingest():
             from plugins.bazaar_plugin import runs_query as _runs_query
             _runs_query._card_tier_cache.clear()
             _runs_query._hero_overview_cache.clear()
+            from plugins.bazaar_plugin.comp_analysis_store import invalidate as invalidate_comp_analysis
+            invalidate_comp_analysis()
         snapshot_queue_errors = []
         if ENABLE_DAY_SNAPSHOT_QUEUE and _day_snapshot_store_error:
             snapshot_queue_errors.append({'error': 'day snapshot store unavailable'})
@@ -2512,86 +2643,69 @@ def api_comp():
 @app.route('/api/comp/card', methods=['GET'])
 @rate_limit
 def api_comp_card():
-    from plugins.bazaar_plugin.runs_query import RunsQuery, HERO_ZH_TO_EN
+    from plugins.bazaar_plugin.runs_query import RunsQuery
+    from plugins.bazaar_plugin.comp_analysis_store import analyze
     card_raw = request.args.get('card', '').strip()
     hero_raw = request.args.get('hero', '').strip()
-    all_phases = request.args.get('all_phases') == 'true'
     rank_filter = request.args.get('rank', 'all')
     ip = _mask_ip(request.headers.get('X-Forwarded-For', request.remote_addr))
-    if not card_raw:
-        return jsonify({'error': '请指定卡牌名'}), 400
+    query = None
     try:
-        query = RunsQuery()
+        raw_ids = request.args.get('card_ids')
+        card_ids = json.loads(raw_ids) if raw_ids else []
+        raw_names = request.args.get('cards')
+        names = json.loads(raw_names) if raw_names and raw_names.startswith('[') else (raw_names or card_raw).split('+')
+        names = [name.strip() for name in names if isinstance(name, str) and name.strip()] if isinstance(names, list) else []
+        if not isinstance(card_ids, list) or len(card_ids) > 5 or any(not isinstance(cid, str) or not cid or len(cid) > 160 for cid in card_ids):
+            raise ValueError('请选择 1–5 张有效物品')
+        if not card_ids and (not names or len(names) > 5 or any(len(name) > 160 for name in names)):
+            raise ValueError('请选择 1–5 张物品，多张物品需同时包含')
+        days_raw = request.args.get('days', '')
+        if days_raw and (not days_raw.isdigit() or not 1 <= int(days_raw) <= 365):
+            raise ValueError('最近天数须为 1–365 的整数')
+        query = RunsQuery(db_path=RUNS_DB_PATH)
         query.load()
-        # 复用启动时预热的卡牌搜索索引，不在每个请求中重新读 card_images.json。
-        matches = _find_card_search_matches(card_raw)
-        if not matches:
-            # 服务启动后的短暂预热窗口内，复用 RunsQuery 已加载的索引兜底。
-            candidate_ids = query.find_card_ids(card_raw)
-            matches = []
-            for candidate_id in candidate_ids:
-                display = query.card_display_info(candidate_id)
-                matches.append({
-                    'cardId': candidate_id,
-                    'zh': display.get('name') or card_raw,
-                    'en': display.get('name_en') or card_raw,
-                })
-        if not matches:
-            return jsonify({'error': f'未找到卡牌: {card_raw}'}), 404
-        required_card = matches[0]['cardId']
-        card_display = matches[0].get('zh') or matches[0].get('en') or card_raw
-        # 解析职业（可选）
-        hero = None
-        if hero_raw:
-            hero = query.resolve_hero(hero_raw)
-            if not hero:
-                return jsonify({'error': f'未知职业: {hero_raw}'}), 400
-        # 全职业时遍历所有职业合并结果
-        HEROES = ['Vanessa', 'Dooley', 'Mak', 'Pygmalien', 'Stelle', 'Jules', 'Karnok', 'The Dragons']
-        heroes_to_query = [hero] if hero else HEROES
-        all_layers = []
-        all_recommendations = []
-        total_runs = 0
-        for h in heroes_to_query:
-            r = query.comp(
-                hero=h,
-                all_phases=all_phases,
-                rank_filter=rank_filter,
-                required_card=required_card,
-                min_count=10,
-            )
-            for layer in r.get('layers', []):
-                layer['hero'] = h
-            for recommendation in r.get('recommendations', []):
-                recommendation['hero'] = h
-                recommendation['hero_zh'] = r.get('hero_zh', h)
-            all_layers.extend(r.get('layers', []))
-            all_recommendations.extend(r.get('recommendations', []))
-            total_runs += r.get('total_runs', 0)
-        # 按 score 排序，取 top10
-        all_layers.sort(key=lambda x: -x.get('score', 0))
-        # 统计口径：全职业时所有百分比以当前 phase 内“含查询卡”的 runs 总数为分母。
-        for recommendation in all_recommendations:
-            recommendation['global_appearance_rate'] = recommendation.get('count', 0) / total_runs if total_runs else 0.0
-            recommendation['sample_warning'] = recommendation.get('count', 0) < 10
-        all_recommendations.sort(key=lambda x: -x.get('score', 0))
-        result = {
-            'card': card_display,
-            'card_id': required_card,
-            'hero': hero_raw or 'all',
-            'layers': all_layers[:10],
-            'recommendations': all_recommendations[:20],
-            'total_runs': total_runs,
-            'phase': CURRENT_PHASE,
-            'season': RUNS_SEASON_ID,
-            'scope': '当前赛季、当前 phase；仅统计包含查询卡的 runs',
-        }
-        _log_query('comp_card', {'card': card_raw, 'hero': hero_raw}, ip, len(all_recommendations), True)
+        if not card_ids:
+            for name in names:
+                matches = _find_card_search_matches(name)
+                if not matches:
+                    candidate_ids = query.find_card_ids(name)
+                    matches = []
+                    for candidate_id in candidate_ids:
+                        display = query.card_display_info_cached(candidate_id)
+                        if name.casefold().replace(' ', '') in (display['name'].casefold().replace(' ', ''), display['name_en'].casefold().replace(' ', '')):
+                            matches.append({'cardId': candidate_id})
+                if not matches:
+                    return jsonify({'error': f'未找到物品: {name}'}), 404
+                card_ids.append(matches[0]['cardId'])
+        for cid in card_ids:
+            image = query._card_image_info(cid)
+            info = query._safe_mapping_info(cid)
+            if not image and not info:
+                raise ValueError('存在无效的物品，请重新从联想列表选择')
+            if str(image.get('type') or info.get('type') or '').lower() != 'item':
+                raise ValueError('阵容分析仅支持物品筛选，技能作为搭配结果展示')
+        hero = query.resolve_hero(hero_raw) if hero_raw else ''
+        if hero_raw and not hero:
+            raise ValueError(f'未知职业: {hero_raw}')
+        result = analyze(query, card_ids, season=RUNS_SEASON_ID, phase=CURRENT_PHASE,
+                         hero=hero, rank=rank_filter, days=int(days_raw) if days_raw else None,
+                         sort=request.args.get('sort', 'reliable'))
+        _log_query('comp_card', {'cards': [c['name'] for c in result['anchors']], 'hero': hero_raw,
+                               'days': result['scope']['days'], 'rank': rank_filter}, ip, len(result['groups']), True)
         return jsonify(result)
-    except Exception as e:
-        import traceback; traceback.print_exc()
+    except (json.JSONDecodeError, TypeError):
+        return jsonify({'error': '无效的阵容分析条件，请重新选择物品'}), 400
+    except ValueError as exc:
+        return jsonify({'error': str(exc)}), 400
+    except Exception:
+        import traceback
+        traceback.print_exc()
         _log_query('comp_card', {'card': card_raw}, ip, 0, False)
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': '阵容分析暂时无法读取，请稍后重试'}), 500
+    finally:
+        if query is not None and query.conn is not None:
+            query.conn.close()
 
 # ===== Feedback API =====
 FEEDBACK_DB = os.getenv('FEEDBACK_DB_PATH', '/opt/qiubot/data/feedback.db')
@@ -3386,6 +3500,9 @@ def internal_error(e):
     return '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>500 - BazaarQiuBot</title><style>body{font-family:sans-serif;background:#0a0e1a;color:#e5e7eb;text-align:center;padding:100px 20px}h1{color:#ef4444;font-size:72px;margin:0}p{font-size:18px;margin:20px 0}a{color:#60a5fa;text-decoration:none}</style></head><body><h1>500</h1><p>服务器内部错误，请稍后重试</p><a href="/">返回首页</a></body></html>', 500
 
 if __name__ == '__main__':
+    from plugins.bazaar_plugin.comp_analysis_store import start_background_refresh
+    start_background_refresh(lambda: RunsQuery(db_path=RUNS_DB_PATH),
+                             season=RUNS_SEASON_ID, phase=CURRENT_PHASE)
     # 单个慢统计请求不能阻塞其它页面/API 请求。
     app.run(
         host=os.getenv('WEB_HOST', '0.0.0.0'),

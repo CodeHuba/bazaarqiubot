@@ -6,7 +6,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>巴扎阵容库 · 数据看板</title>
 <script src="/static/vendor/chart.umd-4.4.0.min.js"></script>
+<script src="/static/stats-dashboard.js?v=comp-tracking-20261019-131736" defer></script>
+<script src="/static/stats-comp.js?v=comp-tracking-20261019-131736" defer></script>
+<script src="/static/stats-search.js?v=20261016-search" defer></script>
+<link rel="stylesheet" href="/static/stats-search.css?v=20261016-search">
 <script src="/static/stats-intraday.js" defer></script>
+<script src="/static/stats-acquisition.js?v=1" defer></script>
+<meta name="robots" content="noindex, nofollow">
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'Inter','PingFang SC','Microsoft YaHei',sans-serif;background:var(--theme-bg, #0a0e1a);color:var(--theme-text, #e2e8f0);min-height:100vh}
@@ -83,6 +89,7 @@ body{font-family:'Inter','PingFang SC','Microsoft YaHei',sans-serif;background:v
   <link rel="stylesheet" href="/static/query-progress.css">
   <script src="/static/query-progress.js"></script>
 <link rel="stylesheet" href="/static/theme.css?v=1">
+<link rel="stylesheet" href="/static/stats-dashboard.css?v=20261015-layout">
 </head>
 <body>
 <nav class="navbar">
@@ -90,23 +97,60 @@ body{font-family:'Inter','PingFang SC','Microsoft YaHei',sans-serif;background:v
   <a href="/" class="nav-link">← 返回查询页</a>
 </nav>
 <div class="main">
-  <div class="page-title">数据看板</div>
-  <div class="page-sub" id="update-time">加载中...</div>
-
-  <div class="controls">
-    <span class="ctrl-label">统计周期：</span>
-    <button class="day-btn" data-days="1" onclick="setDays(1)">今天</button>
-    <button class="day-btn active" data-days="7" onclick="setDays(7)">近 7 天</button>
-    <button class="day-btn" data-days="30" onclick="setDays(30)">近 30 天</button>
-    <button class="day-btn" data-days="90" onclick="setDays(90)">近 90 天</button>
-    <button class="day-btn" style="margin-left:auto;background:#0ea5e9;color:#fff;border-color:#0ea5e9" onclick="openFeedbackAdminModal()">意见反馈管理</button>
-    <button class="day-btn" style="background:var(--theme-violet, #8A4DFF);color:#fff;border-color:var(--theme-violet, #8A4DFF)" onclick="openSupportersModal()">赞赏者管理</button>
-    <button class="day-btn" style="background:var(--theme-gold, #F5C76A);color:var(--theme-bg, #0a0e1a);border-color:var(--theme-gold, #F5C76A)" onclick="openTriviaModal()">冷知识管理</button>
-    <button class="day-btn" style="background:var(--theme-teal, #34d399);color:var(--theme-bg, #0a0e1a);border-color:var(--theme-teal, #34d399)" onclick="openAnnouncementModal()">公告管理</button>
+  <header class="admin-heading">
+    <div><h1 class="page-title">管理后台</h1><p class="page-sub" id="update-time">正在加载统计…</p></div>
+    <button type="button" class="admin-button" id="dashboard-refresh">刷新数据</button>
+  </header>
+  <div class="admin-tabs" role="tablist" aria-label="后台功能">
+    <button type="button" role="tab" id="tab-overview" data-admin-tab="overview" aria-controls="panel-overview" aria-selected="true">概览</button>
+    <button type="button" role="tab" id="tab-features" data-admin-tab="features" aria-controls="panel-features" aria-selected="false" tabindex="-1">功能分析</button>
+    <button type="button" role="tab" id="tab-monitor" data-admin-tab="monitor" aria-controls="panel-monitor" aria-selected="false" tabindex="-1">运行监控</button>
+    <button type="button" role="tab" id="tab-manage" data-admin-tab="manage" aria-controls="panel-manage" aria-selected="false" tabindex="-1">内容管理</button>
   </div>
+  <div class="controls" aria-label="概览与分析统计周期">
+    <span class="ctrl-label">统计周期</span>
+    <button type="button" class="day-btn" data-days="1" onclick="setDays(1)" aria-pressed="false">今天</button>
+    <button type="button" class="day-btn active" data-days="7" onclick="setDays(7)" aria-pressed="true">近 7 天</button>
+    <button type="button" class="day-btn" data-days="30" onclick="setDays(30)" aria-pressed="false">近 30 天</button>
+    <button type="button" class="day-btn" data-days="90" onclick="setDays(90)" aria-pressed="false">近 90 天</button>
+  </div>
+  <div id="main-content" class="dashboard-status" role="status" aria-live="polite">正在加载统计…</div>
 
-  <div id="overview-kpis"></div>
-  <section id="intraday-panel" class="chart-card section" aria-labelledby="intraday-title">
+  <section class="admin-panel" id="panel-overview" data-admin-panel="overview" role="tabpanel" aria-labelledby="tab-overview">
+    <div id="overview-kpis"></div>
+    <section class="section" id="acquisition-panel" aria-labelledby="acquisition-title">
+      <div class="section-heading"><h2 id="acquisition-title">访问来源与主动查询</h2><button type="button" class="admin-button" id="acquisition-refresh">刷新来源</button></div>
+      <p id="acquisition-summary"></p><p class="panel-note" id="acquisition-status" role="status"></p>
+      <div class="table-scroll"><table class="tbl"><thead><tr><th>来源／方式</th><th>活动／入口</th><th>首次进入页面</th><th>访问 UV</th><th>浏览量</th><th>主动查询 UV</th><th>查询比例</th></tr></thead><tbody id="acquisition-body"></tbody></table></div>
+      <p class="panel-note">按匿名设备去重；各行 UV 可能重叠，不能相加。主动查询仅计入新版查询埋点确认的玩家操作，含缓存结果；榜单自动加载不计入。来源关联同一标签页的访问，页面访问间隔超过 30 分钟或进入新活动链接后开始新的归因。</p>
+      <details><summary>生成 B站／社群渠道链接</summary>
+        <form id="campaign-link-form" class="search-controls">
+          <label>内容路径<input name="landing" value="/runs" aria-label="内容路径"></label>
+          <label>渠道<select name="source"><option value="bilibili">B站</option><option value="qq">QQ</option><option value="wechat">微信</option></select></label>
+          <label>方式<select name="medium"><option value="video">视频</option><option value="social">社群</option><option value="profile">个人主页</option></select></label>
+          <label>活动标记<input name="campaign" placeholder="weekly_20261019"></label>
+          <label>入口标记<input name="content" value="video_intro"></label>
+          <button type="submit" class="admin-button">生成链接</button>
+        </form>
+        <label for="campaign-link-output">渠道链接</label><input id="campaign-link-output" readonly style="width:100%;margin:10px 0;padding:10px" aria-describedby="campaign-link-hint">
+        <button type="button" class="admin-button" id="campaign-link-copy">复制链接</button><p class="panel-note" id="campaign-link-hint"></p>
+      </details>
+    </section>
+    <div id="overview-alerts" class="overview-alerts" aria-label="本周期错误记录" hidden></div>
+    <section class="trend-section" aria-labelledby="trend-title">
+      <div class="section-heading"><h2 id="trend-title">使用趋势</h2><span class="panel-note" id="trend-scope">近 7 天</span></div>
+      <div class="trend-controls" role="group" aria-label="趋势时间粒度">
+        <button type="button" data-trend-view="daily" aria-pressed="true">周期趋势 · 按天</button>
+        <button type="button" data-trend-view="hourly" aria-pressed="false">单日明细 · 按小时</button>
+      </div>
+      <div id="trend-range">
+        <div class="trend-controls"><label for="daily-metric">指标</label><select id="daily-metric"><option value="api_calls">API 调用量与访客估算</option><option value="uses">当前功能记录</option><option value="uv">API 访客估算</option></select></div>
+        <div class="chart-wrap" id="trend-chart-wrap"><canvas id="trend-chart" role="img" aria-label="所选周期按天统计趋势"></canvas></div>
+        <details id="daily-details"><summary>每日明细</summary><div class="table-scroll"><table class="tbl"><thead><tr><th>北京时间日期</th><th>API 调用量</th><th>API 访客估算</th><th>当前功能记录</th></tr></thead><tbody id="daily-hourly-body"></tbody></table></div></details>
+      </div>
+      <div id="trend-hourly" hidden>
+        <p class="panel-note">独立选择某一天查看小时分布和前一天同期，不改变上方周期内的排行与摘要。</p>
+          <section id="intraday-panel" class="chart-card section" aria-labelledby="intraday-title">
     <div class="intraday-heading">
       <h2 id="intraday-title">日内使用趋势</h2>
       <button type="button" class="day-btn" id="intraday-refresh">刷新</button>
@@ -135,312 +179,92 @@ body{font-family:'Inter','PingFang SC','Microsoft YaHei',sans-serif;background:v
     <details id="intraday-details"><summary>逐小时明细</summary><div class="intraday-table-wrap"><table class="tbl"><thead><tr><th>北京时间</th><th id="intraday-table-metric">使用次数</th><th>前一天同期</th><th>核心 UV</th><th>成功</th><th>空结果</th><th>错误</th></tr></thead><tbody id="intraday-hourly-body"></tbody></table></div></details>
     <p class="intraday-note">按北京时间每小时统计；核心功能沿用现有 10 秒去重规则。UV 优先按指纹去重，缺少指纹时按脱敏 IP 估算，全天 UV 单独去重。当前小时尚未结束，未来小时留空。今天每 5 分钟自动刷新，数据最多缓存 60 秒。</p>
   </section>
-  <div id="main-content"><div class="loading">加载中...</div></div>
-</div>
-
-<script>
-let _days = 7;
-let _trendChart = null, _apiChart = null;
-
-function setDays(d) {
-  _days = d;
-  document.querySelectorAll('[data-days]').forEach(b => {
-    b.classList.toggle('active', Number(b.dataset.days) === d);
-  });
-  loadStats();
-}
-
-const TAB_NAMES = {runs:'阵容查询', winrate:'胜率查询', partner:'最佳搭档', topcard:'职业榜单', feedback:'意见反馈', stats:'数据看板'};
-const API_NAMES = {
-  '/api/runs':'阵容查询','/api/winrate':'胜率查询','/api/partner':'最佳搭档',
-  '/api/topcard':'职业榜单','/api/feedback':'意见反馈','/api/track/pv':'页面埋点','/api/ingest':'数据采集'
-};
-const MODULE_NAMES = {
-  runs:'阵容查询', winrate:'胜率查询', partner:'最佳搭档', topcard:'职业榜单',
-  routes:'阵容路线', feedback:'意见反馈', trivia:'冷知识', support:'支持',
-  stats:'数据看板'
-};
-const FEATURE_INFO = {
-  runs_query:{name:'阵容查询 → 阵容列表', description:'选择“阵容列表”模式后点击“查询”；翻页也可能产生统计。'},
-  comp_card_query:{name:'阵容查询 → 阵容分析', description:'选择“阵容分析”模式，输入一张核心卡后点击“查询”。'},
-  winrate_query:{name:'胜率查询 → 10胜率查询', description:'在“10胜率查询”表单设置卡牌等条件后点击“查询”。'},
-  partner_query:{name:'最佳搭档 → 最佳搭档查询', description:'在“最佳搭档查询”表单输入卡牌后点击“查询”。'},
-  hero_overview:{name:'职业榜单 → 职业概况', description:'页面顶部的“职业概况”区域；首次打开自动加载，修改时间范围或段位也可能重新加载。'},
-  topcard_query:{name:'职业榜单 → 卡牌榜', description:'职业选择区下方的“卡牌榜”标签；首次打开自动加载，切换职业或筛选条件也可能重新加载。'},
-  comp_query:{name:'职业榜单 → 阵容榜', description:'职业选择区下方的“阵容榜”标签；切换职业或段位也可能重新加载。'},
-  card_tier_query:{name:'职业榜单 → 卡牌 T 表', description:'职业选择区下方的“卡牌 T 表”标签；切换职业、时间范围或段位也可能重新加载。'},
-  feedback_submit:{name:'意见反馈 → 提交反馈', description:'填写反馈内容后点击“提交反馈”。'},
-  feedback_like:{name:'意见反馈 → 点赞', description:'点击某条反馈下方的“❤️”点赞按钮。'},
-  feedback_comment:{name:'意见反馈 → 发送评论／回复', description:'在某条反馈的评论区发送评论或回复；仅展开评论区不计入。'},
-  trivia_submit:{name:'冷知识 → 提交问题', description:'在“提个问题”表单填写问题后点击“提交问题”。'},
-  trivia_vote:{name:'冷知识 → 赞同／不赞同', description:'点击某条冷知识下方的“👍”或“👎”，两种投票合并统计。'},
-  trivia_share:{name:'冷知识 → 分享图片', description:'点击某条冷知识的“分享”，并成功生成分享图片。'},
-  donation_qr_open:{name:'支持 → 查看赞赏码', description:'在“微信赞赏”区域点击“查看赞赏码”；表示打开二维码，不代表已付款。'},
-  support_page_view:{name:'支持 → 页面访问', description:'打开“支持”页面时自动记录，没有独立操作按钮。', group:'auto'},
-  routes_query:{name:'阵容路线 → 每天的主流阵容', description:'原页面加载某职业、某个 Day 的主流阵容。', group:'retired'},
-  routes_summary:{name:'阵容路线 → Day 概览加载', description:'原页面打开或切换职业时自动加载各 Day 的概览。', group:'retired'},
-  routes_latest:{name:'阵容路线 → 统计版本加载', description:'原页面打开或切换职业时自动获取统计版本。', group:'retired'},
-  routes_node_detail:{name:'阵容路线 → 节点详情', description:'历史路线画布中，点击阵容节点打开详情。', group:'retired'},
-  routes_expand:{name:'阵容路线 → 展开分支', description:'历史路线画布中，展开节点分支；选择起点时也可能自动展开。', group:'retired'},
-  routes_cores:{name:'阵容路线 → 旧版核心列表', description:'更早版本的核心列表加载，后续页面已无对应入口。', group:'retired'},
-  routes_detail:{name:'阵容路线 → 旧版核心路线详情', description:'更早版本的单个核心路线详情加载，不是“查看路线详情”按钮的点击量。', group:'retired'}
-};
-
-function fmtN(n) {
-  if (n >= 10000) return (n/10000).toFixed(1) + 'w';
-  if (n >= 1000) return (n/1000).toFixed(1) + 'k';
-  return n;
-}
-
-function escapeHtml(value) {
-  return String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
-}
-
-function renderFeatureUsage(features) {
-  if (!features.length) return '<tr><td colspan="7" style="color:var(--theme-dim, #6b7280);text-align:center;padding:20px">暂无功能事件数据</td></tr>';
-  return features.map(f => {
-    const info = Object.hasOwn(FEATURE_INFO, f.feature) ? FEATURE_INFO[f.feature] : {
-      name:f.feature, description:'尚未配置前台位置说明，请核对该统计项。'
-    };
-    const rate = f.uses ? (f.successes / f.uses * 100).toFixed(1) : '0.0';
-    return `<tr data-feature="${escapeHtml(f.feature)}"><td class="feature-info"><div class="feature-name">${escapeHtml(info.name)}</div><div class="feature-description">${escapeHtml(info.description)}</div></td><td>${f.uses}</td><td>${f.uv}</td><td>${f.successes}</td><td>${f.empty_results}</td><td>${f.errors}</td><td>${rate}%</td></tr>`;
-  }).join('');
-}
-
-function renderFeatureGroups(features) {
-  const groups = {active:[], auto:[], retired:[]};
-  features.forEach(f => {
-    const info = Object.hasOwn(FEATURE_INFO, f.feature) ? FEATURE_INFO[f.feature] : null;
-    groups[info?.group || 'active'].push(f);
-  });
-  document.getElementById('feature-usage-body').innerHTML = renderFeatureUsage(groups.active);
-  document.getElementById('feature-auto-body').innerHTML = renderFeatureUsage(groups.auto);
-  document.getElementById('feature-retired-body').innerHTML = renderFeatureUsage(groups.retired);
-  document.getElementById('feature-auto-count').textContent = `${groups.auto.length} 项`;
-  document.getElementById('feature-retired-count').textContent = `${groups.retired.length} 项`;
-}
-
-async function loadStats() {
-  try {
-    const resp = await fetch('/api/stats/overview?days=' + _days);
-    if (!resp.ok) throw new Error('请求失败');
-    const d = await resp.json();
-    renderStats(d);
-    const now = new Date().toLocaleString('zh-CN');
-    document.getElementById('update-time').textContent = '最后更新：' + now + '  · 统计周期：近 ' + _days + ' 天  · 30min 后自动刷新';
-    // 倒计时
-    let countdown = 1800;
-    clearInterval(window._countdownTimer);
-    window._countdownTimer = setInterval(() => {
-      countdown--;
-      const el = document.getElementById('update-time');
-      const mins = Math.floor(countdown / 60), secs = countdown % 60;
-      const countdownStr = mins > 0 ? mins + 'm' + (secs > 0 ? secs + 's' : '') : secs + 's';
-      if (el) el.textContent = '最后更新：' + now + '  · 统计周期：近 ' + _days + ' 天  · ' + countdownStr + ' 后自动刷新';
-      if (countdown <= 0) clearInterval(window._countdownTimer);
-    }, 1000);
-  } catch(e) {
-    document.getElementById('main-content').innerHTML = '<div class="error-msg">加载失败: ' + e.message + '</div>';
-  }
-}
-
-function renderChart(canvasId, previousChart, config) {
-  const canvas = document.getElementById(canvasId);
-  try {
-    if (previousChart) previousChart.destroy();
-    if (typeof window.Chart !== 'function') throw new Error('Chart.js 未加载');
-    return new window.Chart(canvas.getContext('2d'), config);
-  } catch (e) {
-    console.warn('统计图表加载失败:', canvasId, e);
-    // 图表失败不能阻断 KPI 和后续表格的渲染。
-    canvas.parentElement.innerHTML = '<div class="loading" role="status">图表暂不可用，统计数据已正常加载</div>';
-    return null;
-  }
-}
-
-function renderStats(d) {
-  const el = document.getElementById('main-content');
-
-  // KPI
-  const totalCalls = d.total_calls || 0;
-  const totalUV = d.total_uv || 0;
-  const apiDist = d.api_dist || [];
-  const errorRate = totalCalls > 0 ? ((apiDist.reduce((s,a)=>s+(a.errors||0),0)/totalCalls)*100).toFixed(1) : '0.0';
-  const avgMs = apiDist.length > 0 ? Math.round(apiDist.reduce((s,a)=>s+(a.avg_ms||0),0)/apiDist.length) : 0;
-
-  document.getElementById('overview-kpis').innerHTML = `
-    <div class="kpi-grid">
-      <div class="kpi-card">
-        <div class="kpi-label">API 调用量</div>
-        <div class="kpi-value">${fmtN(totalCalls)}</div>
-        <div class="kpi-sub">近 ${_days} 天</div>
       </div>
-      <div class="kpi-card">
-        <div class="kpi-label">独立访客 UV</div>
-        <div class="kpi-value">${fmtN(totalUV)}</div>
-        <div class="kpi-sub">fingerprint 去重</div>
+    </section>
+    <section class="section" aria-labelledby="overview-top-title">
+      <div class="section-heading"><h2 id="overview-top-title">功能 Top 5</h2><button type="button" class="admin-button" onclick="showAdminPanel('features')">完整分析 →</button></div>
+      <p class="scroll-hint">左右滑动查看完整功能名称与用户数。</p>
+      <div class="table-card table-scroll"><table class="tbl overview-top"><thead><tr><th>#</th><th>前台页面 → 功能</th><th>记录次数</th><th>独立用户</th></tr></thead><tbody id="overview-top-body"></tbody></table></div>
+    </section>
+    <details class="method-note"><summary>摘要统计口径</summary><p>访客 UV 沿用现有 API 日志中的匿名身份估算，不等于全部页面访客。当前功能记录与功能分析中的主排行一致，含首次自动加载，排除已单列的页面访问和下线历史项；它与日内统计的既有核心功能范围不同，不应直接相加或对账。接口错误率沿用现有日志覆盖范围，包含下线接口请求，不代表全站所有请求。历史记录和原始指标均保留在功能分析与运行监控。</p></details>
+  </section>
+
+  <section class="admin-panel" id="panel-features" data-admin-panel="features" role="tabpanel" aria-labelledby="tab-features" hidden>
+
+    <section class="section" aria-labelledby="comp-analytics-title">
+      <div class="section-heading"><div><h2 id="comp-analytics-title">阵容分析 · 查询与分享</h2><p data-period-label>近 7 天</p></div><button type="button" class="admin-button" id="comp-stats-refresh">刷新统计</button></div>
+      <p class="panel-note" id="comp-stats-status" role="status">等待加载阵容分析统计…</p>
+      <div id="comp-stats-content"></div>
+      <p class="panel-note">主动查询沿用已签名、相同访客相同条件 10 秒去重的搜索口径，自动加载与排序不计入主动查询。交互次数由浏览器上报；下载次数指点击下载。接口请求量含自动加载与排序，不等于主动查询量。</p>
+    </section>
+    <section class="section search-rankings" aria-labelledby="search-ranking-title">
+      <div class="section-heading"><div><h2 id="search-ranking-title">搜索排行榜</h2><p data-period-label>近 7 天</p></div><button type="button" class="admin-button" id="search-refresh">刷新榜单</button></div>
+      <div class="search-controls">
+        <label>搜索入口<select id="search-feature"><option value="all">全部搜索</option><option value="runs">阵容查询 → 阵容列表</option><option value="comp_card">阵容查询 → 阵容分析</option><option value="winrate">胜率查询 → 10胜率查询</option><option value="partner">最佳搭档 → 最佳搭档查询</option></select></label>
+        <label>榜单<select id="search-board"><option value="cards">热门卡牌</option><option value="conditions">完整搜索条件</option><option value="empty">空结果关注</option></select></label>
       </div>
-      <div class="kpi-card">
-        <div class="kpi-label">平均响应时间</div>
-        <div class="kpi-value">${avgMs}<span style="font-size:16px;font-weight:400;color:var(--theme-muted, #9ca3af)">ms</span></div>
-        <div class="kpi-sub">API 平均耗时</div>
-      </div>
-      <div class="kpi-card">
-        <div class="kpi-label">错误率</div>
-        <div class="kpi-value" style="color:${parseFloat(errorRate)>5?'#ef4444':'#10b981'}">${errorRate}<span style="font-size:16px;font-weight:400;color:var(--theme-muted, #9ca3af)">%</span></div>
-        <div class="kpi-sub">API 失败占比</div>
-      </div>
-    </div>
-  `;
-  el.innerHTML = `
-    <div class="section" id="feature-usage-section">
-      <div class="section-title">核心功能使用排行（统计周期内）</div>
-      <p class="feature-note">功能名称按“前台页面 → 区域／操作”对应，名称下方说明具体位置与触发方式。次数按请求或事件记录，不等于按钮点击量；同一访客同一功能 10 秒内去重，前端缓存命中时可能不新增。职业概况、卡牌榜包含首次自动加载。</p>
-      <div class="table-card feature-table-wrap">
-        <table class="tbl feature-table">
-          <thead><tr><th>前台位置／操作</th><th>使用次数</th><th>独立用户</th><th>成功</th><th>空结果</th><th>错误</th><th>成功率</th></tr></thead>
-          <tbody id="feature-usage-body"></tbody>
-        </table>
-      </div>
+      <details class="method-note" id="search-advanced"><summary>高级筛选</summary><div class="search-controls">
+        <label>查询职业<select id="search-hero"><option value="">不限条件</option><option value="Vanessa">瓦内莎</option><option value="Dooley">杜利</option><option value="Mak">马克</option><option value="Pygmalien">皮格马利翁</option><option value="Stelle">斯黛尔</option><option value="Jules">朱尔斯</option><option value="Karnok">卡诺克</option><option value="The Dragons">双龙</option></select></label>
+        <label>查询段位<select id="search-rank"><option value="">不限条件</option><option value="all">全部段位</option><option value="legendary">传奇</option></select></label>
+        <label>对局 Day<input id="search-day" type="number" min="1" max="365000" placeholder="不限"></label>
+        <label>卡牌附魔<select id="search-enchantment"><option value="">不限条件</option><option value="none">未限制附魔</option><option value="Deadly">致命</option><option value="Fiery">炽焰</option><option value="Golden">黄金</option><option value="Heavy">沉重</option><option value="Icy">寒冰</option><option value="Obsidian">黑曜石</option><option value="Radiant">辉耀</option><option value="Restorative">回复</option><option value="Shielded">护盾</option><option value="Shiny">闪亮</option><option value="Toxic">毒素</option><option value="Turbo">疾速</option><option value="Mossy">长青</option></select></label>
+        <label class="search-checkbox"><input id="search-combos" type="checkbox">仅联合卡牌条件</label>
+      </div><p class="panel-note">筛选提交时携带的条件；“仅联合卡牌条件”指同一次查询要求同时包含多张卡，胜率多卡分别比较不属于联合条件。</p></details>
+      <p id="search-coverage" class="panel-note">新口径数据加载后显示采集起点。</p>
+      <p id="search-status" role="status" aria-live="polite"></p>
+      <p class="scroll-hint">左右滑动表格查看搜索次数、独立访客和空结果率。</p>
+      <div class="table-card table-scroll"><table class="tbl search-table"><thead><tr><th>#</th><th id="search-item-heading">卡牌</th><th>搜索次数</th><th>独立访客</th><th>空／样本不足率</th></tr></thead><tbody id="search-ranking-body"></tbody></table></div>
+      <div class="search-paging"><span id="search-page-info"></span><div><button type="button" class="admin-button" id="search-prev" disabled>上一页</button> <button type="button" class="admin-button" id="search-next" disabled>下一页</button></div></div>
+      <section id="search-detail" hidden aria-labelledby="search-detail-title" tabindex="-1"></section>
+      <details class="method-note"><summary>搜索统计口径</summary><p>仅记录四个入口的主动有效提交；同一匿名访客、同一入口、完整条件相同，10 秒内去重。自动加载、翻页、输入建议与自动重试不计数，浏览器缓存命中仍计数。热门卡牌将每次提交中的卡牌各记一次，因此卡牌次数之和可能大于提交总数；完整搜索条件保留职业、段位、附魔、Day、查询范围和赛季赛段，纯职业查询也保留。</p><p>空／样本不足率＝（无匹配＋样本不足）÷（有结果＋部分有结果＋无匹配＋样本不足）；未识别、异常和结果未验证不进入分母。空结果关注至少有 5 次已完成查询，按无匹配与样本不足次数排序。独立访客按匿名浏览器标识估算，跨设备不合并。新口径与历史请求热度分开，不混算增长率。</p></details>
+    </section>
+    <section class="section" id="feature-usage-section">
+      <div class="section-heading"><div><h2>核心功能使用排行</h2><p data-period-label>近 7 天</p></div><button type="button" class="admin-button" id="feature-details-toggle" aria-pressed="false">说明与详细结果</button></div>
+      <details class="method-note"><summary>位置说明与统计口径</summary><p>功能名称按“前台页面 → 区域／操作”对应。点击“说明与详细结果”查看入口、触发方式、成功、空结果和错误数。次数按请求或事件记录，不等于按钮点击量；同一访客同一功能 10 秒内去重，前端缓存命中时可能不新增。职业概况、卡牌榜包含首次自动加载。</p></details>
+      <p class="scroll-hint">左右滑动表格查看完整数据。</p>
+      <div class="table-card feature-table-wrap"><table class="tbl feature-table">
+        <thead><tr><th>前台位置／操作</th><th>使用次数</th><th>独立用户</th><th class="feature-detail-col">成功</th><th class="feature-detail-col">空结果</th><th class="feature-detail-col">错误</th><th>成功率</th></tr></thead>
+        <tbody id="feature-usage-body"></tbody>
+      </table></div>
       <details class="feature-extra" id="feature-auto-section">
-        <summary>页面访问与自动加载（不计入上方排行） · <span id="feature-auto-count"></span></summary>
-        <p class="feature-note">以下为单独记录的页面访问与辅助加载，不代表独立的功能操作。</p>
-        <div class="table-card feature-table-wrap"><table class="tbl feature-table">
-          <thead><tr><th>前台位置／触发方式</th><th>记录次数</th><th>独立用户</th><th>成功</th><th>空结果</th><th>错误</th><th>成功率</th></tr></thead>
-          <tbody id="feature-auto-body"></tbody>
-        </table></div>
+        <summary>页面访问与自动加载 · <span id="feature-auto-count"></span></summary>
+        <p class="feature-note">以下为单独记录的页面访问与辅助加载，不计入上方排行，不代表独立的功能操作。</p>
+        <div class="table-card feature-table-wrap"><table class="tbl feature-table"><thead><tr><th>前台位置／触发方式</th><th>记录次数</th><th>独立用户</th><th class="feature-detail-col">成功</th><th class="feature-detail-col">空结果</th><th class="feature-detail-col">错误</th><th>成功率</th></tr></thead><tbody id="feature-auto-body"></tbody></table></div>
       </details>
       <details class="feature-extra" id="feature-retired-section">
         <summary>已下线功能（历史数据） · <span id="feature-retired-count"></span></summary>
         <p class="feature-note">阵容路线暂时下线，以下仅保留所选统计周期内的历史记录，不计入上方排行，也不代表当前有可用入口。</p>
-        <div class="table-card feature-table-wrap"><table class="tbl feature-table">
-          <thead><tr><th>原前台位置／操作</th><th>历史次数</th><th>独立用户</th><th>成功</th><th>空结果</th><th>错误</th><th>成功率</th></tr></thead>
-          <tbody id="feature-retired-body"></tbody>
-        </table></div>
+        <div class="table-card feature-table-wrap"><table class="tbl feature-table"><thead><tr><th>原前台位置／操作</th><th>历史次数</th><th>独立用户</th><th class="feature-detail-col">成功</th><th class="feature-detail-col">空结果</th><th class="feature-detail-col">错误</th><th>成功率</th></tr></thead><tbody id="feature-retired-body"></tbody></table></div>
       </details>
+    </section>
+    <div class="grid-2 analysis-secondary">
+      <section class="section"><div class="section-heading"><h2>模块使用分布</h2></div><p class="panel-note">沿用现有核心功能范围，保留周期内的历史下线功能记录。</p><div class="table-card" id="module-usage-list"></div></section>
+      <section class="section"><div class="section-heading"><h2>页面访问量</h2></div><p class="panel-note">各页面的 PV 记录，重复访问会累计。</p><div class="table-card" id="tab-pv-list"></div></section>
     </div>
+    <details class="method-note"><summary>历史请求热度（旧口径）· Top 10</summary><p>沿用查询接口的成功请求日志，可能包含翻页与自动加载，不等同于上方主动搜索次数；历史日志无法补算精确独立访客与结果分类。</p><div class="table-card table-scroll"><table class="tbl"><thead><tr><th>#</th><th>卡牌</th><th>请求次数</th></tr></thead><tbody id="hot-cards-body"></tbody></table></div></details>
+  </section>
 
-    <div class="section">
-      <div class="section-title">Feedback 互动</div>
-      <div class="fb-action-grid">
-        <div class="fb-action-card"><div class="fb-action-icon">✍️</div><div class="fb-action-value">${d.fb_actions?.submit||0}</div><div class="fb-action-label">提交反馈</div></div>
-        <div class="fb-action-card"><div class="fb-action-icon">❤️</div><div class="fb-action-value">${d.fb_actions?.like||0}</div><div class="fb-action-label">点赞</div></div>
-        <div class="fb-action-card"><div class="fb-action-icon">💬</div><div class="fb-action-value">${d.fb_actions?.comment||0}</div><div class="fb-action-label">评论</div></div>
-      </div>
+  <section class="admin-panel" id="panel-monitor" data-admin-panel="monitor" role="tabpanel" aria-labelledby="tab-monitor" hidden>
+    <div class="section-heading"><h2>接口运行监控</h2><span class="panel-note" data-period-label>近 7 天</span></div>
+    <p class="panel-note">保留当前已记录接口的调用、访客、耗时和失败数据。采集任务状态与埋点写入健康尚未接入此面板，不能据此判断数据采集正常。</p>
+    <div id="monitor-kpis"></div>
+    <p class="scroll-hint">左右滑动表格查看完整数据。</p>
+    <div class="table-card table-scroll"><table class="tbl monitor-table"><thead><tr><th>接口</th><th>调用量</th><th>平均耗时</th><th>错误数</th><th>状态</th></tr></thead><tbody id="api-detail-body"></tbody></table></div>
+    <details class="method-note"><summary>监控范围与耗时口径</summary><p>接口范围和成功／失败判定沿用现有实现，部分业务接口尚未纳入。平均响应时间保留原先“各接口平均耗时再取均值”的算法，暂不作为全部请求的加权平均值。状态标签沿用原先错误占比阈值：超过 10% 为异常，超过 3% 为注意，其余为正常；没有请求时不判断正常。</p></details>
+  </section>
+
+  <section class="admin-panel" id="panel-manage" data-admin-panel="manage" role="tabpanel" aria-labelledby="tab-manage" hidden>
+    <div class="section-heading"><h2>内容与空间管理</h2></div><p class="panel-note">在这里进入原有管理工具。反馈互动统计使用上方所选周期；待处理数量请在对应工具中查看。</p>
+    <div class="manage-grid">
+      <article class="manage-card"><h2>意见反馈</h2><p>搜索反馈、回复情况和处理状态，维护管理员备注。</p><div class="feedback-counts">本周期：提交 <span id="feedback-submit-count">—</span> · 点赞 <span id="feedback-like-count">—</span> · 评论 <span id="feedback-comment-count">—</span></div><button type="button" class="admin-button" onclick="openFeedbackAdminModal()">管理意见反馈</button></article>
+      <article class="manage-card"><h2>冷知识</h2><p>审核玩家问题、编辑答案，以及发布或置顶内容。</p><button type="button" class="admin-button" onclick="openTriviaModal()">管理冷知识</button></article>
+      <article class="manage-card"><h2>公告</h2><p>维护公告草稿、编辑内容，并切换发布状态。</p><button type="button" class="admin-button" onclick="openAnnouncementModal()">管理公告</button></article>
+      <article class="manage-card"><h2>赞赏者</h2><p>维护支持者名单、显示名称与公开状态。</p><button type="button" class="admin-button" onclick="openSupportersModal()">管理赞赏者</button></article>
+      <article class="manage-card"><h2>扎扎空间</h2><p>进入原有空间管理页，审核申请与管理空间状态。</p><a class="admin-button" href="/admin/zaza">进入空间管理 →</a></article>
     </div>
+  </section>
+</div>
 
-    <div class="grid-2 section">
-      <div class="chart-card">
-        <div class="chart-title">📈 每日 API 调用趋势</div>
-        <div class="chart-wrap"><canvas id="trend-chart"></canvas></div>
-      </div>
-      <div class="chart-card">
-        <div class="chart-title">🍩 模块使用分布</div>
-        <div class="chart-wrap"><canvas id="api-chart"></canvas></div>
-      </div>
-    </div>
-
-    <div class="grid-2 section">
-      <div>
-        <div class="section-title">Tab 访问量</div>
-        <div class="table-card" id="tab-pv-list"></div>
-      </div>
-      <div>
-        <div class="section-title">热门查询卡牌</div>
-        <div class="table-card">
-          <table class="tbl">
-            <thead><tr><th>#</th><th>卡牌</th><th>查询次数</th></tr></thead>
-            <tbody id="hot-cards-body"></tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-
-    <div class="section">
-      <div class="section-title">API 接口详情</div>
-      <div class="table-card">
-        <table class="tbl">
-          <thead><tr><th>接口</th><th>调用量</th><th>平均耗时</th><th>错误数</th><th>状态</th></tr></thead>
-          <tbody id="api-detail-body"></tbody>
-        </table>
-      </div>
-    </div>
-  `;
-
-  // 功能使用排行
-  const features = d.feature_usage || [];
-  renderFeatureGroups(features);
-
-  // 趋势图
-  const daily = d.daily || [];
-  _trendChart = renderChart('trend-chart', _trendChart, {
-    type: 'bar',
-    data: {
-      labels: daily.map(r => r.day?.slice(5)),
-      datasets: [
-        {label:'调用量', data: daily.map(r=>r.cnt), backgroundColor:'#f59e0b88', borderColor:'#f59e0b', borderWidth:1, yAxisID:'y'},
-        {label:'UV', data: daily.map(r=>r.uv), type:'line', borderColor:'#60a5fa', backgroundColor:'transparent', borderWidth:2, pointRadius:3, yAxisID:'y1'},
-      ]
-    },
-    options: {responsive:true, maintainAspectRatio:false, plugins:{legend:{labels:{color:'#9ca3af',font:{size:11}}}},
-      scales:{
-        x:{ticks:{color:'#6b7280',font:{size:10}}, grid:{color:'#1f2937'}},
-        y:{ticks:{color:'#6b7280',font:{size:10}}, grid:{color:'#1f2937'}, position:'left'},
-        y1:{ticks:{color:'#60a5fa',font:{size:10}}, grid:{display:false}, position:'right'},
-      }}
-  });
-
-  // 模块使用分布：只统计核心功能事件，并按 page/module 合并，排除页面访问、后台刷新和辅助 API。
-  const moduleUsage = d.module_usage || [];
-  _apiChart = renderChart('api-chart', _apiChart, {
-    type: 'doughnut',
-    data: {
-      labels: moduleUsage.map(item => MODULE_NAMES[item.module] || item.module),
-      datasets: [{data: moduleUsage.map(item => item.uses), backgroundColor:['#f59e0b','#60a5fa','#a78bfa','#34d399','#f87171','#fb923c','#e879f9','#22d3ee']}]
-    },
-    options: {responsive:true, maintainAspectRatio:false,
-      plugins:{legend:{position:'right', labels:{color:'#9ca3af',font:{size:11},padding:10}}}}
-  });
-
-  // Tab PV
-  const tabPv = d.tab_pv || [];
-  const maxPv = Math.max(...tabPv.map(t=>t.cnt), 1);
-  document.getElementById('tab-pv-list').innerHTML = tabPv.length ? tabPv.map(t =>
-    `<div class="tab-bar-item">
-      <div class="tab-bar-name">${TAB_NAMES[t.tab]||t.tab}</div>
-      <div class="tab-bar-wrap"><div class="tab-bar-fill" style="width:${Math.round(t.cnt/maxPv*100)}%"></div></div>
-      <div class="tab-bar-count">${t.cnt}</div>
-    </div>`
-  ).join('') : '<div class="loading" style="padding:20px">暂无数据</div>';
-
-  // 热门卡牌
-  const hotCards = d.hot_cards || [];
-  document.getElementById('hot-cards-body').innerHTML = hotCards.length ? hotCards.map((c,i) =>
-    `<tr><td>${['🥇','🥈','🥉'][i]||i+1}</td><td>${escapeHtml(c.card||'-')}</td><td>${c.cnt}</td></tr>`
-  ).join('') : '<tr><td colspan="3" style="color:var(--theme-dim, #6b7280);text-align:center;padding:20px">暂无数据</td></tr>';
-
-  // API 详情
-  document.getElementById('api-detail-body').innerHTML = apiDist.map(a => {
-    const errPct = a.cnt > 0 ? ((a.errors||0)/a.cnt*100).toFixed(0) : 0;
-    const badge = errPct > 10 ? 'badge-red' : errPct > 3 ? 'badge-yellow' : 'badge-green';
-    const status = errPct > 10 ? '异常' : errPct > 3 ? '注意' : '正常';
-    return `<tr>
-      <td style="font-family:monospace;font-size:12px">${a.endpoint}</td>
-      <td>${a.cnt}</td>
-      <td>${Math.round(a.avg_ms||0)} ms</td>
-      <td>${a.errors||0}</td>
-      <td><span class="badge ${badge}">${status}</span></td>
-    </tr>`;
-  }).join('');
-}
-
-loadStats();
-
-// 自动刷新（每30分钟）
-setInterval(() => {
-  loadStats();
-}, 1800000);
-</script>
 
 <!-- 意见反馈管理模态框 -->
 <div class="modal-overlay" id="feedback-admin-modal" role="dialog" aria-modal="true" aria-labelledby="feedback-admin-title">

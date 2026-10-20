@@ -38,6 +38,15 @@
 .run-share-url {width:100%;box-sizing:border-box;margin:12px 0 0;padding:9px;border:1px solid var(--theme-border,#554477);border-radius:4px;background:var(--theme-bg,#090a2a);color:inherit;font:inherit;font-size:12px;}
 .run-share-preview {margin-top:16px;}.run-share-preview img {display:block;max-width:100%;height:auto;border-radius:8px;}
 .run-share-status {font-size:13px;color:var(--text-secondary);margin:12px 0 0;}
+.run-share-progress{margin-top:16px;padding:12px;border:1px solid var(--theme-border,#554477);border-radius:8px;background:var(--theme-bg,#090a2a)}
+.run-share-progress[hidden]{display:none}
+.run-share-steps{display:flex;gap:8px;list-style:none;padding:0;margin:0 0 12px;font-size:12px;color:var(--text-secondary)}
+.run-share-steps li{flex:1;border-bottom:3px solid var(--theme-border,#554477);padding-bottom:7px}
+.run-share-steps li[data-state="active"],.run-share-steps li[data-state="done"]{border-color:var(--neon-cyan,#26d9f2);color:var(--neon-cyan,#26d9f2)}
+.run-share-steps li[data-state="failed"]{border-color:var(--theme-error,#ed7284);color:var(--theme-error,#ed7284)}
+.run-share-progress-meta{display:flex;justify-content:space-between;gap:10px;font-size:12px;color:var(--text-secondary)}
+.run-share-progress progress{display:block;width:100%;height:8px;margin-top:9px;accent-color:var(--neon-cyan,#26d9f2)}
+.run-share-progress progress[hidden]{display:none}
 .run-share-sheet {box-sizing:border-box;width:800px;padding:32px;background:#090a2a;color:#f5f4ff;font:15px/1.5 system-ui,'Microsoft YaHei',sans-serif;--text-secondary:#b5b3d7;--theme-surface:#171047;--theme-error-bg:#151124;--theme-cyan:#68d6ec;--theme-violet:#b285ed;--theme-border:#49365c;--neon-gold:#f5c76a;}
 .run-share-sheet h2 {margin:0 0 4px;font-size:28px;}
 .run-share-sheet h2 {overflow-wrap:anywhere;}

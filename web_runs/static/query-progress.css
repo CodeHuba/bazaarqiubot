@@ -18,6 +18,7 @@
   opacity: 1;
   visibility: visible;
 }
+.bz-query-progress.is-immediate { transition: none; }
 .bz-query-progress-panel {
   width: min(440px, 100%);
   padding: 24px 25px 21px;

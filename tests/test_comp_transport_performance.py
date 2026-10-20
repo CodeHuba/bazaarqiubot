@@ -16,7 +16,7 @@ def test_comp_card_uses_prebuilt_card_search_index_instead_of_reading_json_per_r
 
     assert "open('/opt/qiubot/plugins/bazaar_plugin/cache/card_images.json'" not in route
     assert "_find_card_search_matches" in route
-    assert "candidate_ids = query.find_card_ids(card_raw)" in route
+    assert "candidate_ids = query.find_card_ids(name)" in route
     assert "for candidate_id in candidate_ids" in route
 
 

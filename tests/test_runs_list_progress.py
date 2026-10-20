@@ -10,8 +10,8 @@ def test_runs_page_loads_existing_unified_playful_query_progress_assets():
     css_path = STATIC / "query-progress.css"
     js_path = STATIC / "query-progress.js"
 
-    assert '<link rel="stylesheet" href="/static/query-progress.css">' in html
-    assert '<script src="/static/query-progress.js"></script>' in html
+    assert '<link rel="stylesheet" href="/static/query-progress.css?v=' in html
+    assert '<script src="/static/query-progress.js?v=' in html
     assert css_path.is_file() and css_path.stat().st_size > 0
     assert js_path.is_file() and js_path.stat().st_size > 0
     assert ".bz-query-progress.is-active" in css_path.read_text(encoding="utf-8")
@@ -20,7 +20,7 @@ def test_runs_page_loads_existing_unified_playful_query_progress_assets():
 
 def test_runs_page_cancels_active_request_before_rate_limit_can_return():
     html = (STATIC / "runs.html").read_text(encoding="utf-8")
-    start = html.index("async function queryRuns(page)")
+    start = html.index("async function queryRuns(page,")
     end = html.index("\nfunction renderRuns", start)
     function = html[start:end]
 
@@ -31,7 +31,7 @@ def test_runs_page_cancels_active_request_before_rate_limit_can_return():
 
 def test_runs_page_has_timeout_and_cancels_previous_request():
     html = (STATIC / "runs.html").read_text(encoding="utf-8")
-    start = html.index("async function queryRuns(page)")
+    start = html.index("async function queryRuns(page,")
     end = html.index("\nfunction renderRuns", start)
     function = html[start:end]
 

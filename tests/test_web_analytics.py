@@ -62,6 +62,7 @@ def test_hot_card_queries_include_all_card_search_modules_and_split_each_card():
         ("winrate", '{"cards":["太空激光+破坏铁球","私人喷气机"]}', 1),
         ("partner", '{"card":"Private Runabout"}', 1),
         ("comp_card", '{"card":"匕翼"}', 1),
+        ("comp_card", '{"cards":["匕翼","太空激光","匕翼"]}', 2),
         ("topcard", '{"hero":"Stelle"}', 1),
         ("runs", '{"cards":["无结果卡"]}', 0),
     ]
@@ -70,8 +71,8 @@ def test_hot_card_queries_include_all_card_search_modules_and_split_each_card():
     result = aggregate_hot_card_queries(rows, canonicalize=lambda name: aliases.get(name, name))
 
     assert {row["card"]: row["cnt"] for row in result} == {
-        "太空激光": 2,
-        "匕翼": 2,
+        "太空激光": 3,
+        "匕翼": 3,
         "私人喷气机": 2,
         "破坏铁球": 1,
         "无结果卡": 1,
