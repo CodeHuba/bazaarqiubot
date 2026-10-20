@@ -14,6 +14,7 @@ function fixture(sparse=false) {
     winning_items:Array.from({length:12},(_,n)=>({...card(`item-${i}-${n}`,`补充物品${n}`),ten_wins:20-n,ten_win_frequency:(20-n)/20})),
     winning_skills:Array.from({length:12},(_,n)=>({...card(`skill-${i}-${n}`,`搭配技能${n}`,'Skill'),ten_wins:20-n,ten_win_frequency:(20-n)/20})),
     examples:Array.from({length:3},(_,j)=>({id:`case-${i}-${j}`,hero:'Vanessa',wins:10,created_at:'2026-10-19T02:00:00Z',
+      similar_ten_wins:[10,6,4][j],exact_ten_wins:[7,4,3][j],
       items:[{...anchor,tier:'Gold',enchantment:'Fiery'},{...card(`actual-${i}-${j}`,`案例物品${i}-${j}`),tier:'Diamond'}],
       skills:Array.from({length:11+j*3},(_,k)=>({...card(`actual-skill-${i}-${j}-${k}`,`案例技能${j}-${k}`,'Skill'),tier:'Silver'}))}))}));
   if(sparse)for(const g of groups)g.examples=[g.examples[0],g.examples[0],{...g.examples[1],wins:8}];
@@ -45,8 +46,45 @@ async function setup(t,{width=1280,brokenArt=false,failComponent=false,artDelay=
   });
   await page.goto('http://comp.test/runs?mode=comp&cards=灼烧梭鱼&hero=瓦内莎&rank=legendary&days=7&auto=1');
   await page.locator('.comp-analysis-group').first().waitFor();
+  await page.waitForTimeout(50);
   return {page,errors,events};
 }
+
+test('share rendering excludes unrelated results and stalled lazy images from the cloned document',async t=>{
+  const {page,errors}=await setup(t);
+  let unrelatedRequests=0;
+  await page.route('**/unrelated-stalled.svg',()=>{unrelatedRequests++;return new Promise(()=>{});});
+  await page.evaluate(()=>{
+    const results=document.createElement('section');results.id='unrelated-long-results';
+    results.style.cssText='position:absolute;top:100000px;left:0';
+    results.innerHTML='<div>Unrelated result</div>'.repeat(3000)+'<img loading="lazy" src="/unrelated-stalled.svg" width="100" height="100">';
+    document.body.append(results);
+  });
+  await page.addScriptTag({path:path.join(root,'vendor/html2canvas-1.4.1.min.js')});
+  await page.evaluate(()=>{
+    const original=window.html2canvas;
+    window.html2canvas=(sheet,options)=>{
+      window.shareTargetNodes=sheet.querySelectorAll('*').length;
+      window.shareTargetImages=sheet.querySelectorAll('img').length;
+      return original(sheet,{...options,onclone:doc=>{
+        window.shareClone={nodes:doc.body.querySelectorAll('*').length,images:doc.images.length,
+          unrelated:!!doc.getElementById('unrelated-long-results'),dialog:!!doc.querySelector('.run-share-dialog')};
+      }});
+    };
+  });
+  await page.locator('[data-comp-share]').first().click();
+  await page.locator('[data-share-generate]').click();
+  await page.locator('[data-share-download]:not([hidden])').waitFor({timeout:8000});
+  const result=await page.evaluate(()=>({clone:window.shareClone,nodes:window.shareTargetNodes,images:window.shareTargetImages}));
+  assert.equal(result.clone.unrelated,false);
+  assert.equal(result.clone.dialog,false);
+  assert.equal(result.clone.images,result.images);
+  assert.ok(result.clone.nodes<=result.nodes+4,JSON.stringify(result));
+  assert.equal(await page.locator('#unrelated-long-results>div').count(),3000);
+  assert.equal(unrelatedRequests,0);
+  assert.equal(await page.locator('.html2canvas-container').count(),0);
+  assert.deepEqual(errors,[]);
+});
 
 test('each group shares its own result scope and link reopens the selected group',async t=>{
   const {page,errors}=await setup(t,{width:390});
@@ -75,6 +113,27 @@ test('each group shares its own result scope and link reopens the selected group
   assert.deepEqual(errors,[]);
 });
 
+test('default analysis, collapsed companions and open examples do not create manual expansion events',async t=>{
+  const {page,events,errors}=await setup(t);
+  const group=page.locator('.comp-analysis-group').first();
+  assert.equal(await group.locator('.comp-winning-details').getAttribute('open'),null);
+  assert.notEqual(await group.locator('[data-comp-examples]').getAttribute('open'),null);
+  assert.equal(await group.locator('.comp-example').count(),3);
+  assert.match(await group.locator('.comp-example-frequency').first().innerText(),/10 局 10 胜/);
+  assert.equal(events.filter(e=>e.action==='examples_open').length,0);
+  await group.locator('.comp-winning-details>summary').click();
+  assert.equal(await group.locator('.comp-companions section').nth(0).locator('.comp-card-chip').count(),8);
+  await page.goto('http://comp.test/runs');
+  assert.match(await page.locator('.view-toggle-btn.active').innerText(),/阵容分析/);
+  assert.equal(await page.locator('#comp-result').isVisible(),true);
+  assert.equal(await page.locator('#runs-result').isVisible(),false);
+  await page.goto('http://comp.test/runs?mode=list');
+  assert.match(await page.locator('.view-toggle-btn.active').innerText(),/阵容列表/);
+  await page.goto('http://comp.test/runs?cards=灼烧梭鱼');
+  assert.match(await page.locator('.view-toggle-btn.active').innerText(),/阵容列表/);
+  assert.deepEqual(errors,[]);
+});
+
 test('PNG includes three complete real cases and reports actual generation stages and art counts',async t=>{
   const {page,errors,events}=await setup(t,{artDelay:100});
   await page.locator('[data-comp-share]').nth(1).click();
@@ -89,6 +148,7 @@ test('PNG includes three complete real cases and reports actual generation stage
   await page.getByRole('button',{name:'生成分享图',exact:true}).click();
   await page.locator('.comp-share-sheet').waitFor({state:'attached'});
   const sheet=page.locator('.comp-share-sheet');
+  assert.match(await sheet.locator('.comp-example-frequency').first().innerText(),/10 局 10 胜/);
   assert.match(await sheet.locator('.comp-share-core').textContent(),/核心物品1/);
   assert.equal(await sheet.locator('.comp-share-companions>section').nth(0).locator('.comp-share-card').count(),8);
   assert.equal(await sheet.locator('.comp-share-companions>section').nth(1).locator('.comp-share-card').count(),8);
@@ -181,6 +241,8 @@ test('sort, examples, share landing and cancellation report actual actions witho
   const before=page.waitForRequest(r=>r.url().includes('/api/comp/card'));
   await page.locator('[data-comp-sort=rate]').click();
   assert.equal((await before).headers()['x-search-action'],undefined);
+  await page.locator('[data-comp-examples] summary').first().click();
+  assert.equal(events.filter(e=>e.action==='examples_open').length,0);
   await page.locator('[data-comp-examples] summary').first().click();
   await page.locator('[data-comp-share]').first().click();
   const link=await page.locator('.run-share-url').inputValue();

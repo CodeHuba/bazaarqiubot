@@ -49,11 +49,12 @@ def test_translations_native_sizes_and_images_invalidate_by_source_version(tmp_p
     first=factory();first.load();first.conn.close()
     translations.write_text('{"Item":"新物品名称"}',encoding='utf-8')
     with sqlite3.connect(native) as conn:
-        conn.execute('UPDATE cards SET Data=?',(json.dumps({'Id':'q','Size':'Small'}),))
+        conn.execute('UPDATE cards SET Data=?',(json.dumps({'Id':'q','Size':'Small','Heroes':['Common','Hero8']}),))
     images.write_text(json.dumps({'cards':{'q':{'internalName':'Item','name':'官方新名称','type':'Item','artLarge':'/new.webp'}}}),encoding='utf-8')
     second=factory();second.load()
     assert second.en_to_zh['Item']=='新物品名称'
     assert second.size_map['q']=='Small'
+    assert second.card_heroes['q']==['Common','Hero8']
     assert second.card_display_info_cached('q')['name']=='官方新名称'
     assert second.card_display_info_cached('q')['img']=='/new.webp'
     second.conn.close()

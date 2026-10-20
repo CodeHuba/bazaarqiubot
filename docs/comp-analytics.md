@@ -18,7 +18,7 @@
 
 - `view`：从列表进入分析，或直接进入分析模式。
 - `sort`：点击排序，detail 为 reliable/rate/appearance。
-- `examples_open`：展开某组合的真实完整阵容。
+- `examples_open`：用户主动重新展开某组合的真实完整阵容；默认展开不计入。
 - `run_open` / `source_open`：点击打开本站对局/原始对局。
 - `share_open`：分享弹窗打开。
 - `share_link_copy` / `share_image_copy`：Clipboard API 写入成功。

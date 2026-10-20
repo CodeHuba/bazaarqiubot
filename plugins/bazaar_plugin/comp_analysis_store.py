@@ -98,7 +98,8 @@ def _build(query, season, phase, previous=None):
             image = query._card_image_info(cid)
             catalog[cid] = {'name': display['name'], 'internalName': display['name_en'],
                             'size': display['size'], 'artLarge': display['img'],
-                            'type': image.get('type') or query._safe_mapping_info(cid).get('type') or 'Item'}
+                            'type': image.get('type') or query._safe_mapping_info(cid).get('type') or 'Item',
+                            'heroes': query.card_heroes.get(cid, image.get('heroes'))}
             asset = assets.get(cid)
             if isinstance(asset, dict):
                 catalog[cid].update({k: asset[k] for k in ('name', 'internalName', 'size', 'type', 'artLarge') if asset.get(k)})

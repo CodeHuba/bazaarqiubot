@@ -88,6 +88,7 @@ def create_app(snapshot, state=None, *, maintain_cache=False):
                 card=json.loads(raw)
                 if isinstance(catalog.get(card.get('Id')),dict) and card.get('Size'):
                     catalog[card['Id']]['size']=card['Size']
+                    catalog[card['Id']]['heroes']=card.get('Heroes')
     art_dir=state/'art'
     available={}
     for cid,record in assets.get('art',{}).items():
@@ -121,6 +122,7 @@ def create_app(snapshot, state=None, *, maintain_cache=False):
                 self.en_to_zh[en]=name
                 self.zh_to_en[name]=en
                 if card.get('size'):self.size_map[cid]=card['size']
+                if isinstance(card.get('heroes'),list):self.card_heroes[cid]=card['heroes']
 
         def _card_image_info(self,cid):
             info=dict(catalog.get(cid) or {})
@@ -178,7 +180,6 @@ def create_app(snapshot, state=None, *, maintain_cache=False):
         source=source.replace('content="index, follow"','content="noindex, nofollow"')
         banner='<div style="padding:9px 20px;text-align:center;background:var(--theme-surface,#171047);color:var(--theme-muted,#b5b3d7);font-size:12px;border-bottom:1px solid var(--theme-border,#444)">阵容分析验收环境 · '+html.escape(str(payload['phase']))+' · 固定快照 '+html.escape(payload['captured_at'][:16].replace('T',' '))+' UTC · 不写入正式数据</div>'
         source=source.replace('<body>','<body>'+banner,1)
-        source=source.replace('</body>','<script>document.addEventListener("DOMContentLoaded",()=>{if(!new URLSearchParams(location.search).has("run")&&!new URLSearchParams(location.search).has("mode"))setViewMode("comp")})</script></body>')
         return Response(URLS.sub(lambda m:PREFIX+m[1],source),content_type='text/html; charset=utf-8')
 
     @app.get('/static/<path:filename>')

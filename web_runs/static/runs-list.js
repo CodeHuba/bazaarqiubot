@@ -296,7 +296,12 @@
         const scale = sheet.scrollHeight > 6000 ? 1 : 2;
         let renderTimeout;
         const canvas = await Promise.race([
-          window.html2canvas(sheet,{backgroundColor:'#090a2a',scale,useCORS:true,allowTaint:false,logging:false,imageTimeout:12000}),
+          window.html2canvas(sheet,{backgroundColor:'#090a2a',scale,useCORS:true,allowTaint:false,logging:false,imageTimeout:12000,
+            // html2canvas clones the owner document before rendering its target.
+            // Keep the sheet and its ancestors; unrelated lazy images can otherwise
+            // block that clone even though none of them belongs in the share image.
+            ignoreElements:element => document.body.contains(element) && !element.contains(sheet) && !sheet.contains(element),
+          }),
           new Promise((_,reject) => { renderTimeout = setTimeout(() => reject(Error('分享图生成超时，请重试')),30000); }),
         ]).finally(() => clearTimeout(renderTimeout));
         setStage(3,'长图绘制完成，正在导出 PNG 图片…');

@@ -1584,9 +1584,9 @@ input[type="file"] {
 <link rel="stylesheet" href="/static/theme.css?v=1">
 <script src="/static/search-tracking.js?v=20261016-search"></script>
 <link rel="stylesheet" href="/static/runs-list.css?v=comp-analysis-20261019-124811">
-<script src="/static/runs-list.js?v=comp-tracking-20261019-131736"></script>
-<link rel="stylesheet" href="/static/comp-analysis.css?v=comp-analysis-20261019-124811">
-<script src="/static/comp-analysis.js?v=comp-perf-20261019-140923"></script>
+<script src="/static/runs-list.js?v=comp-share-timeout-20261020-103409"></script>
+<link rel="stylesheet" href="/static/comp-analysis.css?v=comp-examples-20261020-113542">
+<script src="/static/comp-analysis.js?v=comp-examples-20261020-113542"></script>
 <style>.content-intro{max-width:1200px;margin:20px auto 0;padding:0 24px}.content-intro h1{font-size:22px;line-height:1.5;margin:0 0 8px}.content-intro p{font-size:13px;color:var(--theme-muted,#b5b3d7);margin:0}.content-intro a{color:var(--theme-link,#26d9f2)}</style>
 </head>
 <body>
@@ -1838,6 +1838,8 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('comp-result').style.display = 'none';
   document.getElementById('comp-result').innerHTML = '<div class="result-card"><div class="empty">输入卡牌名称后点击查询，即可查看阵容分析</div></div>';
   const params = new URLSearchParams(location.search);
+  const legacyList = !params.has('mode') && ['cards','card','card_filters','hero','rank','days','page','auto'].some(key => params.has(key));
+  setViewMode(params.has('run') || params.get('mode') === 'list' || legacyList ? 'list' : 'comp');
   if (params.has('run')) {
     window.BazaarRuns.loadRun(params.get('run'));
     return;
@@ -1857,7 +1859,6 @@ document.addEventListener('DOMContentLoaded', () => {
   if (rank && document.querySelector(`#runs-rank option[value="${CSS.escape(rank)}"]`)) {
     document.getElementById('runs-rank').value = rank;
   }
-  if (params.get('mode') === 'comp') setViewMode('comp');
   if (params.get('auto') === '1') {
     const page = Math.max(1, parseInt(params.get('page'), 10) || 1);
     setTimeout(() => queryRuns(page, 'auto'), 0);
@@ -1975,6 +1976,7 @@ async function queryRuns(page, origin = 'user') {
     if (data.error) { showError('runs-error', data.error); _runsEl.innerHTML=''; return; }
     const resultPage = data.page || page;
     const shareParams = new URLSearchParams(params);
+    shareParams.set('mode', 'list');
     shareParams.set('page', resultPage);
     shareParams.set('auto', '1');
     history.replaceState(null, '', location.pathname + '?' + shareParams);

@@ -1,6 +1,6 @@
 # 阵容分析
 
-正式入口：`/runs?mode=comp`；API：`GET /api/comp/card`。
+正式入口：`/runs` 默认进入阵容分析，`/runs?mode=comp` 可明确指定；API：`GET /api/comp/card`。明确的 `mode=list`、单局链接及已有筛选参数的旧列表链接继续进入列表或详情。
 
 ## 查询与结果
 
@@ -8,8 +8,21 @@
 - 一条真实对局为一个样本；限定当前赛季、当前阶段，剔除无效记录。采集源不含 0 胜局。
 - 以 10 胜率为主，同时展示平均胜场和样本量；默认排序使用 Wilson 下界，降低小样本偶然高胜率的影响。
 - 按核心物品组合归组；每组只展示其 10 胜样本中的前 8 件补充物品、前 8 个技能，以及最多 3 套真实完整案例。
+- 高频物品及技能默认折叠，真实完整阵容默认展开；初始展开不计为用户主动展开事件。分享图始终包含完整搭配与案例。
 - 每组支持独立分享链接和 PNG；保留实际品质、附魔和完整技能，二维码指向该组合。生成过程展示组件、卡图、绘制、导出四阶段进度。
 - 查询和分享事件说明见 [comp-analytics.md](comp-analytics.md)。
+
+## 实战案例选择
+
+在同一筛选范围、同一核心组合下只使用 10 胜对局，先按英雄和完整物品组合统计精确频次。比较使用卡牌身份，保留重复物品数量，忽略品质、附魔、技能和位置。
+
+从精确频次高的构筑开始归组。替换、增加或减少一件物品允许归为相近阵容；组内任意两套构筑都必须满足该限制，不能通过 A→B→C 连续相似扩大范围。每局仅分配给一个组。
+
+按相近阵容组累计的 10 胜样本数排序，同频时优先本家或中立物品占比高的，再参考时间。归属来自当前 GameData，兼容双龙的 Hero8 标识；未知归属不算本家。
+
+每组代表采用完整物品组合本身出现次数最多的真实构筑，同频再看本家/中立占比与时间，实际展示其最近一局；不拼接品质、技能或附魔。最多取三个组，已选案例的一件物品变体不会再占用一个展示名额。不足三个就显示实际数量。
+
+`similar_ten_wins` 为所属相近阵容组的累计 10 胜次数，`exact_ten_wins` 为代表构筑的完整物品组合次数。页面与分享图展示前者，不能解释为截图完整构筑的精确出现次数。现有胜率、平均胜场、组合排名和前 8 搭配统计保持原口径。
 
 ## 缓存与更新
 
@@ -30,7 +43,7 @@
 关键验证：
 
 ```sh
-python -m pytest tests/test_comp_analysis_integration.py tests/test_comp_cache_refresh.py tests/test_runs_metadata_cache.py tests/test_comp_analytics.py tests/test_search_analytics.py tests/test_search_analytics_api.py
+python -m pytest tests/test_comp_example_selection.py tests/test_comp_analysis_integration.py tests/test_comp_cache_refresh.py tests/test_runs_metadata_cache.py tests/test_comp_analytics.py tests/test_search_analytics.py tests/test_search_analytics_api.py
 python -m unittest discover -s tools/comp_preview -p test_analysis.py
 node --test tests/test_comp_share_browser.cjs tests/test_stats_comp_browser.cjs tests/test_search_tracking_browser.cjs
 ```

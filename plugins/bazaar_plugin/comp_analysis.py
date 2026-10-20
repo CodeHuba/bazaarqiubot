@@ -6,6 +6,7 @@ from itertools import combinations
 from math import sqrt
 import threading
 import time
+from .comp_examples import select_examples
 
 HEROES = {'Vanessa': '瓦内莎', 'Dooley': '杜利', 'Mak': '马克', 'Pygmalien': '皮格马利翁',
           'Stelle': '斯黛尔', 'Jules': '朱尔斯', 'Karnok': '卡诺克', 'The Dragons': '双龙'}
@@ -103,12 +104,13 @@ class Analysis:
         def display(c):
             return self.card(c['cardId']) | {k:v for k,v in c.items() if k != 'cardId'}
         result = []
-        for row in sorted(runs, key=lambda r: (r['wins'] >= 10, timestamp(r.get('created_at')) or 0, r['id']), reverse=True)[:3]:
+        for row, similar_count, exact_count in select_examples(runs, self.catalog):
             items = row['items']
             if items and all(type(c.get('slotPosition')) is int for c in items):
                 items = sorted(items, key=lambda c: c['slotPosition'])
             result.append({k: row.get(k) for k in ('id', 'hero', 'wins', 'created_at', 'screenshot')} | {
-                'items': [display(c) for c in items], 'skills': [display(c) for c in row['skills']]})
+                'items': [display(c) for c in items], 'skills': [display(c) for c in row['skills']],
+                'similar_ten_wins': similar_count, 'exact_ten_wins': exact_count})
         return result
 
     def companions(self, runs, anchors, kind, winning=False):
