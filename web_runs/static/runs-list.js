@@ -17,7 +17,7 @@
     return date && !isNaN(date) ? date.toLocaleString('zh-CN', {timeZone:'Asia/Shanghai',year:'numeric',month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit',hour12:false}) : '时间未知';
   };
   const runScope = run => [run.season != null ? `第 ${run.season} 赛季` : '', run.phase || ''].filter(Boolean).join(' · ');
-  const runLink = run => { const u = new URL('/runs', location.origin); u.searchParams.set('run', run.id); return u.href; };
+  const runLink = run => { const u = new URL('/runs', location.origin); u.searchParams.set('run', run.id); return window.BazaarAcquisition?.shareUrl(u.href, 'run') || u.href; };
   const quality = c => c.isLegendary === true ? 'Legendary' : (Object.hasOwn(tiers,c.tier) ? c.tier : 'Unknown');
 
   function cardMarkup(card, skill = false, share = false) {
@@ -50,7 +50,6 @@
           <div class="run-art-list run-skills-list" id="run-skills-${esc(run.id)}">${skills.map(c => cardMarkup(c,true)).join('')}</div>
           ${skills.length ? `<button type="button" class="run-action run-skills-toggle" aria-controls="run-skills-${esc(run.id)}" aria-expanded="false" hidden>展开全部技能（共 ${skills.length} 个）</button>` : '<span class="run-data-note">暂无技能数据</span>'}</section>
         <div class="run-actions"><button type="button" class="run-action" data-run-share="${esc(run.id)}">分享阵容</button>
-          <a class="run-action" href="${esc(runLink(run))}">阵容直达链接</a>
           <a class="run-action" href="https://bazaardb.gg/run/tracker/${encodeURIComponent(run.id)}" target="_blank" rel="noopener noreferrer">查看原始对局 ↗</a></div>
         ${image ? `<div class="run-screenshot"><img src="${esc(image)}" alt="原始对局截图" loading="lazy"><p class="run-screenshot-status" hidden>截图加载失败，可查看原始对局。</p></div>` : ''}
       </article>`;
@@ -211,19 +210,47 @@
   }
 
   function openShare(run) {
+    openShareCard({title:'分享这条阵容',link:runLink(run),filename:`bazaarqiubot-${run.id}.png`,
+      description:'分享图包含全部物品和技能，扫码可查看详情。',
+      renderSheet:qr=>shareSheetMarkup(run,qr)});
+  }
+
+  function openShareCard({title,link,filename,description,renderSheet,sheetClass='',linkLabel='复制阵容链接',onEvent}) {
+    const report = (action,detail='',duration) => {try {onEvent?.(action,detail,duration);} catch (_) {}};
     document.querySelector('.run-share-dialog')?.close();
     const dialog = document.createElement('dialog'); dialog.className = 'run-share-dialog';
-    dialog.setAttribute('aria-label','分享这条阵容');
-    dialog.innerHTML = `<div class="run-share-heading"><h2>分享这条阵容</h2><button class="run-action" data-share-close aria-label="关闭分享">关闭</button></div>
-      <input class="run-share-url" aria-label="阵容直达链接" readonly value="${esc(runLink(run))}">
-      <div class="run-actions"><button type="button" class="run-action" data-share-link>复制阵容链接</button><button type="button" class="run-action" data-share-generate>生成分享图</button>
-      <a class="run-action" data-share-download hidden download="bazaarqiubot-${esc(run.id)}.png">下载图片</a><button type="button" class="run-action" data-share-copy hidden>复制图片</button></div>
-      <p class="run-share-status" role="status">分享图包含全部物品和技能，扫码可查看详情。</p><div class="run-share-preview"></div>`;
+    dialog.setAttribute('aria-label',title);
+    dialog.innerHTML = `<div class="run-share-heading"><h2>${esc(title)}</h2><button class="run-action" data-share-close aria-label="关闭分享">关闭</button></div>
+      <input class="run-share-url" aria-label="阵容直达链接" readonly value="${esc(link)}">
+      <div class="run-actions"><button type="button" class="run-action" data-share-link>${esc(linkLabel)}</button><button type="button" class="run-action" data-share-generate>生成分享图</button>
+      <a class="run-action" data-share-download hidden download="${esc(filename)}">下载图片</a><button type="button" class="run-action" data-share-copy hidden>复制图片</button></div>
+      <div class="run-share-progress" hidden aria-label="分享图生成进度">
+        <ol class="run-share-steps"><li>准备组件</li><li>加载卡图</li><li>绘制长图</li><li>导出图片</li></ol>
+        <div class="run-share-progress-meta"><span data-share-stage></span><span data-share-elapsed></span></div>
+        <progress max="1" aria-label="当前阶段进度"></progress>
+      </div><p class="run-share-status" role="status">${esc(description)}</p><div class="run-share-preview"></div>`;
     document.body.appendChild(dialog); dialog.showModal();
+    report('share_open');
     const status = dialog.querySelector('.run-share-status'), generate = dialog.querySelector('[data-share-generate]');
     const download = dialog.querySelector('[data-share-download]'), copy = dialog.querySelector('[data-share-copy]');
-    let imageUrl, imageBlob;
-    dialog.addEventListener('close',() => { if (imageUrl) URL.revokeObjectURL(imageUrl); dialog.remove(); },{once:true});
+    const progress = dialog.querySelector('.run-share-progress'), bar = progress.querySelector('progress');
+    const steps = [...progress.querySelectorAll('li')], stage = progress.querySelector('[data-share-stage]');
+    const elapsed = progress.querySelector('[data-share-elapsed]');
+    const paint = () => new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+    let imageUrl, imageBlob, timer, activeStage=0, generationStarted;
+    function finish(action,detail='') {
+      if(generationStarted==null)return;
+      report(action,detail,performance.now()-generationStarted);generationStarted=null;
+    }
+    function setStage(index, message, complete, total) {
+      activeStage=index;
+      steps.forEach((step,i)=>{step.dataset.state=i<index?'done':i===index?'active':'pending';});
+      stage.textContent=`第 ${index+1}/4 步 · ${steps[index].textContent}`;
+      status.textContent=message;bar.hidden=false;
+      if (total != null) {bar.max=Math.max(1,total);bar.value=complete;}
+      else bar.removeAttribute('value');
+    }
+    dialog.addEventListener('close',() => { finish('share_cancel');clearInterval(timer);if (imageUrl) URL.revokeObjectURL(imageUrl);dialog.remove(); },{once:true});
     dialog.querySelector('[data-share-close]').onclick = () => dialog.close();
     dialog.addEventListener('click',event => {
       if (event.target !== dialog) return;
@@ -231,28 +258,39 @@
       if (event.clientX < r.left || event.clientX > r.right || event.clientY < r.top || event.clientY > r.bottom) dialog.close();
     });
     dialog.querySelector('[data-share-link]').onclick = async () => {
-      try { await navigator.clipboard.writeText(runLink(run)); status.textContent = '阵容链接已复制'; }
+      try { await navigator.clipboard.writeText(link);report('share_link_copy');status.textContent = '阵容链接已复制'; }
       catch (_) { dialog.querySelector('input').select(); status.textContent = '请复制上方已选中的阵容链接'; }
     };
     copy.onclick = async () => {
-      try { await navigator.clipboard.write([new ClipboardItem({'image/png':imageBlob})]); status.textContent = '分享图片已复制'; }
+      try { await navigator.clipboard.write([new ClipboardItem({'image/png':imageBlob})]);report('share_image_copy');status.textContent = '分享图片已复制'; }
       catch (_) { status.textContent = '此浏览器无法复制图片，请下载图片或长按保存'; }
     };
+    download.addEventListener('click',()=>{if(imageBlob)report('share_download');});
     generate.onclick = async () => {
       generate.disabled = true; generate.textContent = '生成中…';
-      status.textContent = '正在准备分享组件…';
+      progress.hidden=false;progress.dataset.state='running';
+      const started=performance.now();elapsed.textContent='已用时 0 秒';
+      generationStarted=started;report('share_generate');
+      timer=setInterval(()=>{elapsed.textContent=`已用时 ${Math.floor((performance.now()-started)/1000)} 秒`;},1000);
+      setStage(0,'正在准备分享组件…');
       let host;
       try {
+        await paint();
         await Promise.all([loadScript('/static/vendor/html2canvas-1.4.1.min.js','html2canvas'),loadScript('/static/vendor/qrcode-1.4.4.js','qrcode')]);
         if (!dialog.open) return;
-        const qr = window.qrcode(0,'M'); qr.addData(runLink(run)); qr.make();
+        const qr = window.qrcode(0,'M'); qr.addData(link); qr.make();
         host = document.createElement('div'); host.className = 'run-share-render-host';
         const sheet = document.createElement('div'); sheet.className = 'run-share-sheet';
-        sheet.innerHTML = shareSheetMarkup(run,shareQrImage(qr)); host.appendChild(sheet); document.body.appendChild(host);
-        const failed = await preloadImages(sheet,(n,total,bad) => { status.textContent = `正在加载卡图 ${n}/${total}${bad ? `（${bad} 张暂不可用）` : ''}`; });
+        if (sheetClass) sheet.classList.add(sheetClass);
+        sheet.innerHTML = renderSheet(shareQrImage(qr),shareImage); host.appendChild(sheet); document.body.appendChild(host);
+        const totalImages=sheet.querySelectorAll('img[data-share-src]').length;
+        setStage(1,`正在加载卡图 0/${totalImages}`,0,totalImages);
+        await paint();
+        const failed = await preloadImages(sheet,(n,total,bad) => { setStage(1,`正在加载卡图 ${n}/${total}${bad ? `（${bad} 张暂不可用）` : ''}`,n,total); });
         await document.fonts.ready;
         if (!dialog.open) return;
-        status.textContent = '正在生成高清分享图…';
+        setStage(2,'正在绘制高清长图，案例和技能较多时需要稍候…');
+        await paint();
         // Wait for the QR image as well as the card art before taking the canvas.
         await Promise.all([...sheet.querySelectorAll('img[src]')].map(img => img.decode().catch(() => {})));
         const scale = sheet.scrollHeight > 6000 ? 1 : 2;
@@ -261,6 +299,8 @@
           window.html2canvas(sheet,{backgroundColor:'#090a2a',scale,useCORS:true,allowTaint:false,logging:false,imageTimeout:12000}),
           new Promise((_,reject) => { renderTimeout = setTimeout(() => reject(Error('分享图生成超时，请重试')),30000); }),
         ]).finally(() => clearTimeout(renderTimeout));
+        setStage(3,'长图绘制完成，正在导出 PNG 图片…');
+        await paint();
         const blob = await new Promise(resolve => canvas.toBlob(resolve,'image/png'));
         if (!blob) throw Error('图片生成失败，请重试');
         if (!dialog.open) return;
@@ -270,9 +310,21 @@
         dialog.querySelector('.run-share-preview').replaceChildren(preview);
         download.href = imageUrl; download.hidden = false;
         copy.hidden = !(navigator.clipboard?.write && window.ClipboardItem);
+        steps.forEach(step=>{step.dataset.state='done';});stage.textContent='4/4 步已完成';
+        bar.max=1;bar.value=1;progress.dataset.state='done';
+        finish('share_generated',failed?'missing_art':'complete');
         status.textContent = failed ? `分享图已生成，${failed} 张卡图使用占位，可重新生成重试。` : '分享图已生成，可下载或长按保存。';
-      } catch (error) { if (dialog.open) status.textContent = error.message || '生成失败，请重试'; }
-      finally { host?.remove(); generate.disabled = false; generate.textContent = '重新生成分享图'; }
+      } catch (error) {
+        finish('share_error',['prepare','art','render','encode'][activeStage]);
+        if (dialog.open) {
+          progress.dataset.state='failed';bar.hidden=true;
+          steps.find(step=>step.dataset.state==='active')?.setAttribute('data-state','failed');
+          stage.textContent='生成未完成，可重试';status.textContent=error.message || '生成失败，请重试';
+        }
+      } finally {
+        clearInterval(timer);elapsed.textContent=`已用时 ${Math.floor((performance.now()-started)/1000)} 秒`;
+        host?.remove();generate.disabled=false;generate.textContent='重新生成分享图';
+      }
     };
   }
 
@@ -298,5 +350,5 @@
     const target = document.getElementById('runs-result');
     if (target && window.ResizeObserver) new ResizeObserver(updateSkills).observe(target);
   });
-  window.BazaarRuns = {renderRows,querySummary,loadRun,cancelDetail};
+  window.BazaarRuns = {renderRows,querySummary,loadRun,cancelDetail,openShareCard};
 })();

@@ -105,7 +105,9 @@ def aggregate_hot_card_queries(rows, canonicalize=None, limit: int = 10) -> list
             continue
         if query_type in {'runs', 'winrate'}:
             values = params.get('cards') or []
-        elif query_type in {'partner', 'comp_card'}:
+        elif query_type == 'comp_card':
+            values = params.get('cards') or [params.get('card')]
+        elif query_type == 'partner':
             values = [params.get('card')]
         else:
             continue

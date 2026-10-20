@@ -2,20 +2,21 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
+<script src="/static/acquisition.js?v=1"></script>
 <script src="/static/theme.js?v=1"></script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>阵容查询 | 巴扎丘Bot</title>
-<meta name="description" content="查询 The Bazaar 天梯真实阵容与对局构成。">
+<title>大巴扎 The Bazaar 中文阵容、卡牌胜率与搭配查询 | 巴扎丘Bot</title>
+<meta name="description" content="大巴扎 The Bazaar 中文社区数据平台，查询当前版本真实 10 胜阵容、卡牌胜率与搭档，查看游戏机制冷知识。">
 <meta name="keywords" content="The Bazaar,巴扎,阵容查询,胜率,天梯,卡牌,攻略,瓦内莎,杜利,马克,皮格马利翁,斯黛尔,朱尔斯,卡诺克,双龙">
 <meta name="author" content="BazaarQiuBot">
 <meta name="robots" content="index, follow">
-<meta property="og:title" content="巴扎丘Bot">
-<meta property="og:description" content="The Bazaar 中文社区数据平台。查询阵容、胜率统计、物品搭配分析。">
+<meta property="og:title" content="大巴扎 The Bazaar 中文阵容、卡牌胜率与搭配查询 | 巴扎丘Bot">
+<meta property="og:description" content="大巴扎 The Bazaar 中文社区数据平台，查询当前版本真实 10 胜阵容、卡牌胜率与搭档，查看游戏机制冷知识。">
 <meta property="og:type" content="website">
-<meta property="og:url" content="https://bazaarqiubot.com">
+<meta property="og:url" content="https://bazaarqiubot.com/">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="巴扎丘Bot">
-<link rel="canonical" href="https://bazaarqiubot.com/runs">
+<link rel="canonical" href="https://bazaarqiubot.com/">
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐉</text></svg>">
 <style>
 /* ============================================
@@ -1576,20 +1577,24 @@ input[type="file"] {
 .comp-hero-badge{font-size:11px;padding:2px 7px;border-radius:10px;background:rgba(255,255,255,.08);color:var(--text-secondary);border:1px solid rgba(255,255,255,.12);flex-shrink:0;}
 </style>
 
-  <link rel="stylesheet" href="/static/query-progress.css">
-  <script src="/static/query-progress.js"></script>
-<link rel="stylesheet" href="/static/card-preview.css?v=1">
-<script src="/static/card-preview.js?v=1"></script>
+  <link rel="stylesheet" href="/static/query-progress.css?v=comp-perf-20261019-140923">
+  <script src="/static/query-progress.js?v=comp-perf-20261019-140923"></script>
+<link rel="stylesheet" href="/static/card-preview.css?v=2">
+<script src="/static/card-preview.js?v=2"></script>
 <link rel="stylesheet" href="/static/theme.css?v=1">
-<link rel="stylesheet" href="/static/runs-list.css?v=20261016-center">
-<script src="/static/runs-list.js?v=20261016"></script>
+<script src="/static/search-tracking.js?v=20261016-search"></script>
+<link rel="stylesheet" href="/static/runs-list.css?v=comp-analysis-20261019-124811">
+<script src="/static/runs-list.js?v=comp-tracking-20261019-131736"></script>
+<link rel="stylesheet" href="/static/comp-analysis.css?v=comp-analysis-20261019-124811">
+<script src="/static/comp-analysis.js?v=comp-perf-20261019-140923"></script>
+<style>.content-intro{max-width:1200px;margin:20px auto 0;padding:0 24px}.content-intro h1{font-size:22px;line-height:1.5;margin:0 0 8px}.content-intro p{font-size:13px;color:var(--theme-muted,#b5b3d7);margin:0}.content-intro a{color:var(--theme-link,#26d9f2)}</style>
 </head>
 <body>
 <nav class="navbar">
   <a href="/runs" class="logo">巴扎丘Bot</a>
   <div class="nav-tabs">
     <a href="/runs" class="nav-tab active">阵容查询</a>
-    <a href="/routes" class="nav-tab">阵容路线</a>
+
     <a href="/winrate" class="nav-tab">胜率查询</a>
     <a href="/partner" class="nav-tab">最佳搭档</a>
     <a href="/topcard" class="nav-tab">职业榜单</a>
@@ -1598,6 +1603,10 @@ input[type="file"] {
     <a href="/support" class="nav-tab">支持</a>
   </div>
 </nav>
+<section class="content-intro" aria-labelledby="site-intro-title">
+  <h1 id="site-intro-title">大巴扎 The Bazaar 中文阵容与胜率查询</h1>
+  <p>基于天梯真实对局，查询 10 胜阵容、卡牌胜率和搭配。</p>
+</section>
 <div class="main page-runs">
 <div id="suggest-area" style="margin-bottom:24px;display:none">
   <div class="form-card" style="padding:18px 24px">
@@ -1631,14 +1640,14 @@ input[type="file"] {
         </select>
       </div>
       <div class="form-group runs-card-picker" id="runs-card-picker">
-        <label>卡牌（可添加多张）</label>
+        <label id="runs-card-label">卡牌（可添加多张）</label>
         <div class="runs-card-picker-box" id="runs-card-picker-box" onclick="document.getElementById('runs-card-search').focus()">
           <div class="runs-card-tags" id="runs-card-tags"></div>
           <input id="runs-card-search" type="text" autocomplete="off" placeholder="输入部分卡名后选择">
         </div>
         <input id="runs-cards" type="hidden" value="">
         <div class="runs-card-suggestions" id="runs-card-suggestions" role="listbox"></div>
-        <div class="runs-card-help">先从联想列表选择卡牌，再点“不限附魔”选择附魔；多张卡需同时满足</div>
+        <div class="runs-card-help" id="runs-card-help">先从联想列表选择卡牌，再点“不限附魔”选择附魔；多张卡需同时满足</div>
       </div>
       <div class="form-group">
         <label>最近天数</label>
@@ -1693,11 +1702,11 @@ function syncRunCards() {
     return `<span class="runs-card-tag">${escapeRunCardText(card.name)}<select class="runs-enchantment-select" aria-label="${escapeRunCardText(card.name)}的附魔" onclick="event.stopPropagation()" onchange="setRunCardEnchantment(${index},this.value)">${options}</select><button type="button" aria-label="删除 ${escapeRunCardText(card.name)}" onclick="event.stopPropagation();removeRunCard(${index})">×</button></span>`;
   }).join('');
 }
-function addRunCard(name, enchantment = null) {
+function addRunCard(name, enchantment = null, cardId = null, type = null) {
   name = String(name || '').trim();
   if (!name || selectedRunCards.some(card => card.name === name && card.enchantment === enchantment)) return;
   if (selectedRunCards.length >= 20) { showError('runs-error', '最多支持 20 个卡牌筛选条件'); return; }
-  selectedRunCards.push({name, enchantment});
+  selectedRunCards.push({name, enchantment, ...(cardId ? {cardId} : {}), ...(type ? {type} : {})});
   syncRunCards();
 }
 function setRunCardEnchantment(index, value) {
@@ -1771,7 +1780,7 @@ function renderRunCardSuggestions() {
 function selectRunCardSuggestion(index) {
   const card = runCardSuggestions[index];
   if (!card) return;
-  addRunCard(card.zh || card.en);
+  addRunCard(card.zh || card.en, null, card.cardId, card.type);
   document.getElementById('runs-card-search').value = '';
   closeRunCardSuggestions();
   document.getElementById('runs-card-search').focus();
@@ -1783,7 +1792,8 @@ async function searchRunCards(query) {
   cardSearchController = new AbortController();
   const input = document.getElementById('runs-card-search');
   try {
-    const res = await fetch('/api/card_search?q=' + encodeURIComponent(query), {signal:cardSearchController.signal});
+    const typeFilter = _viewMode === 'comp' ? '&type=item' : '';
+    const res = await fetch('/api/card_search?q=' + encodeURIComponent(query) + typeFilter, {signal:cardSearchController.signal});
     const rows = await res.json();
     if (requestId !== cardSearchRequestId || input.value.trim() !== query) return;
     runCardSuggestions = (Array.isArray(rows) ? rows : []).filter(card => !selectedRunCards.some(selected => selected.name === (card.zh || card.en) && selected.enchantment === null));
@@ -1847,9 +1857,10 @@ document.addEventListener('DOMContentLoaded', () => {
   if (rank && document.querySelector(`#runs-rank option[value="${CSS.escape(rank)}"]`)) {
     document.getElementById('runs-rank').value = rank;
   }
+  if (params.get('mode') === 'comp') setViewMode('comp');
   if (params.get('auto') === '1') {
     const page = Math.max(1, parseInt(params.get('page'), 10) || 1);
-    setTimeout(() => queryRuns(page), 0);
+    setTimeout(() => queryRuns(page, 'auto'), 0);
   }
 });
 
@@ -1884,7 +1895,7 @@ function winrateColor(r) {
   return 'var(--theme-coral, #ef4444)';
 }
 
-async function queryRuns(page) {
+async function queryRuns(page, origin = 'user') {
   if (showRunFileNotice()) return;
   window.BazaarRuns.cancelDetail();
   if (activeRunsController) {
@@ -1897,7 +1908,7 @@ async function queryRuns(page) {
   showError('runs-error', '');
   const hero = document.getElementById('runs-hero').value;
   const cards = document.getElementById('runs-cards').value.trim();
-  const cardFilters = selectedRunCards.map(card => ({...card}));
+  const cardFilters = selectedRunCards.map(card => ({name:card.name, enchantment:card.enchantment}));
   const wins = '10';
   const days = document.getElementById('runs-days').value;
   const rank = document.getElementById('runs-rank').value;
@@ -1910,7 +1921,7 @@ async function queryRuns(page) {
     }
     document.getElementById('runs-result').style.display = 'none';
     document.getElementById('comp-result').style.display = '';
-    await queryComp();
+    await queryComp(origin);
     return;
   }
   const requestId = ++activeRunsRequestId;
@@ -1942,9 +1953,9 @@ async function queryRuns(page) {
   if (hero) params.set('hero', hero);
   if (cardFilters.length) params.set('card_filters', JSON.stringify(cardFilters));
   if (days) params.set('days', days);
-  const timeoutId = setTimeout(() => controller.abort(), 30000);
+  const timeoutId = setTimeout(() => controller.abort(new DOMException('查询超时', 'TimeoutError')), 30000);
   try {
-    const res = await fetch('/api/runs?' + params, {signal: controller.signal});
+    const res = await (window.BazaarSearch ? BazaarSearch.query('runs', '/api/runs?' + params, {signal:controller.signal}, origin === 'user' && Number(page) === 1) : fetch('/api/runs?' + params, {signal:controller.signal}));
     if (!res.ok) {
       let message = `HTTP ${res.status}`;
       try { const body = await res.json(); message = body.error || message; } catch (_) {}
@@ -1970,7 +1981,7 @@ async function queryRuns(page) {
     renderRuns(data, resultPage, {hero, cards, wins, days, rank});
   } catch(e) {
     if (requestId !== activeRunsRequestId) return;
-    const message = e.name === 'AbortError'
+    const message = ['AbortError', 'TimeoutError'].includes(e.name)
       ? '查询超时，请缩小筛选范围后重试'
       : '请求失败: ' + e.message;
     showError('runs-error', message);
@@ -1994,11 +2005,11 @@ function renderRuns(data, page, params) {
   if (pages > 1) {
     const btns = [];
     const startPage = Math.max(1, Math.min(page - 4, pages - 9));
-    if (startPage > 1) btns.push('<button class="page-btn" onclick="queryRuns(1)">首页</button>');
+    if (startPage > 1) btns.push('<button class="page-btn" onclick="queryRuns(1, &quot;page&quot;)">首页</button>');
     for (let i = startPage; i <= Math.min(pages, startPage + 9); i++) {
-      btns.push(`<button class="page-btn${i===page?' active':''}" onclick="queryRuns(${i})">${i}</button>`);
+      btns.push(`<button class="page-btn${i===page?' active':''}" onclick="queryRuns(${i}, &quot;page&quot;)">${i}</button>`);
     }
-    if (startPage + 9 < pages) btns.push(`<button class="page-btn" onclick="queryRuns(${pages})">末页</button>`);
+    if (startPage + 9 < pages) btns.push(`<button class="page-btn" onclick="queryRuns(${pages}, &quot;page&quot;)">末页</button>`);
     pagination = `<div class="pagination">${btns.join('')}</div>`;
   }
 
@@ -2459,258 +2470,24 @@ window.addEventListener('DOMContentLoaded', () => {
 
 
 // ===== 阵容分析视图 =====
-let _viewMode = 'list'; // 'comp' | 'list'
-
-function toggleScreenshotComp(id) {
-  const el = document.getElementById(id);
-  const icon = document.getElementById(id + '-icon');
-  if (!el) return;
-  const visible = el.style.display !== 'none';
-  el.style.display = visible ? 'none' : 'block';
-  if (icon) icon.textContent = visible ? '▼' : '▲';
-}
-
+let _viewMode = 'list';
 function setViewMode(mode) {
+  if (!['list','comp'].includes(mode)) return;
+  window.BazaarComp?.cancel();
+  if (mode === 'comp' && _viewMode !== 'comp') window.BazaarComp?.track('view');
   _viewMode = mode;
+  closeRunCardSuggestions();
   document.querySelectorAll('.view-toggle-btn').forEach((btn, i) => {
     btn.classList.toggle('active', (i === 0 && mode === 'comp') || (i === 1 && mode === 'list'));
   });
   document.getElementById('runs-result').style.display = mode === 'list' ? '' : 'none';
-  const cardInput = document.getElementById('runs-cards');
-  if (cardInput) {
-    if (mode === 'comp') {
-      cardInput.placeholder = '阵容分析仅支持一张卡，如：火药桶';
-    } else {
-      cardInput.placeholder = '如：火炮阵列+赛博铁尺';
-    }
-  }
   document.getElementById('comp-result').style.display = mode === 'comp' ? '' : 'none';
+  document.getElementById('runs-card-search').placeholder = mode === 'comp' ? '选择 1–5 张物品，多张需同时包含' : '输入部分卡名后选择';
+  document.getElementById('runs-card-label').textContent = mode === 'comp' ? '物品（最多 5 张）' : '卡牌（可添加多张）';
+  document.getElementById('runs-card-help').textContent = mode === 'comp' ? '选择已有物品查搭配；技能作为结果展示，附魔筛选仅支持阵容列表' : '先从联想列表选择卡牌，再点“不限附魔”选择附魔；多张卡需同时满足';
 }
-
-function rateColorComp(r) {
-  if (r >= 0.7) return 'var(--theme-teal, #10b981)';
-  if (r >= 0.5) return 'var(--theme-gold, #f59e0b)';
-  return 'var(--theme-coral, #ef4444)';
-}
-
-const HERO_ZH_COMP = {Vanessa:'瓦内莎',Dooley:'杜利',Mak:'马克',Pygmalien:'皮格马利翁',Stelle:'斯黛尔',Jules:'朱尔斯',Karnok:'卡诺克','The Dragons':'双龙'};
-
-async function queryComp() {
-  if (selectedRunCards.length !== 1) {
-    document.getElementById('comp-result').innerHTML = '<div class="result-card"><div class="empty">阵容分析一次只能选择一张核心卡，请保留一张卡牌后再查询</div></div>';
-    return;
-  }
-  if (selectedRunCards[0].enchantment) {
-    document.getElementById('comp-result').innerHTML = '<div class="result-card"><div class="empty">附魔筛选目前仅支持阵容列表；查看阵容分析请将核心卡改为不限附魔</div></div>';
-    return;
-  }
-  const card = selectedRunCards[0].name;
-  const hero = document.getElementById('runs-hero').value;
-  const rank = document.getElementById('runs-rank').value;
-  if (!card) {
-    document.getElementById('comp-result').innerHTML = '<div class="result-card"><div class="empty">请输入卡牌名称后查询阵容分析</div></div>';
-    return;
-  }
-  const _compEl = document.getElementById('comp-result');
-  _compEl.innerHTML = `<div class="runs-progress-wrap">
-    <div class="runs-progress-label">正在分析阵容数据，请稍候...</div>
-    <div class="runs-progress-bar-bg"><div class="runs-progress-bar" id="comp-pbar"></div></div>
-    <div class="runs-progress-label" id="comp-pct">0%</div>
-  </div>`;
-  let _compPct = 0;
-  const _compTimer = setInterval(() => {
-    if (_compPct < 80) {
-      _compPct += _compPct < 30 ? 3 : _compPct < 60 ? 1.5 : 0.5;
-      const bar = document.getElementById('comp-pbar');
-      const lbl = document.getElementById('comp-pct');
-      if (bar) bar.style.width = _compPct.toFixed(0) + '%';
-      if (lbl) lbl.textContent = _compPct.toFixed(0) + '%';
-    }
-  }, 200);
-  const params = new URLSearchParams({card, rank});
-  if (hero) params.set('hero', hero);
-  try {
-    const res = await fetch('/api/comp/card?' + params);
-    const data = await res.json();
-    clearInterval(_compTimer);
-    const bar = document.getElementById('comp-pbar');
-    const lbl = document.getElementById('comp-pct');
-    if (bar) bar.style.width = '100%';
-    if (lbl) lbl.textContent = '100%';
-    await new Promise(res => setTimeout(res, 300));
-    if (data.error) { _compEl.innerHTML = `<div class="error-msg">${data.error}</div>`; return; }
-    renderCompCard(data);
-  } catch(e) {
-    clearInterval(_compTimer);
-    _compEl.innerHTML = `<div class="error-msg">请求失败: ${e.message}</div>`;
-  }
-}
-
-function renderCompCard(data) {
-  const layers = data.layers || [];
-  const medals = ['🥇','🥈','🥉','4️⃣','5️⃣','6️⃣','7️⃣','8️⃣','9️⃣','🔟'];
-
-  function screenshotBtnComp(id, url) {
-    if (!url) return '';
-    const fullUrl = url.startsWith('http') ? url : 'https://usercontent.bzdb.network' + url;
-    return `<div style="margin-top:8px">
-      <button onclick="toggleScreenshotComp('${id}')" style="background:none;border:1px solid rgba(var(--theme-cyan-rgb, 38, 217, 242), 0.3);border-radius:4px;color:var(--text-secondary);font-size:11px;padding:3px 10px;cursor:pointer;font-family:inherit;transition:all 0.2s;" onmouseover="this.style.borderColor='var(--neon-cyan)';this.style.color='var(--neon-cyan)'" onmouseout="this.style.borderColor='rgba(38,217,242,0.3)';this.style.color='var(--text-secondary)'">
-        📷 查看截图 <span id="${id}-icon">▼</span>
-      </button>
-      <div id="${id}" style="display:none;margin-top:8px">
-        <img src="${fullUrl}" style="max-width:100%;border-radius:6px;border:1px solid rgba(var(--theme-violet-rgb, 138, 77, 255), 0.3)" loading="lazy" onerror="this.parentElement.style.display='none'">
-      </div>
-    </div>`;
-  }
-
-  function chips(cards) {
-    return (cards||[]).map(c => {
-      const sizeCls = 'size-' + (c.size || 'Small');
-      if (c.img) {
-        const cls = c.is_new ? 'comp-card-chip has-img is-new' : 'comp-card-chip has-img';
-        return `<span class="${cls} bcp-trigger" ${window.BazaarCardPreview?.attrs(c)||''}><img class="comp-card-img ${sizeCls}" src="${c.img}" alt="${c.name_zh}" loading="lazy" onerror="this.style.display='none'">${c.name_zh}</span>`;
-      }
-      return `<span class="${c.is_new ? 'comp-card-chip is-new' : 'comp-card-chip'} bcp-trigger" ${window.BazaarCardPreview?.attrs(c)||''}>${c.name_zh}</span>`;
-    }).join('');
-  }
-
-  function renderConfigs(configs, prefix) {
-    if (!configs || !configs.length) return '<div style="font-size:12px;color:var(--text-secondary);padding:8px 0">暂无具体配置数据</div>';
-    return configs.map((cfg, k) => {
-      const id = `${prefix}-cfg-${k}`;
-      const cardHtml = chips(cfg.cards);
-      return `<div class="comp-variant-item">
-        <div class="variant-header">
-          <span class="variant-label">配置 ${k+1}</span>
-          <div class="variant-stats">
-            <span class="variant-rate" style="color:${rateColorComp(cfg.rate)}">${(cfg.rate*100).toFixed(1)}% 胜率</span>
-            <span class="variant-count">${cfg.count}次出场</span>
-          </div>
-        </div>
-        <div class="comp-rep-cards" style="margin-top:6px;flex-wrap:wrap">${cardHtml}</div>
-        ${screenshotBtnComp(id, cfg.screenshot)}
-      </div>`;
-    }).join('');
-  }
-
-  function renderL3(l3list, prefix) {
-    if (!l3list || !l3list.length) return '';
-    return l3list.map((l3, k) => {
-      const id = `${prefix}-l3-${k}`;
-      const cfgHtml = renderConfigs(l3.configs, id);
-      return `<div class="comp-group" id="${id}" style="margin:8px 0;border-color:rgba(var(--theme-cyan-rgb, 38, 217, 242), 0.25)">
-        <div class="comp-group-header" onclick="document.getElementById('${id}').classList.toggle('expanded')" style="background:rgba(var(--theme-bg-rgb, 9, 10, 42), 0.5);padding:10px 16px">
-          <span style="font-size:12px;color:var(--text-secondary);flex-shrink:0">L3</span>
-          <div class="comp-rep-cards" style="flex:1">${chips(l3.core_cards)}</div>
-          <div class="comp-stats">
-            <div>
-              <div class="comp-rate" style="color:${rateColorComp(l3.rate)};font-size:14px">${(l3.rate*100).toFixed(1)}%</div>
-              <div class="comp-count">${l3.count}次</div>
-            </div>
-            <span class="comp-expand-icon">▼</span>
-          </div>
-        </div>
-        <div class="comp-variants" style="padding:12px 16px;background:rgba(0,0,0,0.2)">${cfgHtml}</div>
-      </div>`;
-    }).join('');
-  }
-
-  function renderL2(l2list, prefix) {
-    if (!l2list || !l2list.length) return '<div style="font-size:12px;color:var(--text-secondary);padding:8px">暂无变种数据</div>';
-    return l2list.map((l2, j) => {
-      const id = `${prefix}-l2-${j}`;
-      const l3Html = renderL3(l2.l3_variants, id);
-      const l2InnerHtml = l3Html || renderConfigs(l2.configs, id);
-      return `<div class="comp-group" id="${id}" style="margin:8px 0;border-color:rgba(var(--theme-magenta-rgb, 244, 56, 184), 0.25)">
-        <div class="comp-group-header" onclick="document.getElementById('${id}').classList.toggle('expanded')" style="background:rgba(var(--theme-bg-rgb, 9, 10, 42), 0.45);padding:10px 16px">
-          <span style="font-size:12px;color:var(--text-secondary);flex-shrink:0">L2</span>
-          <div class="comp-rep-cards" style="flex:1">${chips(l2.core_cards)}</div>
-          <div class="comp-stats">
-            <div>
-              <div class="comp-rate" style="color:${rateColorComp(l2.rate)};font-size:14px">${(l2.rate*100).toFixed(1)}%</div>
-              <div class="comp-count">${l2.count}次</div>
-            </div>
-            <span class="comp-expand-icon">▼</span>
-          </div>
-        </div>
-        <div class="comp-variants" style="padding:12px 16px">${l2InnerHtml || '<div style="font-size:12px;color:var(--text-secondary)">暂无数据</div>'}</div>
-      </div>`;
-    }).join('');
-  }
-
-  if (!layers.length) {
-    document.getElementById('comp-result').innerHTML = '<div class="result-card"><div class="empty">数据不足，无法生成阵容分析（至少需要10局含该卡的记录）</div></div>';
-    return;
-  }
-
-  const html = layers.map((l1, i) => {
-    const id = `card-comp-l1-${i}`;
-    const l2Html = renderL2(l1.l2_variants, id);
-    const heroName = l1.hero ? `<span class="comp-hero-badge">${HERO_ZH_COMP[l1.hero] || l1.hero}</span>` : '';
-    return `<div class="comp-group" id="${id}">
-      <div class="comp-group-header" onclick="document.getElementById('${id}').classList.toggle('expanded')">
-        <span class="comp-rank">${medals[i] || i+1}</span>
-        <div style="flex:1;min-width:0">
-          <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
-            <span style="font-size:11px;color:var(--text-secondary)">L1 体系</span>
-            ${heroName}
-          </div>
-          <div class="comp-rep-cards">${chips(l1.core_cards)}</div>
-        </div>
-        <div class="comp-stats">
-          <div>
-            <div class="comp-rate" style="color:${rateColorComp(l1.rate)}">${(l1.rate*100).toFixed(1)}%</div>
-            <div class="comp-count">评分${(l1.score*100).toFixed(0)} · ${l1.count}次</div>
-          </div>
-          <span class="comp-expand-icon">▼</span>
-        </div>
-      </div>
-      <div class="comp-variants">${l2Html}</div>
-    </div>`;
-  }).join('');
-
-  document.getElementById('comp-result').innerHTML = `
-    <div class="comp-summary">
-      <div class="comp-summary-card"><div class="comp-summary-label">当前范围</div><div class="comp-summary-value">${data.phase || '当前 phase'}</div></div>
-      <div class="comp-summary-card"><div class="comp-summary-label">命中对局</div><div class="comp-summary-value">${data.total_runs || 0}</div></div>
-      <div class="comp-summary-card"><div class="comp-summary-label">分析卡牌</div><div class="comp-summary-value">${data.card || '—'}</div></div>
-    </div>
-    <div class="comp-toolbar">
-      <div class="comp-note">以下为包含「${data.card}」的相似核心阵容思路，完整配置可展开参考。</div>
-      <div class="comp-sort-tabs">
-        <button class="comp-sort-btn active" data-comp-sort="score">综合推荐</button>
-        <button class="comp-sort-btn" data-comp-sort="appearance">出场率</button>
-        <button class="comp-sort-btn" data-comp-sort="rate">胜率</button>
-      </div>
-    </div>
-    <div id="comp-recommendations"></div>
-    <div class="comp-system-toggle"><button class="comp-link-btn" onclick="document.getElementById('comp-system-layers').style.display=document.getElementById('comp-system-layers').style.display==='none'?'block':'none'">展开/收起体系层级分析</button></div>
-    <div id="comp-system-layers" style="display:none;margin-top:12px">${html}</div>`;
-  renderCompRecommendations(data);
-}
-
-function renderCompRecommendations(data) {
-  const el = document.getElementById('comp-recommendations');
-  if (!el) return;
-  const items = (data.recommendations || []).slice();
-  let mode = 'score';
-  const render = () => {
-    const sorted = items.sort((a,b) => mode === 'rate' ? (b.rate-a.rate || b.count-a.count) : mode === 'appearance' ? (b.global_appearance_rate-a.global_appearance_rate || b.count-a.count) : (b.score-a.score || b.count-a.count));
-    el.innerHTML = sorted.length ? sorted.map((cfg, i) => {
-      const anchor = (cfg.cards || []).map(c => c.cardId).includes(data.card_id);
-      const cards = (cfg.cards || []).map(c => {
-        const cls = c.cardId === data.card_id ? 'comp-card-chip has-img comp-anchor' : 'comp-card-chip has-img';
-        const img = c.img ? '<img class="comp-card-img size-' + (c.size || 'Small') + '" src="' + c.img + '" alt="' + c.name_zh + '" loading="lazy" onerror="this.style.display=\'none\'">' : '';
-        return '<span class="' + cls + ' bcp-trigger" ' + (window.BazaarCardPreview?.attrs(c)||'') + '>' + img + c.name_zh + '</span>';
-      }).join('');
-      const coreCards = (cfg.core_cards || []).map(c => c.name_zh).join('、');
-      const variantCards = (cfg.variant_cards || []).map(c => c.name_zh).join('、');
-      const runUrl = cfg.run_url || (cfg.run_id ? `https://bazaardb.gg/run/tracker/${cfg.run_id}` : '');
-      return `<div class="comp-idea-card"><div class="comp-idea-head"><div><div class="comp-idea-title">${i+1}. ${cfg.hero_zh || cfg.hero || ''} · 参考阵容</div><div class="comp-rep-cards">${cards}</div></div><div class="comp-metrics"><div class="comp-metric"><strong>${(cfg.global_appearance_rate*100).toFixed(1)}%</strong><span>出场率</span></div><div class="comp-metric"><strong style="color:${rateColorComp(cfg.rate)}">${(cfg.rate*100).toFixed(1)}%</strong><span>胜率</span></div></div></div><div class="comp-details"><div class="comp-note"><b>体系核心：</b>${coreCards || '暂无'}</div>${variantCards ? `<div class="comp-note"><b>该代表构筑的变体：</b>${variantCards}</div>` : ''}<div class="comp-note">${cfg.count} 次样本${cfg.sample_warning ? ' · 样本较少，仅供参考' : ''}</div><div class="comp-detail-actions">${cfg.screenshot ? `<button class="comp-link-btn" onclick="toggleScreenshotComp('recommend-${i}')">📷 查看截图</button><span id="recommend-${i}" style="display:none"><img src="${cfg.screenshot.startsWith('http')?cfg.screenshot:'https://usercontent.bzdb.network'+cfg.screenshot}" style="max-width:100%;margin-top:8px;border-radius:5px" loading="lazy"></span>` : ''}${runUrl ? `<a class="comp-link-btn" href="${runUrl}" target="_blank">查看原始 run →</a>` : ''}</div></div></div>`;
-    }).join('') : '<div class="result-card"><div class="empty">当前 phase 暂无足够样本形成可参考阵容</div></div>';
-  };
-  document.querySelectorAll('[data-comp-sort]').forEach(btn => btn.onclick = () => { mode=btn.dataset.compSort; document.querySelectorAll('[data-comp-sort]').forEach(b=>b.classList.toggle('active',b===btn)); render(); });
-  render();
+function queryComp(origin = 'user') {
+  return window.BazaarComp.query(origin);
 }
 
 </script>

@@ -92,7 +92,7 @@ test('direct run link bypasses current search and preserves original scope',asyn
   assert.match(await page.locator('#runs-result').textContent(),/分享的阵容|18\.2/);
   await page.getByRole('button',{name:'分享阵容',exact:true}).click();
   await assertShareCentered(page);
-  assert.equal(await page.locator('.run-share-url').inputValue(),'http://runs.test/runs?run=stable-run');
+  assert.equal(await page.locator('.run-share-url').inputValue(),'http://runs.test/runs?run=stable-run&utm_source=player_share&utm_medium=share&utm_content=run');
   await page.getByRole('button',{name:'复制阵容链接',exact:true}).click();
   assert.match(await page.locator('.run-share-status').textContent(),/复制|选中/);
   await page.getByRole('button',{name:'关闭分享'}).click();
@@ -103,7 +103,7 @@ test('direct run link bypasses current search and preserves original scope',asyn
 
 test('real PNG export includes all skills, QR, enchantment, and omits names and search highlights',async t => {
   const {page,errors} = await setup(t);
-  await page.goto('http://runs.test/runs?run=stable-run');
+  await page.goto('http://runs.test/runs?run=stable-run&utm_source=player_share&utm_medium=share&utm_content=run');
   await page.locator('.run-result').waitFor();
   await page.getByRole('button',{name:'分享阵容',exact:true}).click();
   await page.getByRole('button',{name:'生成分享图',exact:true}).click();
@@ -154,7 +154,7 @@ test('real PNG export includes all skills, QR, enchantment, and omits names and 
 
 test('missing images export placeholders and component failure can retry without losing link',async t => {
   const {page,errors} = await setup(t,375,{brokenArt:true});
-  await page.goto('http://runs.test/runs?run=stable-run');
+  await page.goto('http://runs.test/runs?run=stable-run&utm_source=player_share&utm_medium=share&utm_content=run');
   await page.locator('.run-result').waitFor();
   await page.getByRole('button',{name:'分享阵容',exact:true}).click();
   await assertShareCentered(page);
@@ -162,17 +162,17 @@ test('missing images export placeholders and component failure can retry without
   await page.locator('[data-share-download]:not([hidden])').waitFor({timeout:30000});
   await assertShareCentered(page);
   assert.match(await page.locator('.run-share-status').textContent(),/54 张卡图使用占位/);
-  assert.equal(await page.locator('.run-share-url').inputValue(),'http://runs.test/runs?run=stable-run');
+  assert.equal(await page.locator('.run-share-url').inputValue(),'http://runs.test/runs?run=stable-run&utm_source=player_share&utm_medium=share&utm_content=run');
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),true);
   assert.deepEqual(errors,[]);
   const failed = await setup(t,375,{failComponent:true});
-  await failed.page.goto('http://runs.test/runs?run=stable-run');
+  await failed.page.goto('http://runs.test/runs?run=stable-run&utm_source=player_share&utm_medium=share&utm_content=run');
   await failed.page.locator('.run-result').waitFor();
   await failed.page.getByRole('button',{name:'分享阵容',exact:true}).click();
   await failed.page.getByRole('button',{name:'生成分享图',exact:true}).click();
   await failed.page.getByRole('button',{name:'重新生成分享图',exact:true}).waitFor();
   assert.match(await failed.page.locator('.run-share-status').textContent(),/加载失败/);
-  assert.equal(await failed.page.locator('.run-share-url').inputValue(),'http://runs.test/runs?run=stable-run');
+  assert.equal(await failed.page.locator('.run-share-url').inputValue(),'http://runs.test/runs?run=stable-run&utm_source=player_share&utm_medium=share&utm_content=run');
   assert.deepEqual(failed.errors,[]);
 });
 

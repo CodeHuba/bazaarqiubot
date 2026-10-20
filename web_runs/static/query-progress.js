@@ -164,6 +164,7 @@
     progress = 8;
     messageIndex = Math.floor(Math.random() * 3);
     clearTimeout(hideTimer);
+    root.classList.remove('is-immediate');
     bar.style.width = progress + '%';
     setMessage();
     root.classList.add('is-active');
@@ -176,7 +177,7 @@
     messageTimer = setInterval(setMessage, 2500);
   }
 
-  function end() {
+  function end(immediate = false) {
     if (pending > 0) pending -= 1;
     if (pending > 0 || !root) return;
     clearInterval(progressTimer);
@@ -185,6 +186,12 @@
     messageTimer = null;
     bar.style.width = '100%';
     copy.textContent = '查询完成，双龙已经把结果送到了。';
+    if (immediate) {
+      root.classList.add('is-immediate');
+      root.classList.remove('is-active');
+      bar.style.width = '8%';
+      return;
+    }
     hideTimer = setTimeout(() => {
       root.classList.remove('is-active');
       bar.style.width = '8%';
@@ -208,11 +215,20 @@
 
   const nativeFetch = window.fetch.bind(window);
   window.fetch = function(input, init) {
+    if (init?.bazaarProgress === 'manual') {
+      const {bazaarProgress, ...options} = init;
+      return nativeFetch(input, options);
+    }
     const matched = matchScene(input);
     if (!matched) return nativeFetch(input, init);
     begin(matched);
-    return nativeFetch(input, init).finally(end);
+    return nativeFetch(input, init).finally(() => end());
   };
 
-  window.BZQueryProgress = { start: begin, finish: end, scenes: SCENES };
+  function startManual(scene) {
+    begin(scene);
+    let finished = false;
+    return () => {if (!finished) {finished=true;end(true);}};
+  }
+  window.BZQueryProgress = { start: begin, finish: end, startManual, scenes: SCENES };
 })();

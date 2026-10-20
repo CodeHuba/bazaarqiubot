@@ -40,12 +40,13 @@ def test_runs_card_picker_restores_legacy_plus_separated_links_as_tags():
     assert "addRunCard" in html
 
 
-def test_runs_comp_analysis_requires_exactly_one_selected_core_card():
+def test_runs_comp_analysis_accepts_multiple_items_and_keeps_list_filters_separate():
     html = _html()
-
-    assert "selectedRunCards.length !== 1" in html
-    assert "阵容分析一次只能选择一张核心卡" in html
-    assert "const card = selectedRunCards[0].name" in html
+    script = (ROOT / 'web_runs/static/comp-analysis.js').read_text(encoding='utf-8')
+    assert 'selectedRunCards.length > 5' in script
+    assert "'card_ids'" in script
+    assert "'&type=item'" in html
+    assert 'name:card.name, enchantment:card.enchantment' in html
 
 
 def test_selecting_candidate_does_not_submit_query_automatically():

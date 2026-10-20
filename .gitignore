@@ -57,3 +57,7 @@ node_modules/
 *.orig
 *.backup
 *.backup-*
+
+# Composition preview snapshots and generated artwork
+.tmp/
+web_runs/static/comp-art/
