@@ -1360,8 +1360,13 @@ class RunsQuery:
         if not self.conn:
             self.load()
 
-        sql = "SELECT hero, stat_wins FROM runs WHERE season=? AND phase=?"
-        params = [RUNS_SEASON_ID, CURRENT_PHASE]
+        # Common 等非可选职业值不能参与榜单或总场数统计。
+        hero_placeholders = ','.join('?' for _ in HERO_EN_TO_ZH)
+        sql = (
+            "SELECT hero, stat_wins FROM runs WHERE season=? AND phase=?"
+            f" AND hero IN ({hero_placeholders})"
+        )
+        params = [RUNS_SEASON_ID, CURRENT_PHASE, *HERO_EN_TO_ZH]
         if rank_filter == 'legendary':
             sql += " AND player_rank='Legendary'"
         if days:
