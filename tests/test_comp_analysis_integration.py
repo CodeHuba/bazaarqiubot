@@ -15,6 +15,8 @@ spec.loader.exec_module(staging)
 def client(tmp_path):
     cards={cid:{'name':cid,'internalName':cid,'type':kind} for cid,kind in
            [('q','Item'),('a','Item'),('b','Item'),('s','Skill'),('unplayed','Item')]}
+    cards['q']['heroes']=['Vanessa']
+    cards['a']['heroes']=['Common']
     rows=[dict(id=str(i),hero='Vanessa',created_at='2026-10-18T12:00:00Z',
                wins=10 if i<40 else 5,losses=2,rank='Legendary',screenshot='',
                items=[{'cardId':'q','tier':'Gold'},{'cardId':'a' if i<40 else 'b'}],
@@ -35,6 +37,11 @@ def test_actual_comp_handler_supports_multi_item_ids_and_exact_names(client):
     assert data['baseline']['rate']==1
     assert data['baseline']['average_wins']==10
     assert {c['cardId'] for c in data['anchors']}=={'q','a'}
+    assert len(data['examples'])==1
+    assert data['examples'][0]['similar_ten_wins']==40
+    from plugins.bazaar_plugin import comp_analysis_store as store
+    db_path=client.application.view_functions['api_comp_card'].__globals__['RUNS_DB_PATH']
+    assert store._engines[(str(Path(db_path).resolve()),19,'19.2')].engine.catalog['q']['heroes']==['Vanessa']
     assert client.get('/comp-preview/api/comp/card?card=q').get_json()['baseline']['count']==60
 
 

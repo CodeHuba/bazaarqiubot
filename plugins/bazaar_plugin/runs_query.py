@@ -143,6 +143,8 @@ class RunsQuery:
                         _sz = _j.get('Size', '')
                         if _cid and _sz:
                             self.size_map[_cid] = _sz
+                        if _cid and isinstance(_j.get('Heroes'), list):
+                            self.card_heroes[_cid] = _j['Heroes']
                     except Exception:
                         pass
                 _gc.close()
@@ -157,7 +159,7 @@ class RunsQuery:
         # 加载卡牌职业映射
         heroes_path = Path('/opt/qiubot/data/card_heroes_map.json')
         if heroes_path.exists():
-            self.card_heroes = json.loads(heroes_path.read_text(encoding="utf-8"))
+            self.card_heroes = {**json.loads(heroes_path.read_text(encoding="utf-8")), **self.card_heroes}
 
         # 加载自定义别名
         alias_path = Path(ALIAS_FILE)

@@ -47,8 +47,11 @@
       let screenshot = row.screenshot || '';
       if (screenshot.startsWith('/') && !screenshot.startsWith('//')) screenshot = 'https://usercontent.bzdb.network' + screenshot;
       screenshot = safeImage(screenshot);
-      return `<article class="comp-example"><div class="comp-example-head"><b>实战样例 ${index+1}</b><span>${esc(heroes[row.hero]||row.hero)} · ${row.wins} 胜</span><span class="comp-note">${esc(row.created_at?.slice(0,10)||'')}</span></div><div class="comp-rep-cards">${(row.items||[]).map(c=>card(c,'',true)).join('')}</div><details><summary>查看本局全部技能（${row.skills?.length||0}）</summary><div class="comp-rep-cards">${(row.skills||[]).map(c=>card(c,'',true)).join('')}</div></details><div class="comp-detail-actions"><a class="comp-link-btn" href="/runs?run=${encodeURIComponent(row.id)}" target="_blank" rel="noopener">打开本局阵容</a><a class="comp-link-btn" href="https://bazaardb.gg/run/tracker/${encodeURIComponent(row.id)}" target="_blank" rel="noopener">查看原始对局 ↗</a></div>${screenshot?`<details><summary>查看本局截图</summary><img class="comp-example-screenshot" src="${esc(screenshot)}" alt="本局对局截图" loading="lazy"></details>`:''}</article>`;
+      return `<article class="comp-example"><div class="comp-example-head"><b>实战样例 ${index+1}</b><span>${esc(heroes[row.hero]||row.hero)} · ${row.wins} 胜</span>${exampleFrequency(row)}<span class="comp-note">${esc(row.created_at?.slice(0,10)||'')}</span></div><div class="comp-rep-cards">${(row.items||[]).map(c=>card(c,'',true)).join('')}</div><details><summary>查看本局全部技能（${row.skills?.length||0}）</summary><div class="comp-rep-cards">${(row.skills||[]).map(c=>card(c,'',true)).join('')}</div></details><div class="comp-detail-actions"><a class="comp-link-btn" href="/runs?run=${encodeURIComponent(row.id)}" target="_blank" rel="noopener">打开本局阵容</a><a class="comp-link-btn" href="https://bazaardb.gg/run/tracker/${encodeURIComponent(row.id)}" target="_blank" rel="noopener">查看原始对局 ↗</a></div>${screenshot?`<details><summary>查看本局截图</summary><img class="comp-example-screenshot" src="${esc(screenshot)}" alt="本局对局截图" loading="lazy"></details>`:''}</article>`;
     }).join('');
+  }
+  function exampleFrequency(row) {
+    return Number.isInteger(row.similar_ten_wins) && row.similar_ten_wins > 0 ? `<span class="comp-example-frequency">相近阵容：${num(row.similar_ten_wins)} 局 10 胜</span>` : '';
   }
   function groupLink(data, row, sort) {
     const url = new URL('/runs', location.origin);
@@ -83,7 +86,7 @@
         const exampleMarkup = cases.map((example,index)=>{
           const created=new Date(example.created_at||NaN);
           const date=Number.isNaN(created.getTime())?'':created.toLocaleDateString('zh-CN',{timeZone:'Asia/Shanghai'});
-          return `<article class="comp-share-example" data-example-id="${esc(example.id)}"><div class="comp-share-example-head"><b>案例 ${index+1} · ${esc(heroes[example.hero]||example.hero)} · 10 胜</b><span>${esc(date)}</span></div><div class="comp-share-case-label">物品 · ${example.items?.length||0} 张</div><div class="comp-share-case-cards comp-share-case-items">${(example.items||[]).map(c=>caseCard(c,'Item')).join('')||'<span class="run-data-note">暂无物品数据</span>'}</div><div class="comp-share-case-label">技能 · ${example.skills?.length||0} 个</div><div class="comp-share-case-cards comp-share-case-skills">${(example.skills||[]).map(c=>caseCard(c,'Skill')).join('')||'<span class="run-data-note">暂无技能数据</span>'}</div></article>`;
+          return `<article class="comp-share-example" data-example-id="${esc(example.id)}"><div class="comp-share-example-head"><b>案例 ${index+1} · ${esc(heroes[example.hero]||example.hero)} · 10 胜</b>${exampleFrequency(example)}<span>${esc(date)}</span></div><div class="comp-share-case-label">物品 · ${example.items?.length||0} 张</div><div class="comp-share-case-cards comp-share-case-items">${(example.items||[]).map(c=>caseCard(c,'Item')).join('')||'<span class="run-data-note">暂无物品数据</span>'}</div><div class="comp-share-case-label">技能 · ${example.skills?.length||0} 个</div><div class="comp-share-case-cards comp-share-case-skills">${(example.skills||[]).map(c=>caseCard(c,'Skill')).join('')||'<span class="run-data-note">暂无技能数据</span>'}</div></article>`;
         }).join('');
         const scope = `${data.scope.phase} · ${data.scope.rank==='legendary'?'传奇':'全部段位'} · ${data.scope.days?'最近 '+data.scope.days+' 天':'当前阶段全部时间'}`;
         return `<header class="run-share-header"><div class="run-share-info"><div class="comp-share-brand">巴扎丘Bot · 阵容分析${location.pathname.startsWith('/comp-preview')?' · 验收预览':''}</div><h2>${esc(row.hero_name)} · 核心组合</h2><p class="run-data-note">${esc(scope)} · ${row.sample_level==='explore'?'小样本探索':'主推荐'}</p></div><div class="run-share-qr"><img src="${esc(qr)}" alt="核心组合直达二维码"><div>扫码查看此组合</div></div></header>
@@ -98,11 +101,11 @@
   function group(row, index) {
     const winningExamples = (row.examples || []).filter(example => example.wins === 10);
     const winning = row.ten_wins ? `
-      <div class="comp-companions">
+      <details class="comp-winning-details"><summary>10 胜样本高频物品与技能</summary><div class="comp-companions">
         <section><h3>10 胜样本 · 物品</h3>${companions(row.winning_items,true)}</section>
         <section><h3>10 胜样本 · 技能</h3>${companions(row.winning_skills,true)}</section>
-      </div>
-      <details data-comp-examples><summary>查看真实完整阵容（${winningExamples.length} 局 10 胜）</summary>${examples(winningExamples)}</details>
+      </div></details>
+      <details data-comp-examples open><summary>查看真实完整阵容（${winningExamples.length} 局 10 胜）</summary>${examples(winningExamples)}</details>
     ` : '<p class="comp-note">该组合暂无 10 胜样本，暂不展示物品与技能搭配。</p>';
     return `<article class="comp-idea-card comp-analysis-group" data-comp-group="${esc(row.id)}">
       <div class="comp-idea-head"><div>
@@ -129,6 +132,7 @@
       <p>10 胜率、平均胜场和样本局数基于全部匹配对局计算。原始采集不含 0 胜局，展示结果不能视为拿到物品后的获胜概率。</p>
       <p>搭配频率以各组合的 10 胜局数为分母；补充物品不含上方核心物品。实战样例中的物品、技能与截图来自同一局。</p>
       <p>主推荐至少 30 局；10–29 局列为小样本探索。每个核心组合最多补充 3 张物品。稳健推荐按 10 胜率的 95% Wilson 下界排序，兼顾样本量；不同组合可能覆盖同一局。</p>
+      <p>实战案例优先选高频相近阵容，同频时兼顾本家及中立物品，再参考时间。相近阵容忽略品质、附魔、技能和位置，组内任意两套物品最多差 1 件；次数为组内累计 10 胜局数。</p>
     </div></details>`;
     el.innerHTML = `
       <div class="comp-analysis-scope">${esc(state)} · 同时包含 ${data.anchors.map(c=>esc(c.name)).join('、')}</div>
@@ -148,8 +152,8 @@
     el.querySelectorAll('[data-comp-sort]').forEach(button=>button.onclick=()=>{ mode=button.dataset.compSort;track('sort','',mode);void query('sort'); });
     const sort = mode;
     el.querySelectorAll('[data-comp-share]').forEach(button=>button.onclick=()=>shareGroup(data,data.groups.find(g=>g.id===button.dataset.compShare),sort));
-    el.querySelectorAll('[data-comp-examples]').forEach(details=>details.addEventListener('toggle',()=>{
-      if(details.open)track('examples_open',details.closest('[data-comp-group]').dataset.compGroup);
+    el.querySelectorAll('[data-comp-examples]').forEach(details=>details.querySelector('summary').addEventListener('click',()=>{
+      if(!details.open)track('examples_open',details.closest('[data-comp-group]').dataset.compGroup);
     }));
     el.querySelectorAll('.comp-detail-actions a').forEach(link=>link.addEventListener('click',()=>{
       track(link.getAttribute('href').startsWith('/runs?')?'run_open':'source_open',link.closest('[data-comp-group]')?.dataset.compGroup||'');
