@@ -17,6 +17,7 @@ import urllib.request
 import secrets
 from datetime import datetime, timedelta, timezone
 from collections import defaultdict
+from contextlib import closing
 from dotenv import load_dotenv
 load_dotenv("/opt/qiubot/.env")
 from functools import wraps
@@ -69,6 +70,17 @@ DAY_STATS_DB_PATH = os.getenv('DAY_STATS_DB_PATH', '/opt/qiubot/data/bazaar_day_
 ROUTES_MAINTENANCE = os.getenv('ROUTES_MAINTENANCE', '0') == '1'
 ENABLE_DAY_SNAPSHOT_QUEUE = os.getenv('ENABLE_DAY_SNAPSHOT_QUEUE', '0') == '1'
 SNAPSHOT_LEASE_MINUTES = int(os.getenv('SNAPSHOT_LEASE_MINUTES', '10'))
+
+
+def _initialize_runs_db(db_path):
+    """启动时固定为 WAL，避免后台长查询阻塞采集提交及后续读取。"""
+    with closing(_sqlite3.connect(db_path, timeout=30)) as conn:
+        mode = conn.execute('PRAGMA journal_mode=WAL').fetchone()[0]
+        if mode.lower() != 'wal':
+            raise RuntimeError(f'Runs database must use WAL, got {mode}')
+
+
+_initialize_runs_db(RUNS_DB_PATH)
 _day_snapshot_store = DaySnapshotStore(DAY_SNAPSHOT_DB_PATH)
 _day_snapshot_store_error = None
 try:
@@ -2391,71 +2403,67 @@ def api_ingest():
 
     db_path = RUNS_DB_PATH
     try:
-        conn = __import__('sqlite3').connect(db_path, check_same_thread=False, timeout=30)
-        # 兼容既有数据库：每日战斗阵容随 run 保存，避免另建高频关联表。
-        columns = {row[1] for row in conn.execute('PRAGMA table_info(runs)')}
-        if 'snapshots_json' not in columns:
-            conn.execute('ALTER TABLE runs ADD COLUMN snapshots_json TEXT')
-        _ensure_snapshot_job_schema(conn)
-        _ensure_combat_snapshot_schema(conn)
         new_count = 0
         eligible_snapshot_jobs = []
-        for run in data:
-            wins = run.get('statWins') or 0
-            if wins < 1:
-                continue
-            try:
-                _items_json = __import__('json').dumps(run.get('items', []), ensure_ascii=False)
-                try:
-                    _card_ids_text = ' '.join(
-                        it['cardId'] for it in run.get('items', []) if 'cardId' in it
-                    )
-                except Exception:
-                    _card_ids_text = ''
-                before_insert_changes = conn.total_changes
-                conn.execute("""INSERT OR IGNORE INTO runs
-                    (id, hero, username, created_at, items_json, skills_json, combats_json,
-                     snapshots_json, stat_wins, stat_losses, player_rating, player_rating_after,
-                     player_rank, player_rank_after, screenshot_url, raw_json, collected_at, season, phase, card_ids_text)
-                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-                    (run['id'], run.get('hero'), run.get('username'),
-                     run.get('createdAt'),
-                     _items_json,
-                     __import__('json').dumps(run.get('skills', []), ensure_ascii=False),
-                     __import__('json').dumps(run.get('combats', []), ensure_ascii=False),
-                     __import__('json').dumps(run.get('combatSnapshots', []), ensure_ascii=False),
-                     run.get('statWins'), run.get('statLosses'),
-                     run.get('playerRating'), run.get('playerRatingAfter'),
-                     run.get('playerRank'), run.get('playerRankAfter'),
-                     run.get('screenshotUrl'),
-                     __import__('json').dumps(run, ensure_ascii=False),
-                     __import__('datetime').datetime.now().isoformat(), RUNS_SEASON_ID, CURRENT_PHASE,
-                     _card_ids_text))
-                if conn.total_changes > before_insert_changes:
-                    new_count += 1
-                    if ENABLE_DAY_SNAPSHOT_QUEUE and _day_snapshot_store.eligible(
-                            run.get('playerRank'), run.get('statWins')):
-                        eligible_snapshot_jobs.append({
-                            'run_id': run['id'],
-                            'season': RUNS_SEASON_ID,
-                            'phase': CURRENT_PHASE,
-                            'hero': run.get('hero'),
-                            'player_rank': run.get('playerRank'),
-                            'stat_wins': run.get('statWins'),
-                        })
-                    _insert_combat_snapshots(conn, run)
-                    # 增量追加到 Redis winrate 缓存
-                    _winrate_cache_append(
-                        __import__('json').dumps(run.get('items', []), ensure_ascii=False),
-                        run.get('statWins', 0)
-                    )
-                    # 新 run 加入 OCR 队列识别游戏用户名
-                    # enqueue_run(run['id'], run.get('screenshotUrl', ''))  # 已改为凌晨批量处理
-            except Exception as e:
-                pass
-        conn.commit()
-        total = conn.execute('SELECT COUNT(*) FROM runs').fetchone()[0]
-        conn.close()
+        cache_updates = []
+        # with conn 负责提交/回滚；closing 保证 COMMIT 失败也立即释放连接和锁。
+        with closing(_sqlite3.connect(db_path, timeout=30)) as conn:
+            columns = {row[1] for row in conn.execute('PRAGMA table_info(runs)')}
+            if 'snapshots_json' not in columns:
+                conn.execute('ALTER TABLE runs ADD COLUMN snapshots_json TEXT')
+            _ensure_snapshot_job_schema(conn)
+            _ensure_combat_snapshot_schema(conn)
+            with conn:
+                conn.execute('BEGIN IMMEDIATE')
+                for run in data:
+                    if not isinstance(run, dict):
+                        continue
+                    wins = run.get('statWins') or 0
+                    if not isinstance(wins, (int, float)) or wins < 1:
+                        continue
+                    conn.execute('SAVEPOINT ingest_run')
+                    try:
+                        items_json = json.dumps(run.get('items', []), ensure_ascii=False)
+                        card_ids_text = ' '.join(
+                            item['cardId'] for item in (run.get('items') or [])
+                            if isinstance(item, dict) and isinstance(item.get('cardId'), str)
+                        )
+                        inserted = conn.execute("""INSERT OR IGNORE INTO runs
+                            (id, hero, username, created_at, items_json, skills_json, combats_json,
+                             snapshots_json, stat_wins, stat_losses, player_rating, player_rating_after,
+                             player_rank, player_rank_after, screenshot_url, raw_json, collected_at, season, phase, card_ids_text)
+                            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                            (run['id'], run.get('hero'), run.get('username'), run.get('createdAt'),
+                             items_json, json.dumps(run.get('skills', []), ensure_ascii=False),
+                             json.dumps(run.get('combats', []), ensure_ascii=False),
+                             json.dumps(run.get('combatSnapshots', []), ensure_ascii=False),
+                             run.get('statWins'), run.get('statLosses'),
+                             run.get('playerRating'), run.get('playerRatingAfter'),
+                             run.get('playerRank'), run.get('playerRankAfter'), run.get('screenshotUrl'),
+                             json.dumps(run, ensure_ascii=False), datetime.now().isoformat(),
+                             RUNS_SEASON_ID, CURRENT_PHASE, card_ids_text)).rowcount > 0
+                        if inserted:
+                            _insert_combat_snapshots(conn, run)
+                    except _sqlite3.Error:
+                        # 锁、磁盘等数据库异常必须回滚整批，不能伪报入库成功。
+                        raise
+                    except (AttributeError, KeyError, TypeError, ValueError):
+                        conn.execute('ROLLBACK TO ingest_run')
+                        conn.execute('RELEASE ingest_run')
+                        app.logger.warning('Skipping malformed ingest run', exc_info=True)
+                        continue
+                    conn.execute('RELEASE ingest_run')
+                    if inserted:
+                        new_count += 1
+                        cache_updates.append((items_json, wins))
+                        if ENABLE_DAY_SNAPSHOT_QUEUE and _day_snapshot_store.eligible(
+                                run.get('playerRank'), wins):
+                            eligible_snapshot_jobs.append({
+                                'run_id': run['id'], 'season': RUNS_SEASON_ID,
+                                'phase': CURRENT_PHASE, 'hero': run.get('hero'),
+                                'player_rank': run.get('playerRank'), 'stat_wins': wins,
+                            })
+                total = conn.execute('SELECT COUNT(*) FROM runs').fetchone()[0]
         if new_count:
             # 当前 Phase 有新 run 后，使所有派生统计缓存失效。
             from plugins.bazaar_plugin import runs_query as _runs_query
@@ -2463,6 +2471,9 @@ def api_ingest():
             _runs_query._hero_overview_cache.clear()
             from plugins.bazaar_plugin.comp_analysis_store import invalidate as invalidate_comp_analysis
             invalidate_comp_analysis()
+        # Redis/派生缓存操作一律在 SQLite 提交并关闭后执行。
+        for items_json, wins in cache_updates:
+            _winrate_cache_append(items_json, wins)
         snapshot_queue_errors = []
         if ENABLE_DAY_SNAPSHOT_QUEUE and _day_snapshot_store_error:
             snapshot_queue_errors.append({'error': 'day snapshot store unavailable'})
@@ -2480,7 +2491,14 @@ def api_ingest():
             'snapshot_jobs_eligible': len(eligible_snapshot_jobs),
             'snapshot_queue_errors': snapshot_queue_errors,
         })
+    except _sqlite3.OperationalError as e:
+        app.logger.exception('Runs ingest database operation failed')
+        code = getattr(e, 'sqlite_errorcode', 0) or 0
+        if (code & 0xff) in (_sqlite3.SQLITE_BUSY, _sqlite3.SQLITE_LOCKED):
+            return jsonify({'error': 'database is busy; retry ingest'}), 503, {'Retry-After': '2'}
+        return jsonify({'error': str(e)}), 500
     except Exception as e:
+        app.logger.exception('Runs ingest failed')
         return jsonify({'error': str(e)}), 500
 
 
