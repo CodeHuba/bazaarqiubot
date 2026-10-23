@@ -6,6 +6,7 @@ from itertools import combinations
 from math import sqrt
 import threading
 import time
+from .query_budget import budgeted_rows, checkpoint
 from .comp_examples import select_examples
 
 HEROES = {'Vanessa': '瓦内莎', 'Dooley': '杜利', 'Mak': '马克', 'Pygmalien': '皮格马利翁',
@@ -44,7 +45,7 @@ class Analysis:
         self.catalog = payload.get('cards', {})
         self.runs, self.item_index, self.skill_ids = [], defaultdict(set), set()
         seen = set()
-        for source in payload['runs']:
+        for source in budgeted_rows(payload['runs']):
             rid, wins = source.get('id'), source.get('wins')
             if not rid or rid in seen or type(wins) is not int or not 0 <= wins <= 10:
                 continue
@@ -159,6 +160,13 @@ class Analysis:
         if cached is not None:
             return cached
         if existing is not None:
+            while not existing.done():
+                checkpoint()
+                try:
+                    return existing.result(timeout=.1)
+                except TimeoutError:
+                    if existing.done():
+                        return existing.result()
             return existing.result()
         try:
             result = self._compute(anchors, hero, rank, days, sort, reference)
@@ -179,19 +187,19 @@ class Analysis:
         indices = set.intersection(*(self.item_index.get(c, set()) for c in anchors))
         captured = reference if reference is not None else timestamp(self.payload['captured_at'])
         cutoff = captured - days*86400 if days else None
-        runs = [self.runs[i] for i in sorted(indices) if
+        runs = [self.runs[i] for i in budgeted_rows(sorted(indices)) if
                 (not hero or self.runs[i]['hero'] == hero) and
                 (rank != 'legendary' or self.runs[i].get('rank') == 'Legendary') and
                 (cutoff is None or (timestamp(self.runs[i].get('created_at')) or 0) >= cutoff)]
         base = metric(runs, len(runs))
         by_hero = defaultdict(list)
-        for row in runs:
+        for row in budgeted_rows(runs):
             by_hero[row['hero']].append(row)
         groups, group_runs = [], {}
         for h, pool in by_hero.items():
             # Enumerate at most three additional items. Each run contributes once per combination.
             buckets = defaultdict(list)
-            for row in pool:
+            for row in budgeted_rows(pool):
                 extras = sorted(row['item_ids'] - anchors)
                 for length in range(1, min(3, len(extras)) + 1):
                     for extra in combinations(extras, length):
@@ -199,13 +207,13 @@ class Analysis:
             candidates = [(extra, rows) for extra, rows in buckets.items() if len(rows) >= 10]
             # Remove a shorter pattern only when a superset has exactly the same matching runs.
             redundant = set()
-            for extra, rows in candidates:
+            for extra, rows in budgeted_rows(candidates):
                 if len(extra) > 1:
                     for length in range(1, len(extra)):
                         for subset in combinations(extra, length):
                             if len(buckets[subset]) == len(rows):
                                 redundant.add(subset)
-            for extra, rows in candidates:
+            for extra, rows in budgeted_rows(candidates):
                 if extra in redundant:
                     continue
                 gid = h + ':' + ','.join(extra)

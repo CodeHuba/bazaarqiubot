@@ -12,7 +12,9 @@ spec.loader.exec_module(staging)
 
 
 @pytest.fixture
-def client(tmp_path):
+def client(tmp_path, monkeypatch):
+    from plugins.bazaar_plugin import comp_analysis_store as store
+    monkeypatch.setattr(store, '_REFRESH_MIN_INTERVAL', 0)
     cards={cid:{'name':cid,'internalName':cid,'type':kind} for cid,kind in
            [('q','Item'),('a','Item'),('b','Item'),('s','Skill'),('unplayed','Item')]}
     cards['q']['heroes']=['Vanessa']

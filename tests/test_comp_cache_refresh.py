@@ -12,6 +12,8 @@ from plugins.bazaar_plugin import comp_analysis_store as store
 
 @pytest.fixture
 def cache(tmp_path, monkeypatch):
+    # Refresh publication tests do not wait for the production coalescing window.
+    monkeypatch.setattr(store, '_REFRESH_MIN_INTERVAL', 0)
     store.invalidate(hard=True)
     database=tmp_path/'runs.db';database.write_text('one')
     class Query:
@@ -125,3 +127,72 @@ def test_live_day_window_advances_without_rebuilding_data(monkeypatch):
     assert engine.query(['q'],days=1)['baseline']['count']==1
     monkeypatch.setattr(comp_analysis,'time',SimpleNamespace(time=lambda:start+60))
     assert engine.query(['q'],days=1)['baseline']['count']==0
+
+
+def test_ingest_burst_is_coalesced_and_eventually_publishes_latest_data(cache, monkeypatch):
+    Query, calls, _, database = cache
+    monkeypatch.setattr(store, '_REFRESH_MIN_INTERVAL', 60)
+    assert analyze(Query) == 'one'
+    entry = next(iter(store._engines.values()))
+    database.write_text('latest committed records')
+    for _ in range(100):
+        store.invalidate()
+        assert analyze(Query) == 'one'
+    assert calls == ['one']
+    assert not entry.refreshing
+    entry.last_started -= 61
+    store.prewarm(Query, season=19, phase='19.2')
+    assert entry.ready.wait(2)
+    assert analyze(Query) == 'latest committed records'
+    assert len(calls) == 2
+    assert entry.built_revision == entry.revision
+
+
+def test_failed_build_does_not_retain_large_local_variables(cache, monkeypatch):
+    Query, _, _, _ = cache
+    def fail(*args):
+        large_records = bytearray(1000000)
+        raise OSError('failed after allocation')
+    monkeypatch.setattr(store, '_build', fail)
+    entry = store.prewarm(Query, season=19, phase='19.2')
+    assert entry.ready.wait(2)
+    assert isinstance(entry.error, OSError)
+    assert entry.error.__traceback__ is None
+    assert entry.error.__context__ is None
+
+
+def test_cold_http_query_retries_instead_of_waiting_for_its_own_worker_slot(cache, monkeypatch):
+    from plugins.bazaar_plugin.query_budget import QueryController, BudgetExceeded
+    Query, _, original, _ = cache
+    admission = QueryController(limit=1, memory=lambda: 2048)
+    monkeypatch.setattr(store, 'controller', admission)
+    attempted = Event()
+    original_acquire = admission.acquire
+    def acquire(**kwargs):
+        try:
+            return original_acquire(**kwargs)
+        finally:
+            if kwargs.get('label') == 'comp-refresh':
+                attempted.set()
+    monkeypatch.setattr(admission, 'acquire', acquire)
+    started, release = Event(), Event()
+    def build(*args):
+        started.set()
+        assert release.wait(2)
+        return original(*args)
+    monkeypatch.setattr(store, '_build', build)
+    with admission.acquire():
+        with pytest.raises(BudgetExceeded):
+            analyze(Query)
+        assert attempted.wait(1)
+    assert admission.status()['active'] == 0
+    entry = next(iter(store._engines.values()))
+    assert entry.ready.wait(2)  # The refresh was rejected by the occupied slot.
+    entry.failed_at -= 6
+    store.prewarm(Query, season=19, phase='19.2')
+    try:
+        assert started.wait(2)
+    finally:
+        release.set()
+    assert entry.ready.wait(2)
+    assert analyze(Query) == 'one'
