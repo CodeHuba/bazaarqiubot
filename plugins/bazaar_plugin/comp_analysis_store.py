@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 import json
 import hashlib
 import logging
+import os
 from pathlib import Path
 import threading
 import time
@@ -13,6 +14,7 @@ import time
 from .comp_analysis import Analysis
 from .run_instances import json_value, terminal_instances
 from .runs_metadata import file_version
+from .query_budget import BudgetExceeded, budgeted_rows, checkpoint, controller, current_budget
 
 _engines = OrderedDict()
 _lock = threading.RLock()
@@ -21,6 +23,7 @@ _watchers = set()
 _ASSET_CATALOG = Path(__file__).resolve().parents[2] / 'web_runs/static/comp-art/catalog.json'
 _INSTANCE_FIELDS = ('cardId', 'tier', 'tierOverride', 'isLegendary', 'enchantment', 'slotPosition')
 _logger = logging.getLogger(__name__)
+_REFRESH_MIN_INTERVAL = max(1, float(os.getenv('COMP_REFRESH_MIN_INTERVAL_SECONDS', '60')))
 
 
 @dataclass
@@ -36,6 +39,7 @@ class Entry:
     error: object = None
     failed_at: float = 0
     builds: int = 0
+    last_started: float = 0
     ready: object = field(default_factory=threading.Event)
 
 
@@ -73,7 +77,7 @@ def _build(query, season, phase, previous=None):
             ' FROM runs WHERE season=? AND phase=?', (season, phase))
         records = []
         previous_rows = {r['id']: r for r in previous.runs} if previous else {}
-        for r in rows:
+        for r in budgeted_rows(rows):
             fingerprint = _row_digest(r)
             old = previous_rows.get(r[0])
             if old is not None and old.get('_source_digest') == fingerprint:
@@ -93,7 +97,7 @@ def _build(query, season, phase, previous=None):
         catalog = {}
         ids = set(query.card_mapping)
         ids.update(c['cardId'] for row in records for c in row['items'] + row['skills'])
-        for cid in ids:
+        for cid in budgeted_rows(ids):
             display = query.card_display_info_cached(cid)
             image = query._card_image_info(cid)
             catalog[cid] = {'name': display['name'], 'internalName': display['name_en'],
@@ -103,6 +107,7 @@ def _build(query, season, phase, previous=None):
             asset = assets.get(cid)
             if isinstance(asset, dict):
                 catalog[cid].update({k: asset[k] for k in ('name', 'internalName', 'size', 'type', 'artLarge') if asset.get(k)})
+        checkpoint()
         engine = Analysis({'runs': records, 'cards': catalog, 'season': season, 'phase': phase,
                            'captured_at': getattr(query, 'analysis_snapshot_time', None) or datetime.now(timezone.utc).isoformat(),
                            'live': not bool(getattr(query, 'analysis_snapshot_time', None)),
@@ -119,7 +124,8 @@ def _refresh(entry):
         revision = entry.revision
         previous = entry.engine
     try:
-        engine, signature = _build(entry.factory(), entry.season, entry.phase, previous)
+        with controller.acquire(seconds=60, label='comp-refresh'):
+            engine, signature = _build(entry.factory(), entry.season, entry.phase, previous)
         with _lock:
             entry.engine, entry.signature = engine, signature
             entry.built_revision = revision
@@ -127,6 +133,8 @@ def _refresh(entry):
             entry.error = None
         del previous  # Large old snapshots are released outside the publication lock.
     except Exception as exc:
+        # Do not retain the failed build's records/JSON through its traceback.
+        exc.__traceback__ = exc.__context__ = exc.__cause__ = None
         with _lock:
             entry.error, entry.failed_at = exc, time.monotonic()
         _logger.warning('Composition snapshot refresh failed: %s', type(exc).__name__)
@@ -136,17 +144,22 @@ def _refresh(entry):
             entry.ready.set()
 
 
-def _schedule(entry):
+def _schedule(entry, *, force=False):
     # Only one worker builds at a time. Requests keep their old immutable engine
     # reference while a new snapshot is prepared, without holding this lock.
     if entry.refreshing or (entry.error and time.monotonic()-entry.failed_at < 5):
         return
+    # Ingest invalidation and WAL writes can arrive many times per second. Keep
+    # serving the last complete engine and coalesce refreshes into one per minute.
+    if entry.engine is not None and not force and time.monotonic()-entry.last_started < _REFRESH_MIN_INTERVAL:
+        return
+    entry.last_started = time.monotonic()
     entry.refreshing = True
     entry.ready.clear()
     _executor.submit(_refresh, entry)
 
 
-def _entry(query, season, phase, factory=None):
+def _entry(query, season, phase, factory=None, force=False):
     key = (str(Path(query.db_path).resolve()), season, phase)
     signature = _signature(query)
     with _lock:
@@ -165,7 +178,7 @@ def _entry(query, season, phase, factory=None):
             _engines[key] = entry
         _engines.move_to_end(key)
         if entry.engine is None or entry.built_revision != entry.revision or entry.signature != signature:
-            _schedule(entry)
+            _schedule(entry, force=force)
         return entry
 
 
@@ -180,6 +193,12 @@ def invalidate(*, hard=False):
 
 
 def _wait(entry):
+    budget = current_budget()
+    if budget is not None and entry.engine is None:
+        # A cold HTTP request must not occupy a shared worker slot while waiting
+        # for a refresh that needs that same slot. The client can retry shortly.
+        budget.reason = 'warming'
+        raise BudgetExceeded('warming')
     if not entry.ready.wait(45):
         raise TimeoutError('阵容分析正在预热，请稍后重试')
     with _lock:
@@ -190,7 +209,7 @@ def _wait(entry):
 
 def prewarm(factory, *, season, phase, wait=False):
     query = factory()
-    entry = _entry(query, season, phase, factory)
+    entry = _entry(query, season, phase, factory, force=wait)
     return _wait(entry) if wait else entry
 
 

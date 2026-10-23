@@ -1,0 +1,19 @@
+[Unit]
+Description=QiuBot read-only resource and website health check
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /opt/qiubot/tools/check_web_resources.py
+StateDirectory=qiubot-health
+User=ubuntu
+Group=ubuntu
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+MemoryMax=64M
+TimeoutStartSec=15
+Nice=10
+StandardOutput=journal
+StandardError=journal

@@ -55,6 +55,7 @@ from ocr_worker import start_worker, enqueue_run
 from plugins.bazaar_plugin.runs_query import RunsQuery
 from plugins.bazaar_plugin.run_card_filters import normalize_run_card_filters
 from plugins.bazaar_plugin.data_client import RUNS_SEASON_ID, CURRENT_PHASE
+from plugins.bazaar_plugin.query_budget import checkpoint
 from day_stats_builder import (
     _build_daily_node_rankings,
     _build_daily_route_directions,
@@ -317,7 +318,8 @@ _threading.Thread(target=_build_card_search_index, daemon=True).start()
 import redis as _redis
 import pickle as _pickle
 
-_redis_client = _redis.Redis(host='localhost', port=6379, db=0)
+_redis_client = _redis.Redis(host='localhost', port=6379, db=0,
+                             socket_connect_timeout=.5, socket_timeout=1)
 _WINRATE_CACHE_KEY = f'winrate_cache:{RUNS_SEASON_ID}:{CURRENT_PHASE}'
 _winrate_cache_ready = False
 
@@ -366,16 +368,18 @@ def _winrate_cache_append(items_json: str, stat_wins: int):
 def _winrate_from_cache(card_ids_sets: list, min_wins: int = 10) -> tuple:
     """从 Redis 缓存计算胜率，返回 (total, ten_win)。"""
     total = ten_win = 0
-    raw_list = _redis_client.lrange(_WINRATE_CACHE_KEY, 0, -1)
-    for raw in raw_list:
-        try:
-            card_ids, wins = _pickle.loads(raw)
-            if all(card_ids & s for s in card_ids_sets):
-                total += 1
-                if wins >= min_wins:
-                    ten_win += 1
-        except Exception:
-            pass
+    count = _redis_client.llen(_WINRATE_CACHE_KEY)
+    for offset in range(0, count, 512):
+        checkpoint()
+        for raw in _redis_client.lrange(_WINRATE_CACHE_KEY, offset, min(offset + 511, count - 1)):
+            try:
+                card_ids, wins = _pickle.loads(raw)
+                if all(card_ids & s for s in card_ids_sets):
+                    total += 1
+                    if wins >= min_wins:
+                        ten_win += 1
+            except Exception:
+                pass
     return total, ten_win
 
 _threading.Thread(target=_build_winrate_cache, daemon=True).start()
@@ -963,6 +967,23 @@ def after_request(response):
         elif ext == 'html':
             response.cache_control.no_cache = True        # HTML 不缓存
     return response
+
+# Flask runs after_request callbacks in reverse registration order. Translate
+# overload/timeout responses before the existing analytics callback records them.
+from resource_guard import install_resource_guard
+install_resource_guard(app)
+
+
+@app.route('/api/stats/resources', methods=['GET'])
+@require_stats_auth
+def api_stats_resources():
+    from plugins.bazaar_plugin.query_budget import available_memory_mb
+    from plugins.bazaar_plugin.comp_analysis_store import cache_status
+    response = jsonify(queries=app.extensions['query_controller'].status(),
+                       available_memory_mb=available_memory_mb(), analysis=cache_status())
+    response.headers['Cache-Control'] = 'private, no-store'
+    return response
+
 
 def _log_api_call(endpoint, method, params, ip, fingerprint, result_count, success, duration_ms):
     try:
