@@ -310,7 +310,7 @@ PY
 - Redis `winrate_cache:19:19.3` 为 484 条；后台分析快照已刷新至 484 条，phase 正确、ready=true、error=null。真实物品 Chronobarrier 查询命中 5 条样本，小样本无组合时正常返回，未发生 500。
 - 公网阵容列表、职业概况、阵容分析、卡牌预览、分析与列表页面均返回 200，预览 `dataLabel=19.3`。验收请求按既有限流间隔串行发送；初次过密请求触发一次预期的 429，调整检查间隔后通过，未修改限流规则。
 - 正式应用及查询保护七个源码文件哈希保持不变；Web、机器人和资源健康 timer 正常，MemoryHigh/MemoryMax/TasksMax 保留原值。扎扎、路线下线状态、普通 Day 队列均未改变。
-- 恢复公告 #16 为 draft，未发布。线上证据：`/opt/qiubot/backups/season_19.3_public_acceptance.json`；运行日志：`/opt/qiubot/backups/season_update_19.3_20261024.log`。
+- 恢复公告 #16 为 draft，未发布。最终线上证据：`/opt/qiubot/backups/season_19.3_final_acceptance.json`（484 条）；中间验收快照：`/opt/qiubot/backups/season_19.3_public_acceptance.json`；运行日志：`/opt/qiubot/backups/season_update_19.3_20261024.log`。
 - 隔离候选 82 项测试通过；本地本次配置、边界及 SOP 回归 27 项通过。数据库、卡图、日志、备份和敏感配置不入 Git。
 
 参考已合并记录：[卡图身份修复 `530b92a`](https://github.com/CodeHuba/bazaarqiubot/commit/530b92a)、[阵容分析集成 `8d63813`](https://github.com/CodeHuba/bazaarqiubot/commit/8d63813)、[无效职业过滤 `14dda98`](https://github.com/CodeHuba/bazaarqiubot/commit/14dda98)、[案例选择与分享超时修复 `044f722`](https://github.com/CodeHuba/bazaarqiubot/commit/044f722)、[数据盘分工 `ae291ef`](https://github.com/CodeHuba/bazaarqiubot/commit/ae291ef)。阵容分析行为与缓存细节见[当前发布说明](https://github.com/CodeHuba/bazaarqiubot/blob/8436a3c/docs/comp-analysis.md)。

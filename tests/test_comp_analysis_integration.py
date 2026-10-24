@@ -5,6 +5,8 @@ from pathlib import Path
 
 import pytest
 
+from plugins.bazaar_plugin.data_client import CURRENT_PHASE
+
 ROOT=Path(__file__).resolve().parents[1]
 spec=importlib.util.spec_from_file_location('comp_staging',ROOT/'tools/comp_preview/staging.py')
 staging=importlib.util.module_from_spec(spec)
@@ -23,7 +25,7 @@ def client(tmp_path, monkeypatch):
                wins=10 if i<40 else 5,losses=2,rank='Legendary',screenshot='',
                items=[{'cardId':'q','tier':'Gold'},{'cardId':'a' if i<40 else 'b'}],
                skills=[{'cardId':'s','tier':'Silver'}]) for i in range(60)]
-    payload=dict(runs=rows,cards=cards,season=19,phase='19.2',captured_at='2026-10-19T00:00:00Z',source='test')
+    payload=dict(runs=rows,cards=cards,season=19,phase=CURRENT_PHASE,captured_at='2026-10-19T00:00:00Z',source='test')
     snapshot=tmp_path/'snapshot.json.gz'
     snapshot.write_bytes(gzip.compress(json.dumps(payload).encode()))
     app=staging.create_app(snapshot)
@@ -43,7 +45,7 @@ def test_actual_comp_handler_supports_multi_item_ids_and_exact_names(client):
     assert data['examples'][0]['similar_ten_wins']==40
     from plugins.bazaar_plugin import comp_analysis_store as store
     db_path=client.application.view_functions['api_comp_card'].__globals__['RUNS_DB_PATH']
-    assert store._engines[(str(Path(db_path).resolve()),19,'19.2')].engine.catalog['q']['heroes']==['Vanessa']
+    assert store._engines[(str(Path(db_path).resolve()),19,CURRENT_PHASE)].engine.catalog['q']['heroes']==['Vanessa']
     assert client.get('/comp-preview/api/comp/card?card=q').get_json()['baseline']['count']==60
 
 
@@ -113,13 +115,13 @@ def test_refresh_reuses_unchanged_rows_and_recovers_changed_and_new_runs(client)
     from plugins.bazaar_plugin import comp_analysis_store as store
     namespace=client.application.view_functions['api_comp_card'].__globals__
     path=namespace['RUNS_DB_PATH']
-    key=(str(Path(path).resolve()),19,'19.2')
+    key=(str(Path(path).resolve()),19,CURRENT_PHASE)
     entry=store._engines[key]
     old=entry.engine;old_rows={r['id']:r for r in old.runs}
     with sqlite3.connect(path) as conn:
         conn.execute("UPDATE runs SET stat_wins=3 WHERE id='0'")
         conn.execute("INSERT INTO runs SELECT 'new-run',hero,username,created_at,items_json,skills_json,combats_json,stat_wins,stat_losses,screenshot_url,player_rank,season,phase,card_ids_text,raw_json FROM runs WHERE id='1'")
-    new=store.prewarm(entry.factory,season=19,phase='19.2',wait=True)
+    new=store.prewarm(entry.factory,season=19,phase=CURRENT_PHASE,wait=True)
     new_rows={r['id']:r for r in new.runs}
     assert new_rows['1'] is old_rows['1']
     assert new_rows['0'] is not old_rows['0']
@@ -175,7 +177,7 @@ def test_background_watcher_refreshes_external_insert_without_a_query(client, mo
     from plugins.bazaar_plugin import comp_analysis_store as store
     namespace = client.application.view_functions['api_comp_card'].__globals__
     path = namespace['RUNS_DB_PATH']
-    entry = store._engines[(str(Path(path).resolve()), 19, '19.2')]
+    entry = store._engines[(str(Path(path).resolve()), 19, CURRENT_PHASE)]
     checked = Event()
     original = store.prewarm
     def watched_check(*args, **kwargs):
@@ -183,7 +185,7 @@ def test_background_watcher_refreshes_external_insert_without_a_query(client, mo
         checked.set()
         return value
     monkeypatch.setattr(store, 'prewarm', watched_check)
-    store.start_background_refresh(entry.factory, season=19, phase='19.2')
+    store.start_background_refresh(entry.factory, season=19, phase=CURRENT_PHASE)
     assert checked.wait(2)
     with sqlite3.connect(path) as conn:
         conn.execute("INSERT INTO runs SELECT 'external-fresh-run',hero,username,created_at,items_json,skills_json,combats_json,stat_wins,stat_losses,screenshot_url,player_rank,season,phase,card_ids_text,raw_json FROM runs WHERE id='1'")
