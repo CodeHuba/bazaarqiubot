@@ -300,7 +300,7 @@ class BazaarPlugin(NcatBotPlugin):
             return self._cmd_watchlist(event)
 
         if sub in {"winrate", "胜率"}:
-            return await self._cmd_winrate(arg)
+            return await self._cmd_winrate(arg, event)
 
         if sub == "testpush":
             user_id = getattr(event, "user_id", 0)
@@ -398,7 +398,7 @@ class BazaarPlugin(NcatBotPlugin):
         return None
 
 
-    async def _cmd_winrate(self, arg: str) -> str:
+    async def _cmd_winrate(self, arg: str, event=None) -> str | None:
         """#bz winrate <卡牌1> [卡牌2] ... [--hero 英雄] [--days N] [--legendary]"""
         if not arg:
             return "用法: #bz winrate <卡牌名> [卡牌2] [--hero 英雄] [--days N] [--legendary]\n示例: #bz winrate 万剑之王 --hero Pygmalien"
@@ -414,32 +414,50 @@ class BazaarPlugin(NcatBotPlugin):
         m_days = _re.search(r'--days\s+(\d+)', arg)
         if m_hero:
             hero = m_hero.group(1)
-            arg = arg[:m_hero.start()] + arg[m_hero.end():]
         if m_days:
             days = int(m_days.group(1))
-            arg = arg[:m_days.start()] + arg[m_days.end():]
         if '--legendary' in arg:
             rank_filter = 'legendary'
-            arg = arg.replace('--legendary', '')
+        arg = _re.sub(r'--hero\s+\S+|--days\s+\d+|--legendary\b', '', arg)
 
         cards = arg.split()
         if not cards:
             return "用法: #bz winrate <卡牌名> [卡牌2] [--hero 英雄] [--days N] [--legendary]"
 
-        try:
+        def query():
             rq = RunsQuery()
-            result = await asyncio.get_event_loop().run_in_executor(
-                None, lambda: rq.winrate(
-                    cards=cards,
-                    hero=hero,
-                    days=days,
-                    rank_filter=rank_filter,
-                )
-            )
+            try:
+                return rq.winrate(cards=cards, hero=hero, days=days, rank_filter=rank_filter)
+            finally:
+                if rq.conn is not None:
+                    rq.conn.close()
+
+        try:
+            result = await asyncio.to_thread(query)
         except Exception as e:
             return f"[巴扎] 胜率查询失败: {e}"
 
-        return fmt.format_winrate(result, hero=hero, days=days, rank_filter=rank_filter)
+        fallback = fmt.format_winrate(result, hero=hero, days=days, rank_filter=rank_filter)
+        if event is None or result.get('not_found') or not result.get('card_names'):
+            return fallback
+        try:
+            from .winrate_image import render_winrate
+            if not hasattr(self, '_winrate_render_slots'):
+                self._winrate_render_slots = asyncio.Semaphore(2)
+            async with self._winrate_render_slots:
+                path = await asyncio.to_thread(render_winrate, result)
+            upload = _image_upload_value(path)
+            if upload is None:
+                return fallback
+            if getattr(event, 'message_type', None) == 'private':
+                await self.api.post_private_msg(user_id=event.user_id, image=upload)
+            else:
+                await self.api.post_group_msg(group_id=event.group_id, image=upload)
+        except Exception as error:
+            print(f'[{self.name}] 胜率图片失败，fallback 文字: {error}')
+            return fallback
+        return None
+
 
     async def _cmd_monster_db(self, matches, repository, event=None):
         from .monster_data import day_label, format_monster_text
