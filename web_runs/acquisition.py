@@ -10,7 +10,7 @@ from flask import Blueprint, Response, current_app, jsonify, request
 
 TOKEN = re.compile(r'^[A-Za-z0-9_-]{8,128}$')
 LABEL = re.compile(r'^[a-z0-9_-]{1,64}$')
-PUBLIC_PATH = re.compile(r'^/(?:|runs|winrate|partner|topcard|trivia(?:/[1-9][0-9]*)?|builds(?:/(?:vanessa|dooley|mak|pygmalien|stelle|jules|karnok|dragons))?|feedback|support|zaza|static/privacy\.html)$')
+PUBLIC_PATH = re.compile(r'^/(?:|runs|library/?|winrate|partner|topcard|trivia(?:/[1-9][0-9]*)?|builds(?:/(?:vanessa|dooley|mak|pygmalien|stelle|jules|karnok|dragons))?|feedback|support|zaza|static/privacy\.html)$')
 
 
 @contextmanager

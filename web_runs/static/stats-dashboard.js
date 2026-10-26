@@ -9,12 +9,12 @@ let _statsPeriod = 7;
 let _adminPanel = 'overview';
 let _trendView = 'daily';
 
-const TAB_NAMES = {runs:'阵容查询', winrate:'胜率查询', partner:'最佳搭档', topcard:'职业榜单', feedback:'意见反馈', stats:'数据看板'};
+const TAB_NAMES = {library:'图鉴构筑', runs:'阵容查询', winrate:'胜率查询', partner:'最佳搭档', topcard:'职业榜单', feedback:'意见反馈', stats:'数据看板'};
 const API_NAMES = {
   '/api/comp/card':'阵容分析','/api/runs':'阵容查询','/api/winrate':'胜率查询','/api/partner':'最佳搭档',
   '/api/topcard':'职业榜单','/api/feedback':'意见反馈','/api/track/pv':'页面埋点','/api/ingest':'数据采集'
 };
-const MODULE_NAMES = {
+const MODULE_NAMES = {library:'图鉴构筑',
   runs:'阵容查询', winrate:'胜率查询', partner:'最佳搭档', topcard:'职业榜单',
   routes:'阵容路线', feedback:'意见反馈', trivia:'冷知识', support:'支持',
   stats:'数据看板'
