@@ -30,10 +30,10 @@ HOWBAZAAR_BASE = "https://www.howbazaar.gg"
 MRMAO_BASE = "https://bazaar.mrmao.life"
 MRMAO_API_BASE = "https://bazaarapi.mrmao.life"
 
-# 当前赛季 ID（comprehensive-info 必传）
+# 实际赛季 ID（赛季更新脚本维护）
 CURRENT_SEASON_ID = 19
-# 玩家 stat/history 接口使用独立赛季号，不能影响 runs 等其他链路。
-PLAYER_STAT_SEASON_ID = 19
+# 玩家 stat/history 接口的 seasonId 比实际赛季大 1（S19 → 20），随赛季自动更新。
+PLAYER_STAT_SEASON_ID = CURRENT_SEASON_ID + 1
 CURRENT_PHASE = "19.3"  # 当前赛季阶段，补丁后手动更新
 RUNS_SEASON_ID = 19
 
