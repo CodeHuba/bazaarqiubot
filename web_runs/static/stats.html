@@ -6,7 +6,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>巴扎阵容库 · 数据看板</title>
 <script src="/static/vendor/chart.umd-4.4.0.min.js"></script>
-<script src="/static/stats-dashboard.js?v=comp-tracking-20261019-131736" defer></script>
+<script src="/static/stats-dashboard.js?v=library-20261027" defer></script>
+<script src="/static/stats-library.js?v=1" defer></script>
 <script src="/static/stats-comp.js?v=comp-tracking-20261019-131736" defer></script>
 <script src="/static/stats-search.js?v=20261016-search" defer></script>
 <link rel="stylesheet" href="/static/stats-search.css?v=20261016-search">
@@ -191,6 +192,12 @@ body{font-family:'Inter','PingFang SC','Microsoft YaHei',sans-serif;background:v
 
   <section class="admin-panel" id="panel-features" data-admin-panel="features" role="tabpanel" aria-labelledby="tab-features" hidden>
 
+    <section class="section" aria-labelledby="library-analytics-title">
+      <div class="section-heading"><div><h2 id="library-analytics-title">图鉴构筑 · 使用情况</h2><p data-period-label>近 7 天</p></div><button type="button" class="admin-button" id="library-stats-refresh">刷新统计</button></div>
+      <p class="panel-note" id="library-stats-status" role="status">等待加载图鉴构筑统计…</p>
+      <div id="library-stats-content"></div>
+      <details class="method-note"><summary>使用率统计口径</summary><p>按北京时间及上方周期统计，匿名浏览器标识用于去重，跨设备不合并。全站使用占比＝图鉴访客／全站已埋点访客；构筑使用率＝发生构筑编辑、保存或新建操作的访客／图鉴访客；导出使用率＝成功生成图片并触发下载的访客／图鉴访客。分母为周期内有有效记录的访客；无记录显示“—”。</p><p>初始列表、自动恢复和图片加载不计为主动查询或构筑。搜索停止输入 700 毫秒后记录；筛选按用户点击记录。相同事件编号重试不重复计数。草稿重复保存不计入成功保存。导出成功表示生成并触发下载，无法确认用户最终保留文件。浏览器离线或拦截可能造成漏记。仅记录操作类型，不采集搜索原文、草稿名称或完整构筑。</p></details>
+    </section>
     <section class="section" aria-labelledby="comp-analytics-title">
       <div class="section-heading"><div><h2 id="comp-analytics-title">阵容分析 · 查询与分享</h2><p data-period-label>近 7 天</p></div><button type="button" class="admin-button" id="comp-stats-refresh">刷新统计</button></div>
       <p class="panel-note" id="comp-stats-status" role="status">等待加载阵容分析统计…</p>

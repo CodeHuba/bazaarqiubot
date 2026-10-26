@@ -25,6 +25,7 @@ from flask import Flask, request, jsonify, send_from_directory, send_file, abort
 from werkzeug.middleware.proxy_fix import ProxyFix
 from search_analytics import (PATHS as SEARCH_PATHS, init_search_schema, issue_receipt, record_search, search_rankings)
 from comp_analytics import create_comp_analytics_blueprint, init_comp_analytics
+from library_analytics import create_library_analytics_blueprint, init_library_analytics
 from acquisition import create_acquisition_blueprint, init_acquisition
 from analytics import (
     FeatureEventWriter, aggregate_hot_card_queries, init_analytics_db,
@@ -535,6 +536,13 @@ try:
 except _sqlite3.Error:
     app.logger.warning('Composition analytics initialization unavailable')
 app.register_blueprint(create_comp_analytics_blueprint(
+    stats_path=lambda: STATS_DB, admin_authorized=lambda: _stats_authorized(),
+))
+try:
+    init_library_analytics(STATS_DB)
+except _sqlite3.Error:
+    app.logger.warning('Library analytics initialization unavailable')
+app.register_blueprint(create_library_analytics_blueprint(
     stats_path=lambda: STATS_DB, admin_authorized=lambda: _stats_authorized(),
 ))
 _search_receipt_secret = os.getenv('SEARCH_ANALYTICS_SECRET') or os.getenv('STATS_PASSWORD') or secrets.token_hex(32)

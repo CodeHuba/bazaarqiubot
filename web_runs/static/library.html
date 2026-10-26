@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ctext y='.9em' font-size='55'%3E⚡%3C/text%3E%3C/svg%3E">
+  <title>图鉴构筑 · 巴扎丘Bot</title>
+  <script src="/static/theme.js?v=1"></script>
+  <link rel="stylesheet" href="/static/library.css?v=small-batches-1">
+  <link rel="stylesheet" href="/static/theme.css?v=1">
+  <script src="/static/library-layout.js?v=drag-push-1" defer></script>
+  <script src="/static/library-tracking.js?v=1" defer></script>
+  <script src="/static/library.js?v=production-analytics-1" defer></script>
+</head>
+<body>
+  <nav class="navbar" aria-label="主导航">
+    <a class="logo" href="/library">⚡ 巴扎丘Bot</a>
+    <div class="nav-tabs"><a class="nav-tab" href="https://bazaarqiubot.com/runs" target="_blank" rel="noopener">阵容查询</a><a class="nav-tab active" href="/library" aria-current="page">图鉴构筑</a><a class="nav-tab" href="https://bazaarqiubot.com/winrate" target="_blank" rel="noopener">胜率查询</a><a class="nav-tab" href="https://bazaarqiubot.com/partner" target="_blank" rel="noopener">最佳搭档</a><a class="nav-tab" href="https://bazaarqiubot.com/topcard" target="_blank" rel="noopener">职业榜单</a><a class="nav-tab" href="https://bazaarqiubot.com/trivia" target="_blank" rel="noopener">冷知识</a></div>
+  </nav>
+  <main class="workspace">
+    <header class="page-heading"><div><div class="eyebrow">THE BAZAAR · CARD LIBRARY</div><h1>卡牌图鉴与构筑<span class="preview-badge">预览版</span></h1><p>查找物品与技能，搭建并保存你的构筑。</p></div><div class="heading-meta"><span class="live-dot"></span><span id="data-version">读取本地数据…</span><button id="drafts-open" class="button">我的草稿 <span id="draft-count">0</span></button></div></header>
+    <div class="mobile-tools"><button class="button" id="filters-open">☷ 筛选 <span id="filter-count">0</span></button><button class="button primary" id="mobile-build" aria-controls="builder-content">编辑构筑 <span id="mobile-count">0/10</span></button></div>
+    <div class="library-layout">
+      <aside id="filters" class="filters" aria-label="图鉴筛选">
+        <div class="filter-heading"><strong>筛选图鉴</strong><button id="reset" class="text-button">重置</button><button id="filters-close" class="icon-button mobile-only" aria-label="关闭筛选">×</button></div>
+        <div class="segmented" aria-label="卡牌类型"><button class="selected" data-type="Item" aria-pressed="true">◈ 物品</button><button data-type="Skill" aria-pressed="false">✧ 技能</button></div>
+        <section class="filter-section"><h2>英雄<span id="hero-caption">全部英雄</span></h2><div id="hero-options" class="hero-options"></div><label class="check-label"><input id="include-common" type="checkbox"> 包含通用卡牌</label></section>
+        <section class="filter-section"><h2>标签<button class="text-button" id="tags-expand">展开全部</button></h2><input id="tag-search" class="field small-field" placeholder="搜索标签…" aria-label="搜索标签"><div class="tag-options" id="tag-options"></div><label class="check-label"><input id="hidden-tags" type="checkbox"> 同时匹配隐藏标签</label></section>
+        <section class="filter-section" id="size-filter"><h2>物品尺寸</h2><div class="size-options"><button data-size="Small"><span>▯</span>小型 <small>1 格</small></button><button data-size="Medium"><span>▯▯</span>中型 <small>2 格</small></button><button data-size="Large"><span>▯▯▯</span>大型 <small>3 格</small></button></div></section>
+        <section class="filter-section"><h2>最低出现品质</h2><div class="quality-options" id="quality-options"></div></section>
+        <section class="filter-section"><h2>商人</h2><details id="merchant-picker" class="merchant-picker"><summary id="merchant-summary" aria-label="选择商人"><span id="merchant-selected"></span><span class="merchant-chevron" aria-hidden="true">⌄</span></summary><div class="merchant-menu"><input id="merchant-search" class="field" type="search" placeholder="搜索商人名称…" aria-label="搜索商人"><div id="merchant-options" class="merchant-options" role="group" aria-label="商人选项"></div></div></details></section>
+        <footer class="filter-footer">数据来自本地 GameData 与官方中文。<br>商人筛选按静态货池条件匹配。</footer>
+      </aside>
+      <section class="catalog" aria-label="卡牌列表">
+        <div class="catalog-toolbar"><label class="search-box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg><input id="search" type="search" placeholder="搜索卡牌名称、效果或标签…" autocomplete="off"><kbd>/</kbd></label><select id="sort" class="field sort-field" aria-label="排序"><option value="hero">英雄优先</option><option value="name">名称排序</option><option value="size">尺寸排序</option><option value="quality">品质排序</option></select></div>
+        <div class="results-line"><div><strong id="result-count">—</strong> <span id="result-label">件物品</span><span class="result-divider">/</span><span id="scope-label">全部英雄</span></div><span class="browse-hint">点击卡牌查看详情</span></div>
+        <div id="active-filters" class="active-filters"></div>
+        <div id="card-grid" class="card-grid" aria-live="polite"><div class="empty-state">正在整理卡牌图鉴…</div></div>
+        <button class="button load-more" id="load-more" hidden>加载更多</button>
+        <p class="catalog-footnote">图鉴展示卡牌基础效果；实际数值可能随对局、成长与其他物品变化。</p>
+      </section>
+    </div>
+  </main>
+  <section id="builder" class="builder" aria-label="构筑编辑器">
+    <div class="builder-top"><div class="builder-title"><span class="builder-symbol">◈</span><input id="build-name" value="未命名构筑" maxlength="48" aria-label="构筑名称"><span class="slot-counter"><b id="slots-used">0</b> / 10 格</span><span id="saved-status" class="saved-status">自动保存到本机</span></div><div class="builder-actions"><button class="icon-button" id="undo" aria-label="撤销" title="撤销">↶</button><button class="icon-button" id="redo" aria-label="重做" title="重做">↷</button><button class="text-button" id="clear">清空</button><button class="button primary" id="export">↗ 导出图片</button><button class="button builder-toggle" id="builder-toggle" aria-label="收起构筑" aria-expanded="true" aria-controls="builder-content"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m5 7 5 5 5-5"/></svg><span id="builder-toggle-label">收起构筑</span></button></div></div>
+    <div id="builder-content" class="builder-content"><div class="board-side"><div class="board-scroll"><div id="board" class="board"></div></div></div><div class="skills-side"><div class="section-label"><span>技能 <small id="skill-count">0 个</small></span><button class="text-button" id="find-skills">＋ 添加技能</button></div><div id="skills" class="skills-list"><span class="skill-placeholder">为这套构筑挑选技能</span></div></div></div>
+    <div id="placement-status" class="placement-status" role="status" aria-live="polite"></div>
+  </section>
+  <div id="backdrop" class="backdrop" hidden></div>
+  <dialog id="detail-dialog" class="detail-dialog"><div id="detail-content"></div></dialog>
+  <dialog id="draft-dialog" class="draft-dialog"><div class="dialog-heading"><h2>我的草稿</h2><button class="icon-button" data-close="draft-dialog" aria-label="关闭草稿">×</button></div><p class="subtle">草稿保存在当前浏览器。</p><div class="draft-actions"><button id="save-draft" class="button primary">保存当前构筑</button><button id="new-build" class="button">新建构筑</button></div><div id="draft-list"></div></dialog>
+  <div id="toast" class="toast" role="status" hidden></div>
+</body>
+</html>
