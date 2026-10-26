@@ -1,5 +1,6 @@
 import asyncio
 import importlib
+import re
 import sys
 from collections import defaultdict
 from types import ModuleType
@@ -220,6 +221,122 @@ def test_db_partial_chinese_name_returns_candidates(monkeypatch, tmp_path):
 
     assert queried == ["管风", "Pipe Organ"]
     assert result == "📦 完整资料：Pipe Organ"
+
+
+def test_db_candidate_limit_is_shared_across_types_and_duplicates(monkeypatch):
+    module = load_plugin_module(monkeypatch)
+    cards = [{'Id': f'item-{i}', 'Type': 'Item', 'InternalName': f'Frost item {i}'} for i in range(4)]
+    cards += [{'Id': f'skill-{i}', 'Type': 'Skill', 'InternalName': f'Frost skill {i}'} for i in range(4)]
+    cards.insert(1, cards[0].copy())
+    monsters = [{'id': f'monster-{i}', 'name': f'Frost beast {i}', 'level': 3, 'day': '2'} for i in range(8)]
+
+    entries = module._db_candidates('Frost', cards, monsters)
+    text = module._format_db_candidates('Frost', entries)
+
+    assert len(entries) == 10
+    assert len(re.findall(r'^\d+\. ', text, re.M)) == 10
+    assert text.count('Frost item 0（物品）') == 1
+    assert '（技能）' in text and '（野怪｜Day 2｜等级 3）' in text
+    assert '（卡牌）' not in text
+
+
+def test_db_candidate_labels_cover_merchants_and_events(monkeypatch):
+    module = load_plugin_module(monkeypatch)
+    cards = [
+        {'Id': 'shop', 'Type': 'EventEncounter', 'Tags': ['Merchant'], 'InternalName': 'Test Shop'},
+        {'Id': 'event', 'Type': 'EventEncounter', 'InternalName': 'Test Event'},
+        {'Id': 'pedestal', 'Type': 'PedestalEncounter', 'InternalName': 'Test Pedestal'},
+    ]
+    entries = module._db_candidates('Test', cards)
+    assert [entry['type'] for entry in entries] == ['商店', '遭遇事件', '遭遇事件']
+
+
+def test_db_candidates_deduplicate_search_and_detail_identifiers(monkeypatch):
+    module = load_plugin_module(monkeypatch)
+    cards = [
+        {'Id': 'uuid-detail', 'Type': 'Item', 'Title': {'Text': 'Test Name'}},
+        {'urlId': 'short-search-id', 'Type': 'Item', 'title': 'Test Name'},
+        {'Id': 'skill-same-name', 'Type': 'Skill', 'title': 'Test Name'},
+    ]
+    entries = module._db_candidates('Test', cards)
+    assert len(entries) == 2
+    assert {entry['type'] for entry in entries} == {'物品', '技能'}
+
+
+def test_db_fuzzy_monster_candidates_deduplicate_identical_visible_forms(monkeypatch):
+    module = load_plugin_module(monkeypatch)
+    monsters = [{'id': f'variant-{i}', 'name': 'Frost Beast', 'day': '3', 'level': 4, 'tier': 'Gold'} for i in range(2)]
+    assert len(module._db_candidates('Frost', monsters=monsters)) == 1
+
+
+def test_db_remote_candidates_are_typed_and_capped_in_total(monkeypatch):
+    module = load_plugin_module(monkeypatch)
+    plugin = module.BazaarPlugin()
+    monkeypatch.setattr(module.card_data_paths, 'get_gamedata_db_path', lambda *a, **k: None)
+    monkeypatch.setattr(module.bdb, 'query_card_by_name', lambda name: None)
+    monkeypatch.setattr(module.bdb, 'search_cards', lambda name, kind: [
+        {'urlId': f'{kind}-{i}', 'title': f'Test {kind} {i}'} for i in range(6)
+    ])
+
+    result = asyncio.run(plugin._cmd_db('Test'))
+
+    assert len(re.findall(r'^\d+\. ', result, re.M)) == 10
+    assert '（物品）' in result and '（技能）' in result
+
+
+def test_db_remote_fuzzy_first_result_does_not_skip_candidates(monkeypatch):
+    module = load_plugin_module(monkeypatch)
+    plugin = module.BazaarPlugin()
+    monkeypatch.setattr(module.card_data_paths, 'get_gamedata_db_path', lambda *a, **k: None)
+    monkeypatch.setattr(module.bdb, 'query_card_by_name', lambda name: {
+        'Id': 'wrong-first', 'Type': 'Item', 'Title': {'Text': 'Wrong Potion'},
+    })
+    monkeypatch.setattr(module.bdb, 'search_cards', lambda name, kind: [
+        {'urlId': f'{kind}-hit', 'title': f'Potion {kind}'}
+    ])
+    monkeypatch.setattr(module.bdb, 'format_card', lambda card: pytest.fail('不可直接展示首个模糊结果'))
+
+    result = asyncio.run(plugin._cmd_db('Potion'))
+
+    assert '未精确匹配' in result
+    assert 'Potion skill（技能）' in result
+    assert 'Potion item（物品）' in result
+
+
+def test_db_requested_skill_type_filters_remote_fallback(monkeypatch):
+    module = load_plugin_module(monkeypatch)
+    plugin = module.BazaarPlugin()
+    monkeypatch.setattr(module.card_data_paths, 'get_gamedata_db_path', lambda *a, **k: None)
+    monkeypatch.setattr(module.bdb, 'query_card_by_name', lambda name: {
+        'Id': 'wrong-type', 'Type': 'Item', 'Title': {'Text': 'Test'},
+    })
+    searched = []
+    def search(name, kind):
+        searched.append(kind)
+        return [{'urlId': 'skill-hit', 'title': 'Test Skill'}]
+    monkeypatch.setattr(module.bdb, 'search_cards', search)
+    monkeypatch.setattr(module.bdb, 'format_card', lambda card: pytest.fail('不可展示其他类型'))
+
+    result = asyncio.run(plugin._cmd_db('技能 Test'))
+
+    assert searched == ['skill']
+    assert 'Test Skill（技能）' in result and '（物品）' not in result
+
+
+def test_db_remote_search_keeps_other_type_when_one_source_fails(monkeypatch):
+    module = load_plugin_module(monkeypatch)
+    plugin = module.BazaarPlugin()
+    monkeypatch.setattr(module.card_data_paths, 'get_gamedata_db_path', lambda *a, **k: None)
+    monkeypatch.setattr(module.bdb, 'query_card_by_name', lambda name: None)
+    def search(name, kind):
+        if kind == 'item':
+            raise RuntimeError('item search unavailable')
+        return [{'urlId': 'skill-hit', 'title': 'Test Skill'}]
+    monkeypatch.setattr(module.bdb, 'search_cards', search)
+
+    result = asyncio.run(plugin._cmd_db('Test'))
+
+    assert 'Test Skill（技能）' in result
 
 
 def test_db_enchant_tooltip_uses_official_hash_translation(monkeypatch):

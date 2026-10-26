@@ -2,6 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
+<script src="/static/theme.js?v=1"></script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>最佳搭档 | 巴扎丘Bot</title>
 <meta name="description" content="查询 The Bazaar 卡牌的最佳搭档和组合率。">
@@ -24,28 +25,28 @@
 /* CSS 变量 - 色彩系统 */
 :root {
   /* 主色 */
-  --bg-deep: #090A2A;
-  --bg-surface: #171047;
-  --neon-magenta: #F438B8;
-  --neon-cyan: #26D9F2;
-  --neon-violet: #8A4DFF;
-  --neon-teal: #36E3C1;
-  --neon-coral: #FF536A;
-  --neon-gold: #F5C76A;
-  --text-primary: #F5F4FF;
-  --text-secondary: #B5B3D7;
+  --bg-deep: var(--theme-bg, #090A2A);
+  --bg-surface: var(--theme-surface, #171047);
+  --neon-magenta: var(--theme-magenta, #F438B8);
+  --neon-cyan: var(--theme-cyan, #26D9F2);
+  --neon-violet: var(--theme-violet, #8A4DFF);
+  --neon-teal: var(--theme-teal, #36E3C1);
+  --neon-coral: var(--theme-coral, #FF536A);
+  --neon-gold: var(--theme-gold, #F5C76A);
+  --text-primary: var(--theme-text, #F5F4FF);
+  --text-secondary: var(--theme-muted, #B5B3D7);
 
   /* 功能色 */
-  --border-dim: rgba(138, 77, 255, 0.15);
-  --border-bright: rgba(38, 217, 242, 0.4);
-  --glow-magenta: 0 0 20px rgba(244, 56, 184, 0.5);
-  --glow-cyan: 0 0 20px rgba(38, 217, 242, 0.5);
-  --glow-violet: 0 0 16px rgba(138, 77, 255, 0.4);
+  --border-dim: rgba(var(--theme-violet-rgb, 138, 77, 255), 0.15);
+  --border-bright: rgba(var(--theme-cyan-rgb, 38, 217, 242), 0.4);
+  --glow-magenta: 0 0 20px rgba(var(--theme-magenta-rgb, 244, 56, 184), 0.5);
+  --glow-cyan: 0 0 20px rgba(var(--theme-cyan-rgb, 38, 217, 242), 0.5);
+  --glow-violet: 0 0 16px rgba(var(--theme-violet-rgb, 138, 77, 255), 0.4);
 
   /* 胜率渐变 */
-  --win-high: #36E3C1;
-  --win-mid: #F5C76A;
-  --win-low: #FF536A;
+  --win-high: var(--theme-teal, #36E3C1);
+  --win-mid: var(--theme-gold, #F5C76A);
+  --win-low: var(--theme-coral, #FF536A);
 }
 
 /* 全局重置 */
@@ -60,8 +61,8 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif;
   background: var(--bg-deep);
   background-image:
-    linear-gradient(rgba(138, 77, 255, 0.03) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(138, 77, 255, 0.03) 1px, transparent 1px);
+    linear-gradient(rgba(var(--theme-violet-rgb, 138, 77, 255), 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(var(--theme-violet-rgb, 138, 77, 255), 0.03) 1px, transparent 1px);
   background-size: 24px 24px;
   color: var(--text-primary);
   min-height: 100vh;
@@ -82,8 +83,8 @@ body::before {
     0deg,
     transparent,
     transparent 2px,
-    rgba(38, 217, 242, 0.02) 2px,
-    rgba(38, 217, 242, 0.02) 4px
+    rgba(var(--theme-cyan-rgb, 38, 217, 242), 0.02) 2px,
+    rgba(var(--theme-cyan-rgb, 38, 217, 242), 0.02) 4px
   );
   pointer-events: none;
   z-index: 1;
@@ -104,7 +105,7 @@ body::before {
   align-items: center;
   height: 64px;
   gap: 32px;
-  box-shadow: 0 4px 24px rgba(244, 56, 184, 0.15);
+  box-shadow: 0 4px 24px rgba(var(--theme-magenta-rgb, 244, 56, 184), 0.15);
 }
 
 .logo {
@@ -150,12 +151,12 @@ body::before {
 .nav-tab:hover {
   color: var(--text-primary);
   border-color: var(--border-bright);
-  background: rgba(38, 217, 242, 0.08);
+  background: rgba(var(--theme-cyan-rgb, 38, 217, 242), 0.08);
 }
 
 .nav-tab.active {
   color: var(--text-primary);
-  background: linear-gradient(135deg, rgba(244, 56, 184, 0.15), rgba(38, 217, 242, 0.15));
+  background: linear-gradient(135deg, rgba(var(--theme-magenta-rgb, 244, 56, 184), 0.15), rgba(var(--theme-cyan-rgb, 38, 217, 242), 0.15));
   border-color: var(--neon-magenta);
   box-shadow: var(--glow-magenta);
 }
@@ -200,12 +201,12 @@ body::before {
 /* 筛选卡片 - 品红主边框 + 青色角标 */
 .form-card {
   background: var(--bg-surface);
-  border: 1px solid rgba(244, 56, 184, 0.35);
+  border: 1px solid rgba(var(--theme-magenta-rgb, 244, 56, 184), 0.35);
   border-radius: 8px;
   padding: 20px 24px;
   margin-bottom: 24px;
   position: relative;
-  box-shadow: inset 0 0 40px rgba(244, 56, 184, 0.04);
+  box-shadow: inset 0 0 40px rgba(var(--theme-magenta-rgb, 244, 56, 184), 0.04);
 }
 
 /* 青色角标 */
@@ -266,8 +267,8 @@ body::before {
 
 /* 输入框 / 下拉框 */
 input, select {
-  background: rgba(9, 10, 42, 0.8);
-  border: 1px solid rgba(138, 77, 255, 0.3);
+  background: rgba(var(--theme-bg-rgb, 9, 10, 42), 0.8);
+  border: 1px solid rgba(var(--theme-violet-rgb, 138, 77, 255), 0.3);
   border-radius: 6px;
   padding: 9px 14px;
   color: var(--text-primary);
@@ -279,17 +280,17 @@ input, select {
 }
 
 input:hover, select:hover {
-  border-color: rgba(38, 217, 242, 0.5);
+  border-color: rgba(var(--theme-cyan-rgb, 38, 217, 242), 0.5);
 }
 
 input:focus, select:focus {
   border-color: var(--neon-cyan);
-  box-shadow: 0 0 0 2px rgba(38, 217, 242, 0.15);
-  background: rgba(9, 10, 42, 1);
+  box-shadow: 0 0 0 2px rgba(var(--theme-cyan-rgb, 38, 217, 242), 0.15);
+  background: rgba(var(--theme-bg-rgb, 9, 10, 42), 1);
 }
 
 input::placeholder {
-  color: rgba(181, 179, 215, 0.4);
+  color: rgba(var(--theme-muted-rgb, 181, 179, 215), 0.4);
 }
 
 /* select 选项颜色 */
@@ -317,22 +318,22 @@ select option {
 .btn-primary {
   background: linear-gradient(135deg, var(--neon-magenta), var(--neon-violet));
   color: #fff;
-  box-shadow: 0 4px 16px rgba(244, 56, 184, 0.4);
+  box-shadow: 0 4px 16px rgba(var(--theme-magenta-rgb, 244, 56, 184), 0.4);
 }
 
 .btn-primary:hover {
   transform: translateY(-1px);
-  box-shadow: 0 6px 24px rgba(244, 56, 184, 0.6);
+  box-shadow: 0 6px 24px rgba(var(--theme-magenta-rgb, 244, 56, 184), 0.6);
   filter: brightness(1.1);
 }
 
 .btn-primary:active {
   transform: translateY(0);
-  box-shadow: 0 2px 8px rgba(244, 56, 184, 0.4);
+  box-shadow: 0 2px 8px rgba(var(--theme-magenta-rgb, 244, 56, 184), 0.4);
 }
 
 .btn-primary:disabled {
-  background: rgba(138, 77, 255, 0.15);
+  background: rgba(var(--theme-violet-rgb, 138, 77, 255), 0.15);
   color: var(--text-secondary);
   cursor: not-allowed;
   box-shadow: none;
@@ -361,8 +362,8 @@ select option {
   border-radius: 4px;
   font-size: 13px;
   cursor: pointer;
-  border: 1px solid rgba(38, 217, 242, 0.2);
-  background: rgba(38, 217, 242, 0.05);
+  border: 1px solid rgba(var(--theme-cyan-rgb, 38, 217, 242), 0.2);
+  background: rgba(var(--theme-cyan-rgb, 38, 217, 242), 0.05);
   color: var(--text-secondary);
   transition: all 0.2s;
   font-weight: 500;
@@ -371,13 +372,13 @@ select option {
 .chip:hover {
   border-color: var(--neon-cyan);
   color: var(--neon-cyan);
-  background: rgba(38, 217, 242, 0.12);
-  box-shadow: 0 0 8px rgba(38, 217, 242, 0.3);
+  background: rgba(var(--theme-cyan-rgb, 38, 217, 242), 0.12);
+  box-shadow: 0 0 8px rgba(var(--theme-cyan-rgb, 38, 217, 242), 0.3);
 }
 
 .chip .cnt {
   font-size: 10px;
-  color: rgba(181, 179, 215, 0.5);
+  color: rgba(var(--theme-muted-rgb, 181, 179, 215), 0.5);
   margin-left: 4px;
 }
 
@@ -387,13 +388,13 @@ select option {
 
 /* 青色主边框 + 品红角标 */
 .result-card {
-  background: rgba(23, 16, 71, 0.7);
-  border: 1px solid rgba(38, 217, 242, 0.3);
+  background: rgba(var(--theme-surface-rgb, 23, 16, 71), 0.7);
+  border: 1px solid rgba(var(--theme-cyan-rgb, 38, 217, 242), 0.3);
   border-radius: 8px;
   overflow: hidden;
   margin-bottom: 24px;
   position: relative;
-  box-shadow: 0 0 0 0 transparent, inset 0 0 32px rgba(38, 217, 242, 0.03);
+  box-shadow: 0 0 0 0 transparent, inset 0 0 32px rgba(var(--theme-cyan-rgb, 38, 217, 242), 0.03);
   transition: box-shadow 0.3s;
 }
 
@@ -412,30 +413,30 @@ select option {
 }
 
 .result-card:hover {
-  box-shadow: 0 0 20px rgba(38, 217, 242, 0.12);
+  box-shadow: 0 0 20px rgba(var(--theme-cyan-rgb, 38, 217, 242), 0.12);
 }
 
 .result-header {
   padding: 12px 20px;
-  border-bottom: 1px solid rgba(38, 217, 242, 0.15);
+  border-bottom: 1px solid rgba(var(--theme-cyan-rgb, 38, 217, 242), 0.15);
   font-size: 13px;
   color: var(--text-secondary);
   display: flex;
   justify-content: space-between;
   align-items: center;
-  background: rgba(9, 10, 42, 0.4);
+  background: rgba(var(--theme-bg-rgb, 9, 10, 42), 0.4);
 }
 
 .total {
   color: var(--neon-cyan);
   font-weight: 700;
-  text-shadow: 0 0 8px rgba(38, 217, 242, 0.6);
+  text-shadow: 0 0 8px rgba(var(--theme-cyan-rgb, 38, 217, 242), 0.6);
 }
 
 /* 阵容列表项 */
 .run-item {
   padding: 12px 20px;
-  border-bottom: 1px solid rgba(138, 77, 255, 0.1);
+  border-bottom: 1px solid rgba(var(--theme-violet-rgb, 138, 77, 255), 0.1);
   display: flex;
   gap: 12px;
   align-items: center;
@@ -443,7 +444,7 @@ select option {
 }
 
 .run-item:hover {
-  background: rgba(244, 56, 184, 0.05);
+  background: rgba(var(--theme-magenta-rgb, 244, 56, 184), 0.05);
 }
 
 .run-item:last-child {
@@ -456,9 +457,9 @@ select option {
   font-size: 12px;
   font-weight: 700;
   white-space: nowrap;
-  background: rgba(244, 56, 184, 0.12);
+  background: rgba(var(--theme-magenta-rgb, 244, 56, 184), 0.12);
   color: var(--neon-magenta);
-  border: 1px solid rgba(244, 56, 184, 0.35);
+  border: 1px solid rgba(var(--theme-magenta-rgb, 244, 56, 184), 0.35);
 }
 
 .run-meta {
@@ -510,7 +511,7 @@ select option {
 .page-btn {
   padding: 6px 14px;
   border-radius: 4px;
-  border: 1px solid rgba(138, 77, 255, 0.3);
+  border: 1px solid rgba(var(--theme-violet-rgb, 138, 77, 255), 0.3);
   background: transparent;
   color: var(--text-secondary);
   cursor: pointer;
@@ -523,7 +524,7 @@ select option {
 .page-btn:hover {
   border-color: var(--neon-violet);
   color: var(--neon-violet);
-  background: rgba(138, 77, 255, 0.1);
+  background: rgba(var(--theme-violet-rgb, 138, 77, 255), 0.1);
 }
 
 .page-btn.active {
@@ -540,8 +541,8 @@ select option {
 
 /* 胜率查询 - 偏电光青 */
 .winrate-card {
-  background: rgba(23, 16, 71, 0.7);
-  border: 1px solid rgba(38, 217, 242, 0.3);
+  background: rgba(var(--theme-surface-rgb, 23, 16, 71), 0.7);
+  border: 1px solid rgba(var(--theme-cyan-rgb, 38, 217, 242), 0.3);
   border-radius: 8px;
   padding: 36px;
   text-align: center;
@@ -579,7 +580,7 @@ select option {
 }
 
 .winrate-bar-wrap {
-  background: rgba(138, 77, 255, 0.1);
+  background: rgba(var(--theme-violet-rgb, 138, 77, 255), 0.1);
   border-radius: 4px;
   height: 8px;
   width: 320px;
@@ -592,7 +593,7 @@ select option {
   content: '';
   position: absolute;
   inset: 0;
-  border: 1px solid rgba(38, 217, 242, 0.2);
+  border: 1px solid rgba(var(--theme-cyan-rgb, 38, 217, 242), 0.2);
   border-radius: 4px;
 }
 
@@ -643,8 +644,8 @@ select option {
   text-transform: uppercase;
   letter-spacing: 0.1em;
   padding: 10px 20px 8px;
-  border-bottom: 1px solid rgba(54, 227, 193, 0.15);
-  background: rgba(54, 227, 193, 0.04);
+  border-bottom: 1px solid rgba(var(--theme-teal-rgb, 54, 227, 193), 0.15);
+  background: rgba(var(--theme-teal-rgb, 54, 227, 193), 0.04);
 }
 
 .partner-item {
@@ -652,12 +653,12 @@ select option {
   align-items: center;
   gap: 14px;
   padding: 12px 20px;
-  border-bottom: 1px solid rgba(138, 77, 255, 0.1);
+  border-bottom: 1px solid rgba(var(--theme-violet-rgb, 138, 77, 255), 0.1);
   transition: background 0.15s;
 }
 
 .partner-item:hover {
-  background: rgba(54, 227, 193, 0.05);
+  background: rgba(var(--theme-teal-rgb, 54, 227, 193), 0.05);
 }
 
 .partner-item:last-child {
@@ -692,7 +693,7 @@ select option {
 
 .partner-bar-wrap {
   width: 80px;
-  background: rgba(138, 77, 255, 0.1);
+  background: rgba(var(--theme-violet-rgb, 138, 77, 255), 0.1);
   border-radius: 4px;
   height: 5px;
   overflow: hidden;
@@ -715,8 +716,8 @@ select option {
 }
 
 .topcard-hero-card {
-  background: rgba(23, 16, 71, 0.7);
-  border: 1px solid rgba(138, 77, 255, 0.35);
+  background: rgba(var(--theme-surface-rgb, 23, 16, 71), 0.7);
+  border: 1px solid rgba(var(--theme-violet-rgb, 138, 77, 255), 0.35);
   border-radius: 8px;
   overflow: hidden;
   position: relative;
@@ -739,8 +740,8 @@ select option {
   align-items: center;
   justify-content: space-between;
   padding: 12px 18px;
-  border-bottom: 1px solid rgba(138, 77, 255, 0.2);
-  background: rgba(9, 10, 42, 0.5);
+  border-bottom: 1px solid rgba(var(--theme-violet-rgb, 138, 77, 255), 0.2);
+  background: rgba(var(--theme-bg-rgb, 9, 10, 42), 0.5);
 }
 
 .topcard-hero-name {
@@ -760,12 +761,12 @@ select option {
   align-items: center;
   gap: 12px;
   padding: 10px 18px;
-  border-bottom: 1px solid rgba(138, 77, 255, 0.08);
+  border-bottom: 1px solid rgba(var(--theme-violet-rgb, 138, 77, 255), 0.08);
   transition: background 0.15s;
 }
 
 .topcard-item:hover {
-  background: rgba(138, 77, 255, 0.05);
+  background: rgba(var(--theme-violet-rgb, 138, 77, 255), 0.05);
 }
 
 .topcard-item:last-child {
@@ -824,7 +825,7 @@ select option {
 
 .topcard-bar-wrap {
   width: 60px;
-  background: rgba(138, 77, 255, 0.1);
+  background: rgba(var(--theme-violet-rgb, 138, 77, 255), 0.1);
   border-radius: 4px;
   height: 4px;
   overflow: hidden;
@@ -862,8 +863,8 @@ select option {
 .fb-textarea {
   width: 100%;
   min-height: 100px;
-  background: rgba(9, 10, 42, 0.8);
-  border: 1px solid rgba(255, 83, 106, 0.3);
+  background: rgba(var(--theme-bg-rgb, 9, 10, 42), 0.8);
+  border: 1px solid rgba(var(--theme-coral-rgb, 255, 83, 106), 0.3);
   border-radius: 6px;
   padding: 12px;
   color: var(--text-primary);
@@ -877,8 +878,8 @@ select option {
 
 .fb-textarea:focus {
   border-color: var(--neon-coral);
-  box-shadow: 0 0 0 2px rgba(255, 83, 106, 0.15);
-  background: rgba(9, 10, 42, 1);
+  box-shadow: 0 0 0 2px rgba(var(--theme-coral-rgb, 255, 83, 106), 0.15);
+  background: rgba(var(--theme-bg-rgb, 9, 10, 42), 1);
 }
 
 .fb-contact-input {
@@ -891,12 +892,12 @@ select option {
   background: linear-gradient(135deg, var(--neon-coral), var(--neon-magenta));
   color: #fff;
   font-weight: 700;
-  box-shadow: 0 4px 16px rgba(255, 83, 106, 0.4);
+  box-shadow: 0 4px 16px rgba(var(--theme-coral-rgb, 255, 83, 106), 0.4);
 }
 
 .fb-submit-btn:hover {
   transform: translateY(-1px);
-  box-shadow: 0 6px 24px rgba(255, 83, 106, 0.6);
+  box-shadow: 0 6px 24px rgba(var(--theme-coral-rgb, 255, 83, 106), 0.6);
   filter: brightness(1.1);
 }
 
@@ -908,8 +909,8 @@ select option {
 }
 
 .fb-card {
-  background: rgba(23, 16, 71, 0.7);
-  border: 1px solid rgba(255, 83, 106, 0.3);
+  background: rgba(var(--theme-surface-rgb, 23, 16, 71), 0.7);
+  border: 1px solid rgba(var(--theme-coral-rgb, 255, 83, 106), 0.3);
   border-radius: 8px;
   padding: 16px 20px;
   margin-bottom: 12px;
@@ -948,13 +949,13 @@ select option {
   gap: 10px;
   margin-top: 10px;
   padding-top: 10px;
-  border-top: 1px solid rgba(138, 77, 255, 0.15);
+  border-top: 1px solid rgba(var(--theme-violet-rgb, 138, 77, 255), 0.15);
 }
 
 .fb-like-btn {
   padding: 4px 12px;
   border-radius: 4px;
-  border: 1px solid rgba(255, 83, 106, 0.3);
+  border: 1px solid rgba(var(--theme-coral-rgb, 255, 83, 106), 0.3);
   background: transparent;
   color: var(--text-secondary);
   cursor: pointer;
@@ -970,13 +971,13 @@ select option {
 .fb-like-btn:hover {
   border-color: var(--neon-coral);
   color: var(--neon-coral);
-  background: rgba(255, 83, 106, 0.08);
+  background: rgba(var(--theme-coral-rgb, 255, 83, 106), 0.08);
 }
 
 .fb-like-btn.liked {
   border-color: var(--neon-coral);
   color: var(--neon-coral);
-  background: rgba(255, 83, 106, 0.15);
+  background: rgba(var(--theme-coral-rgb, 255, 83, 106), 0.15);
 }
 
 /* 通用状态 - Loading / Empty / Error */
@@ -1016,8 +1017,8 @@ select option {
 }
 
 .error-msg {
-  background: rgba(255, 83, 106, 0.08);
-  border: 1px solid rgba(255, 83, 106, 0.35);
+  background: rgba(var(--theme-coral-rgb, 255, 83, 106), 0.08);
+  border: 1px solid rgba(var(--theme-coral-rgb, 255, 83, 106), 0.35);
   border-radius: 6px;
   padding: 12px 16px;
   color: var(--neon-coral);
@@ -1044,7 +1045,7 @@ select option {
 
 .run-link:hover {
   color: var(--neon-teal);
-  text-shadow: 0 0 8px rgba(38, 217, 242, 0.5);
+  text-shadow: 0 0 8px rgba(var(--theme-cyan-rgb, 38, 217, 242), 0.5);
 }
 
 /* Footer */
@@ -1056,7 +1057,7 @@ body {
 footer {
   margin-top: auto;
   padding: 30px 20px;
-  border-top: 1px solid rgba(138, 77, 255, 0.2);
+  border-top: 1px solid rgba(var(--theme-violet-rgb, 138, 77, 255), 0.2);
   text-align: center;
   color: var(--text-secondary);
   font-size: 12px;
@@ -1073,7 +1074,7 @@ footer a {
 
 footer a:hover {
   color: var(--neon-teal);
-  text-shadow: 0 0 8px rgba(38, 217, 242, 0.5);
+  text-shadow: 0 0 8px rgba(var(--theme-cyan-rgb, 38, 217, 242), 0.5);
 }
 
 /* 移动端适配 (< 768px) */
@@ -1215,11 +1216,11 @@ footer a:hover {
 
 .fb-form-card {
   background: var(--bg-surface);
-  border: 1px solid rgba(255, 83, 106, 0.35);
+  border: 1px solid rgba(var(--theme-coral-rgb, 255, 83, 106), 0.35);
   border-radius: 8px;
   padding: 20px;
   position: relative;
-  box-shadow: inset 0 0 40px rgba(255, 83, 106, 0.04);
+  box-shadow: inset 0 0 40px rgba(var(--theme-coral-rgb, 255, 83, 106), 0.04);
   position: sticky;
   top: 80px;
 }
@@ -1238,7 +1239,7 @@ footer a:hover {
 
 .fb-success {
   display: none;
-  background: rgba(54, 227, 193, 0.12);
+  background: rgba(var(--theme-teal-rgb, 54, 227, 193), 0.12);
   border: 1px solid var(--neon-teal);
   border-radius: 6px;
   padding: 10px 14px;
@@ -1264,7 +1265,7 @@ footer a:hover {
 }
 
 .fb-upload-hint {
-  border: 1px dashed rgba(255, 83, 106, 0.3);
+  border: 1px dashed rgba(var(--theme-coral-rgb, 255, 83, 106), 0.3);
   border-radius: 6px;
   padding: 10px;
   text-align: center;
@@ -1276,7 +1277,7 @@ footer a:hover {
 
 .fb-upload-hint:hover {
   border-color: var(--neon-coral);
-  background: rgba(255, 83, 106, 0.05);
+  background: rgba(var(--theme-coral-rgb, 255, 83, 106), 0.05);
 }
 
 .fb-preview {
@@ -1285,14 +1286,14 @@ footer a:hover {
   max-height: 200px;
   border-radius: 6px;
   margin-top: 10px;
-  border: 1px solid rgba(138, 77, 255, 0.2);
+  border: 1px solid rgba(var(--theme-violet-rgb, 138, 77, 255), 0.2);
 }
 
 .fb-load-more {
   width: 100%;
   padding: 10px;
   border-radius: 6px;
-  border: 1px solid rgba(255, 83, 106, 0.3);
+  border: 1px solid rgba(var(--theme-coral-rgb, 255, 83, 106), 0.3);
   background: transparent;
   color: var(--text-secondary);
   cursor: pointer;
@@ -1305,7 +1306,7 @@ footer a:hover {
 .fb-load-more:hover {
   border-color: var(--neon-coral);
   color: var(--neon-coral);
-  background: rgba(255, 83, 106, 0.08);
+  background: rgba(var(--theme-coral-rgb, 255, 83, 106), 0.08);
 }
 
 .masonry {
@@ -1371,7 +1372,7 @@ input[type="file"] {
 .fb-comment-btn {
   padding: 4px 12px;
   border-radius: 4px;
-  border: 1px solid rgba(255, 83, 106, 0.3);
+  border: 1px solid rgba(var(--theme-coral-rgb, 255, 83, 106), 0.3);
   background: transparent;
   color: var(--text-secondary);
   cursor: pointer;
@@ -1384,14 +1385,14 @@ input[type="file"] {
 .fb-comment-btn:hover {
   border-color: var(--neon-coral);
   color: var(--neon-coral);
-  background: rgba(255, 83, 106, 0.08);
+  background: rgba(var(--theme-coral-rgb, 255, 83, 106), 0.08);
 }
 
 /* 回复按钮 - 更小，品红风格 */
 .fb-reply-btn {
   padding: 3px 10px;
   border-radius: 4px;
-  border: 1px solid rgba(244, 56, 184, 0.25);
+  border: 1px solid rgba(var(--theme-magenta-rgb, 244, 56, 184), 0.25);
   background: transparent;
   color: var(--text-secondary);
   cursor: pointer;
@@ -1404,7 +1405,7 @@ input[type="file"] {
 .fb-reply-btn:hover {
   border-color: var(--neon-magenta);
   color: var(--neon-magenta);
-  background: rgba(244, 56, 184, 0.08);
+  background: rgba(var(--theme-magenta-rgb, 244, 56, 184), 0.08);
 }
 
 /* 发送按钮 - 青色风格 */
@@ -1419,20 +1420,20 @@ input[type="file"] {
   font-weight: 700;
   transition: all 0.2s;
   font-family: inherit;
-  box-shadow: 0 2px 10px rgba(38, 217, 242, 0.3);
+  box-shadow: 0 2px 10px rgba(var(--theme-cyan-rgb, 38, 217, 242), 0.3);
 }
 
 .fb-comment-submit:hover {
   transform: translateY(-1px);
-  box-shadow: 0 4px 16px rgba(38, 217, 242, 0.5);
+  box-shadow: 0 4px 16px rgba(var(--theme-cyan-rgb, 38, 217, 242), 0.5);
   filter: brightness(1.1);
 }
 
 /* 评论输入框 */
 .fb-comment-input {
   flex: 1;
-  background: rgba(9, 10, 42, 0.8);
-  border: 1px solid rgba(38, 217, 242, 0.2);
+  background: rgba(var(--theme-bg-rgb, 9, 10, 42), 0.8);
+  border: 1px solid rgba(var(--theme-cyan-rgb, 38, 217, 242), 0.2);
   border-radius: 6px;
   padding: 7px 12px;
   color: var(--text-primary);
@@ -1445,11 +1446,11 @@ input[type="file"] {
 
 .fb-comment-input:focus {
   border-color: var(--neon-cyan);
-  box-shadow: 0 0 0 2px rgba(38, 217, 242, 0.1);
+  box-shadow: 0 0 0 2px rgba(var(--theme-cyan-rgb, 38, 217, 242), 0.1);
 }
 
 .fb-comment-input::placeholder {
-  color: rgba(181, 179, 215, 0.4);
+  color: rgba(var(--theme-muted-rgb, 181, 179, 215), 0.4);
 }
 
 /* 评论区域容器 */
@@ -1464,16 +1465,16 @@ input[type="file"] {
 .fb-comment-list {
   margin-top: 10px;
   padding: 10px 0 0;
-  border-top: 1px solid rgba(138, 77, 255, 0.1);
+  border-top: 1px solid rgba(var(--theme-violet-rgb, 138, 77, 255), 0.1);
 }
 
 .fb-comment-item {
   padding: 8px 12px;
-  border-left: 2px solid rgba(38, 217, 242, 0.2);
+  border-left: 2px solid rgba(var(--theme-cyan-rgb, 38, 217, 242), 0.2);
   margin-bottom: 8px;
   font-size: 13px;
   color: var(--text-primary);
-  background: rgba(9, 10, 42, 0.3);
+  background: rgba(var(--theme-bg-rgb, 9, 10, 42), 0.3);
   border-radius: 0 4px 4px 0;
 }
 
@@ -1493,13 +1494,16 @@ input[type="file"] {
 
   <link rel="stylesheet" href="/static/query-progress.css">
   <script src="/static/query-progress.js"></script>
+<link rel="stylesheet" href="/static/card-preview.css?v=1">
+<script src="/static/card-preview.js?v=1"></script>
+<link rel="stylesheet" href="/static/theme.css?v=1">
+<script src="/static/search-tracking.js?v=20261016-search"></script>
 </head>
 <body>
 <nav class="navbar">
   <a href="/runs" class="logo">巴扎丘Bot</a>
   <div class="nav-tabs">
     <a href="/runs" class="nav-tab">阵容查询</a>
-    <a href="/routes" class="nav-tab">阵容路线</a>
     <a href="/winrate" class="nav-tab">胜率查询</a>
     <a href="/partner" class="nav-tab active">最佳搭档</a>
     <a href="/topcard" class="nav-tab">职业榜单</a>
@@ -1565,9 +1569,9 @@ function showError(id, msg) {
 }
 
 function winrateColor(r) {
-  if (r >= 0.7) return '#10b981';
-  if (r >= 0.5) return '#f59e0b';
-  return '#ef4444';
+  if (r >= 0.7) return 'var(--theme-teal, #10b981)';
+  if (r >= 0.5) return 'var(--theme-gold, #f59e0b)';
+  return 'var(--theme-coral, #ef4444)';
 }
 
 async function queryRuns(page) {
@@ -1601,7 +1605,7 @@ function renderRuns(data, page, params) {
   let items = runs.map(r => {
     const day = r.wins + r.losses;
     const itemsStr = r.items.slice(0,5).join('、') + (r.items.length>5?` +${r.items.length-5}`:'');
-    const screenshot = r.screenshot ? `<div style="margin:8px 0 2px"><img src="${r.screenshot}" style="max-width:100%;border-radius:6px;border:1px solid #1f2937" loading="lazy" onerror="this.style.display='none'"></div>` : '';
+    const screenshot = r.screenshot ? `<div style="margin:8px 0 2px"><img src="${r.screenshot}" style="max-width:100%;border-radius:6px;border:1px solid var(--theme-border, #1f2937)" loading="lazy" onerror="this.style.display='none'"></div>` : '';
     return `<div class="run-item" style="flex-direction:column;align-items:flex-start">
       <div style="display:flex;gap:12px;align-items:center;width:100%">
         <span class="run-hero">${heroZh[r.hero]||r.hero}</span>
@@ -1665,7 +1669,7 @@ function renderWinrate(data) {
   const color = winrateColor(rate);
   const pct = (rate*100).toFixed(1);
   const title = card_names.join(' + ') || '查询卡牌';
-  let notFoundHtml = not_found && not_found.length ? `<div style="color:#f87171;font-size:12px;margin-top:12px">未识别: ${not_found.join(', ')}</div>` : '';
+  let notFoundHtml = not_found && not_found.length ? `<div style="color:var(--theme-coral, #f87171);font-size:12px;margin-top:12px">未识别: ${not_found.join(', ')}</div>` : '';
   document.getElementById('wr-result').innerHTML = `
     <div class="winrate-card">
       <div class="winrate-title">${title} 的10胜率</div>
@@ -1691,7 +1695,7 @@ async function queryPartner() {
   const params = new URLSearchParams({card, rank});
   if (days) params.set('days', days);
   try {
-    const res = await fetch('/api/partner?' + params);
+    const res = await (window.BazaarSearch ? BazaarSearch.query('partner', '/api/partner?' + params) : fetch('/api/partner?' + params));
     const data = await res.json();
     if (data.error) { showError('pt-error', data.error); document.getElementById('pt-result').innerHTML=''; return; }
     renderPartner(data);
@@ -1719,8 +1723,8 @@ function renderPartner(data) {
       const nameEn = p.name_en && p.name_en !== p.name ? `<div class="topcard-name-en">${p.name_en}</div>` : '';
       return `<div class="partner-item">
         <span class="partner-rank">${medals[i]}</span>
-        ${imgHtml}
-        <div class="topcard-name" style="flex:1">
+        <span class="bcp-trigger" ${window.BazaarCardPreview?.attrs(p)||''}>${imgHtml}</span>
+        <div class="topcard-name bcp-trigger" ${window.BazaarCardPreview?.attrs(p)||''} style="flex:1">
           <div class="topcard-name-zh">${p.name}</div>
           ${nameEn}
         </div>
@@ -1800,9 +1804,9 @@ const RANK_ICONS = ['🥇','🥈','🥉','4️⃣','5️⃣','6️⃣','7️⃣'
 window._topcardLoaded = false;
 
 function tcRateColor(r) {
-  if (r >= 0.6) return '#10b981';
-  if (r >= 0.45) return '#f59e0b';
-  return '#ef4444';
+  if (r >= 0.6) return 'var(--theme-teal, #10b981)';
+  if (r >= 0.45) return 'var(--theme-gold, #f59e0b)';
+  return 'var(--theme-coral, #ef4444)';
 }
 
 async function loadTopcard() {
@@ -2082,16 +2086,16 @@ window.addEventListener('DOMContentLoaded', () => {
 
 </script>
 
-<footer style="padding:30px 20px;border-top:1px solid #1f2937;text-align:center;color:#6b7280;font-size:13px">
+<footer style="padding:30px 20px;border-top:1px solid var(--theme-border, #1f2937);text-align:center;color:var(--theme-dim, #6b7280);font-size:13px">
   <div style="margin-bottom:12px">
-    <a href="/static/privacy.html" style="color:#60a5fa;text-decoration:none;margin:0 15px" target="_blank">隐私政策</a>
+    <a href="/static/privacy.html" style="color:var(--theme-link, #60a5fa);text-decoration:none;margin:0 15px" target="_blank">隐私政策</a>
     <span style="margin:0 5px">|</span>
-    <a href="https://github.com/CodeHuba/QiuBot" style="color:#60a5fa;text-decoration:none;margin:0 15px" target="_blank">GitHub</a>
+    <a href="https://github.com/CodeHuba/QiuBot" style="color:var(--theme-link, #60a5fa);text-decoration:none;margin:0 15px" target="_blank">GitHub</a>
     <span style="margin:0 5px">|</span>
-    <span style="color:#9ca3af;margin:0 15px">反馈QQ群：<a href="https://qm.qq.com/q/1102189995" target="_blank" style="color:var(--neon-coral);text-shadow:0 0 8px rgba(255,83,106,0.5)">1102189995</a></span>
+    <span style="color:var(--theme-muted, #9ca3af);margin:0 15px">反馈QQ群：<a href="https://qm.qq.com/q/1102189995" target="_blank" style="color:var(--neon-coral);text-shadow:0 0 8px rgba(var(--theme-coral-rgb, 255, 83, 106), 0.5)">1102189995</a></span>
   </div>
-  <div style="color:#4b5563">
-    <a href="https://beian.miit.gov.cn/" target="_blank" style="color:#4b5563;text-decoration:none">浙ICP备2026066685号</a>
+  <div style="color:var(--theme-dim, #4b5563)">
+    <a href="https://beian.miit.gov.cn/" target="_blank" style="color:var(--theme-dim, #4b5563);text-decoration:none">浙ICP备2026066685号</a>
   </div>
   <div style="margin-top:8px;font-size:12px">© 2026 BazaarQiuBot - The Bazaar 中文社区数据服务</div>
 </footer>

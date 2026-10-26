@@ -1,0 +1,1228 @@
+{
+  "source": "https://bazaardb.gg/?c=monsters",
+  "retrieved_at": "2026-10-26",
+  "encounters": [
+    {
+      "name": "Banannibal",
+      "level": 1,
+      "tier": "Bronze",
+      "day": "1",
+      "url": "https://bazaardb.gg/card/4k4n5d9g1c9ydpt7c1gy7wg72q/Banannibal",
+      "art": "https://s.bazaardb.gg/v1/z19.0/8424c04ebd4564e9c93dcc71a160c323408fd13e_p@256.webp?v=8"
+    },
+    {
+      "name": "Fanged Inglet",
+      "level": 1,
+      "tier": "Bronze",
+      "day": "1",
+      "url": "https://bazaardb.gg/card/zbmkwtx8bq8h02y8js9mzdmyc3/Fanged-Inglet",
+      "art": "https://s.bazaardb.gg/v1/z19.0/4e2e89779294f437c9c9ba81a9ea3b79508eb1da_p@256.webp?v=8"
+    },
+    {
+      "name": "Kyver Drone",
+      "level": 1,
+      "tier": "Bronze",
+      "day": "1",
+      "url": "https://bazaardb.gg/card/zmm6kf98bcjb7c7l421cf8vkm7/Kyver-Drone",
+      "art": "https://s.bazaardb.gg/v1/z19.0/a0f8427a9e8f716ace8cea143871e04957a96f28_p@256.webp?v=8"
+    },
+    {
+      "name": "Pyro",
+      "level": 1,
+      "tier": "Bronze",
+      "day": "1",
+      "url": "https://bazaardb.gg/card/bybl8zqml05dxsmsxhdk6yt3cm/Pyro",
+      "art": "https://s.bazaardb.gg/v1/z19.0/fe315fddea3a5074a3cfbc1e8af33f2590863d90_p@256.webp?v=8"
+    },
+    {
+      "name": "Happy Camper",
+      "level": 2,
+      "tier": "Silver",
+      "day": "1",
+      "url": "https://bazaardb.gg/card/18nj36wvshvysjlgg856qy42xjp/Happy-Camper",
+      "art": "https://s.bazaardb.gg/v1/z19.0/cb731c71efbd76a78d39c6b4a3214ea2ffefe644_p@256.webp?v=8"
+    },
+    {
+      "name": "Coconut Crab",
+      "level": 2,
+      "tier": "Bronze",
+      "day": "2",
+      "url": "https://bazaardb.gg/card/6c5xj4m8990zzghc7x056vqqpg/Coconut-Crab",
+      "art": "https://s.bazaardb.gg/v1/z19.0/1e75e593d53f16e10abcd5858972754f4c86699e_p@256.webp?v=8"
+    },
+    {
+      "name": "Boarrior",
+      "level": 3,
+      "tier": "Silver",
+      "day": "2",
+      "url": "https://bazaardb.gg/card/z1vgvk5551v61t2dkkhjc2c7yk/Boarrior",
+      "art": "https://s.bazaardb.gg/v1/z19.0/7be7486d3b431bd414f5d7d3e34bff434de03a7a_p@256.webp?v=8"
+    },
+    {
+      "name": "Calico",
+      "level": 4,
+      "tier": "Gold",
+      "day": "2",
+      "url": "https://bazaardb.gg/card/14h8cdhv8zx3shfcztxq6wq31bs/Calico",
+      "art": "https://s.bazaardb.gg/v1/z19.0/9fd875510e84bc495a00e022cdd30e861411da4b_p@256.webp?v=8"
+    },
+    {
+      "name": "Dabbling Apprentice",
+      "level": 3,
+      "tier": "Bronze",
+      "day": "3",
+      "url": "https://bazaardb.gg/card/q9bh5pwwl84y08qmgwbyl1071c/Dabbling-Apprentice",
+      "art": "https://s.bazaardb.gg/v1/z19.0/d1ea4789669933d6b4c36fce0dfdeb962b69610a_p@256.webp?v=8"
+    },
+    {
+      "name": "Frost Street Challenger",
+      "level": 4,
+      "tier": "Silver",
+      "day": "3",
+      "url": "https://bazaardb.gg/card/fb3s2lhbgxc0x8wcsnmqzd71sh/Frost-Street-Challenger",
+      "art": "https://s.bazaardb.gg/v1/z19.0/a7dc8a65441e8ba3b4844442facfe4f892a78070_p@256.webp?v=8"
+    },
+    {
+      "name": "Giant Mosquito",
+      "level": 5,
+      "tier": "Gold",
+      "day": "3",
+      "url": "https://bazaardb.gg/card/114q26gwstg68pnx5xjqgb9sdlm/Giant-Mosquito",
+      "art": "https://s.bazaardb.gg/v1/z19.0/50190fd9d018b145032c0e47d0509f251f9e04dd_p@256.webp?v=8"
+    },
+    {
+      "name": "Boilerroom Brawler",
+      "level": 4,
+      "tier": "Bronze",
+      "day": "4",
+      "url": "https://bazaardb.gg/card/cmjdlbt02tvfg7vf044gqphfl6/Boilerroom-Brawler",
+      "art": "https://s.bazaardb.gg/v1/z19.0/a9afc929f5fd83f4b22c63ce25019e9b3a68036c_p@256.webp?v=8"
+    },
+    {
+      "name": "Bloodreef Raider",
+      "level": 4,
+      "tier": "Silver",
+      "day": "4",
+      "url": "https://bazaardb.gg/card/nyl2bp6yd5djql6xpv072mnfsj/Bloodreef-Raider",
+      "art": "https://s.bazaardb.gg/v1/z19.0/f129f857cecc4251c533023e1b1036e5dcbcff98_p@256.webp?v=8"
+    },
+    {
+      "name": "Ahexa",
+      "level": 6,
+      "tier": "Gold",
+      "day": "4",
+      "url": "https://bazaardb.gg/card/yd5k0df30bsfc2vq5p7d6s0hd2/Ahexa",
+      "art": "https://s.bazaardb.gg/v1/z19.0/4162c79aa8948f9d64665c5424627d5da2f0af1d_p@256.webp?v=8"
+    },
+    {
+      "name": "Grandfather Klok",
+      "level": 5,
+      "tier": "Bronze",
+      "day": "5",
+      "url": "https://bazaardb.gg/card/14v4tkc45vb1x4f8qx39gx7xyqm/Grandfather-Klok",
+      "art": "https://s.bazaardb.gg/v1/z19.0/7592400bb1d7905d52560cb31eb504ef0d8e7129_p@256.webp?v=8"
+    },
+    {
+      "name": "Harkuvian Rocket Trooper",
+      "level": 6,
+      "tier": "Silver",
+      "day": "5",
+      "url": "https://bazaardb.gg/card/g1jb4v85pv3b9gs6fqb9ch18v3/Harkuvian-Rocket-Trooper",
+      "art": "https://s.bazaardb.gg/v1/z19.0/2393c017b8c6e16e9aed39afdbb76d977c311502_p@256.webp?v=8"
+    },
+    {
+      "name": "Drone Operator",
+      "level": 7,
+      "tier": "Gold",
+      "day": "5",
+      "url": "https://bazaardb.gg/card/k0q27svqj7yk9qlpcs98psmz8f/Drone-Operator",
+      "art": "https://s.bazaardb.gg/v1/z19.0/40dccdb1d12f1ef82a691177dadaba8016f02980_p@256.webp?v=8"
+    },
+    {
+      "name": "Dire Inglet",
+      "level": 6,
+      "tier": "Bronze",
+      "day": "6",
+      "url": "https://bazaardb.gg/card/lv3wghmp4d62czt53lx040ftlm/Dire-Inglet",
+      "art": "https://s.bazaardb.gg/v1/z19.0/da635c323080b706cfe8f92345dad38c9904c2fa_p@256.webp?v=8"
+    },
+    {
+      "name": "Foundation Weeper",
+      "level": 7,
+      "tier": "Silver",
+      "day": "6",
+      "url": "https://bazaardb.gg/card/sjs1y5dhy9wlstw98qv4s25l46/Foundation-Weeper",
+      "art": "https://s.bazaardb.gg/v1/z19.0/ea65fc2194c52c48b21e3678b1332483d940b8c1_p@256.webp?v=8"
+    },
+    {
+      "name": "Dire Mosquito",
+      "level": 8,
+      "tier": "Gold",
+      "day": "6",
+      "url": "https://bazaardb.gg/card/zjjw325z4nfmj3w820jjjmmg9c/Dire-Mosquito",
+      "art": "https://s.bazaardb.gg/v1/z19.0/826f8bb93355c3f0862866526c1cc90148157fba_p@256.webp?v=8"
+    },
+    {
+      "name": "Unibou",
+      "level": 7,
+      "tier": "Bronze",
+      "day": "7",
+      "url": "https://bazaardb.gg/card/s8kh75vqmqd4y23l1nqcp1z8bx/Unibou",
+      "art": "https://s.bazaardb.gg/v1/z19.0/0c5717028202906d0acae34c0d7fdbfd5129f45f_p@256.webp?v=8"
+    },
+    {
+      "name": "Ghost Pepper",
+      "level": 8,
+      "tier": "Silver",
+      "day": "7",
+      "url": "https://bazaardb.gg/card/18vcvnhy5tl2bhcp7bpknv65hzp/Ghost-Pepper",
+      "art": "https://s.bazaardb.gg/v1/z19.0/434b008b59f1dfcd6f296a084bea4b9bd0f242fd_p@256.webp?v=8"
+    },
+    {
+      "name": "Annex Trooper",
+      "level": 9,
+      "tier": "Gold",
+      "day": "7",
+      "url": "https://bazaardb.gg/card/145h702x3qszg9qwlzdnzbmpkkn/Annex-Trooper",
+      "art": "https://s.bazaardb.gg/v1/z19.0/897f33f8fed49f7a6b51b18db928e342b374b8c7_p@256.webp?v=8"
+    },
+    {
+      "name": "Cloudtop Officer",
+      "level": 8,
+      "tier": "Bronze",
+      "day": "8",
+      "url": "https://bazaardb.gg/card/lybpqhnqybwz2j3yfjn0jv28f7/Cloudtop-Officer",
+      "art": "https://s.bazaardb.gg/v1/z19.0/66105f07fa02e8ef8dec5f4f5b5f4d50333fd382_p@256.webp?v=8"
+    },
+    {
+      "name": "Bouncertron",
+      "level": 9,
+      "tier": "Silver",
+      "day": "8",
+      "url": "https://bazaardb.gg/card/vc9z26l70pjv51qv7xqz9kg05l/Bouncertron",
+      "art": "https://s.bazaardb.gg/v1/z19.0/0e79c896c121f29745ea65ea986838e561a1da7b_p@256.webp?v=8"
+    },
+    {
+      "name": "Burninator Bot",
+      "level": 10,
+      "tier": "Gold",
+      "day": "8",
+      "url": "https://bazaardb.gg/card/8tk071zmks7kd4tl47myl7tm73/Burninator-Bot",
+      "art": "https://s.bazaardb.gg/v1/z19.0/6574f6892f94baf3339ec814bd824049ef87a70f_p@256.webp?v=8"
+    },
+    {
+      "name": "Bloodreef Captain",
+      "level": 10,
+      "tier": "Bronze",
+      "day": "9",
+      "url": "https://bazaardb.gg/card/lf9cbq2zb3py5mcyfssvx8msj2/Bloodreef-Captain",
+      "art": "https://s.bazaardb.gg/v1/z19.0/172d2747a8f8f4d3cc68efcb672ded158ac3d585_p@256.webp?v=8"
+    },
+    {
+      "name": "Anaconda",
+      "level": 10,
+      "tier": "Silver",
+      "day": "9",
+      "url": "https://bazaardb.gg/card/nwqwn46mmqg427fbwzb0ll5fqv/Anaconda",
+      "art": "https://s.bazaardb.gg/v1/z19.0/8268da6391f6030110c3472a6a82585a2c9bb5e3_p@256.webp?v=8"
+    },
+    {
+      "name": "Ferros Khan",
+      "level": 11,
+      "tier": "Gold",
+      "day": "9",
+      "url": "https://bazaardb.gg/card/58b2dvkwwncg2n8ylt1n7wllf1/Ferros-Khan",
+      "art": "https://s.bazaardb.gg/v1/z19.0/84223a9d59f2b797cea0b87f5c01f6d8b3f0e9b3_p@256.webp?v=8"
+    },
+    {
+      "name": "Fairy Circle",
+      "level": 10,
+      "tier": "Bronze",
+      "day": "10",
+      "url": "https://bazaardb.gg/card/15z38mc30s50ybmxh39hkxw1b7t/Fairy-Circle",
+      "art": "https://s.bazaardb.gg/v1/z19.0/372c716194efb913922d101dbf4197d2ac771ce2_p@256.webp?v=8"
+    },
+    {
+      "name": "Industry Plant",
+      "level": 11,
+      "tier": "Silver",
+      "day": "10",
+      "url": "https://bazaardb.gg/card/htksh2jwn3bfcdnm45q0vvvzqh/Industry-Plant",
+      "art": "https://s.bazaardb.gg/v1/z19.0/0c4eda1ded5f318d57f54ba8a60e9969c1c856ed_p@256.webp?v=8"
+    },
+    {
+      "name": "Awakened Primordial",
+      "level": 12,
+      "tier": "Gold",
+      "day": "10",
+      "url": "https://bazaardb.gg/card/15y57m9q9qm7g7h6l06wxbms76t/Awakened-Primordial",
+      "art": "https://s.bazaardb.gg/v1/z19.0/72e92b216050cf29c33df312819f2da2c4bfd399_p@256.webp?v=8"
+    },
+    {
+      "name": "Blowguns Trap",
+      "level": 9,
+      "tier": "Bronze",
+      "day": "",
+      "url": "https://bazaardb.gg/card/36kbw1qwp8jfs2p461ngt6qy55/Blowguns-Trap",
+      "art": "https://s.bazaardb.gg/v1/z19.0/ae1d72739fc24e4b0b7f05bd9a872c276de3ac2f_p@256.webp?v=8"
+    },
+    {
+      "name": "Augmented Hellbilly",
+      "level": 7,
+      "tier": "Silver",
+      "day": "",
+      "url": "https://bazaardb.gg/card/2jsbyc0qfx895gt16flddjm98h/Augmented-Hellbilly",
+      "art": "https://s.bazaardb.gg/v1/z19.0/8df27bb03bff80dfba2b3c531cc8c5167ead49e1_p@256.webp?v=8"
+    },
+    {
+      "name": "Boulder Trap",
+      "level": 11,
+      "tier": "Gold",
+      "day": "",
+      "url": "https://bazaardb.gg/card/8n33nhdddpcdf7xh5yf3sjybpj/Boulder-Trap",
+      "art": "https://s.bazaardb.gg/v1/z19.0/bc07b69529f94c8a8da26be87286d7fd2a5f947a_p@256.webp?v=8"
+    },
+    {
+      "name": "Haunted Kimono",
+      "level": 2,
+      "tier": "Silver",
+      "day": "1",
+      "url": "https://bazaardb.gg/card/hsmsh522qg02wcy6lv2bdsj8q/Haunted-Kimono",
+      "art": "https://s.bazaardb.gg/v1/z19.0/51e6b39b54a853d60212fa86e27b2b9e2b9f02de_p@256.webp?v=8"
+    },
+    {
+      "name": "Viper",
+      "level": 2,
+      "tier": "Silver",
+      "day": "1",
+      "url": "https://bazaardb.gg/card/yt24hfwlm9mh916tvy0qp9wlm1/Viper",
+      "art": "https://s.bazaardb.gg/v1/z19.0/6b092bf8fb696cf942ea10fb4116cf167b80bb60_p@256.webp?v=8"
+    },
+    {
+      "name": "Rogue Scrapper",
+      "level": 2,
+      "tier": "Bronze",
+      "day": "2",
+      "url": "https://bazaardb.gg/card/4tbjtt8wd832lj4fktcx07h4c2/Rogue-Scrapper",
+      "art": "https://s.bazaardb.gg/v1/z19.0/180535cdaf13361b01e3dc1d059ee07c2e8f5e85_p@256.webp?v=8"
+    },
+    {
+      "name": "The Baron Boys",
+      "level": 2,
+      "tier": "Bronze",
+      "day": "2",
+      "url": "https://bazaardb.gg/card/ngwp6s8qm49twmbj8qxvqphk4k/The-Baron-Boys",
+      "art": "https://s.bazaardb.gg/v1/z19.0/9231e34b974b8bda680ac36546222274371a4126_p@256.webp?v=8"
+    },
+    {
+      "name": "Covetous Thief",
+      "level": 3,
+      "tier": "Silver",
+      "day": "2",
+      "url": "https://bazaardb.gg/card/j0pmpjhdynq747h0mv8j9kfx7f/Covetous-Thief",
+      "art": "https://s.bazaardb.gg/v1/z19.0/de4de08ddd4a145edc01e5d6cfbf21c056e42d22_p@256.webp?v=8"
+    },
+    {
+      "name": "Soda Swiller",
+      "level": 3,
+      "tier": "Silver",
+      "day": "2",
+      "url": "https://bazaardb.gg/card/q21t5jlkm480dfz4w7fx68jzlh/Soda-Swiller",
+      "art": "https://s.bazaardb.gg/v1/z19.0/890bff7469e1d604dd70a5b1ae86c0705e872078_p@256.webp?v=8"
+    },
+    {
+      "name": "Eccentric Etherwright",
+      "level": 4,
+      "tier": "Gold",
+      "day": "2",
+      "url": "https://bazaardb.gg/card/7x0m9sv72dlk9t4myxdlg5kp2s/Eccentric-Etherwright",
+      "art": "https://s.bazaardb.gg/v1/z19.0/509250c75c2086ab4f895de29f99a406fd68b095_p@256.webp?v=8"
+    },
+    {
+      "name": "Ventriloquist",
+      "level": 4,
+      "tier": "Gold",
+      "day": "2",
+      "url": "https://bazaardb.gg/card/b9jmw0tzfzf77ltl62y3wvxnz3/Ventriloquist",
+      "art": "https://s.bazaardb.gg/v1/z19.0/c944bdfe7485aea389d2141ff2c468ae54d6e5f7_p@256.webp?v=8"
+    },
+    {
+      "name": "Overbearing Teacher",
+      "level": 4,
+      "tier": "Bronze",
+      "day": "3",
+      "url": "https://bazaardb.gg/card/jzk64ct8ffxhd9nd2dtx1m42x0/Overbearing-Teacher",
+      "art": "https://s.bazaardb.gg/v1/z19.0/a3a8156824d3e7b710cdeee28e1de1289c33ad5b_p@256.webp?v=8"
+    },
+    {
+      "name": "Tempest Bravo",
+      "level": 3,
+      "tier": "Bronze",
+      "day": "3",
+      "url": "https://bazaardb.gg/card/q559t8w2t8glmmnssv5zgsd0d/Tempest-Bravo",
+      "art": "https://s.bazaardb.gg/v1/z19.0/21700ad270e3612ae4a3e12e44d058ae000e5921_p@256.webp?v=8"
+    },
+    {
+      "name": "Product Demonstrator",
+      "level": 4,
+      "tier": "Silver",
+      "day": "3",
+      "url": "https://bazaardb.gg/card/8fcgxx4zq4zg0vbzpy7jwkzn6f/Product-Demonstrator",
+      "art": "https://s.bazaardb.gg/v1/z19.0/0116cd2cbf8cbe6b389359e84c9f702b9619417a_p@256.webp?v=8"
+    },
+    {
+      "name": "Sommelier",
+      "level": 4,
+      "tier": "Silver",
+      "day": "3",
+      "url": "https://bazaardb.gg/card/lcs0ghc9jpdlns0z3jvkdmx10w/Sommelier",
+      "art": "https://s.bazaardb.gg/v1/z19.0/962cb5a38e2c61b4b28fd9c971027209dd818aa0_p@256.webp?v=8"
+    },
+    {
+      "name": "Street Gamer",
+      "level": 4,
+      "tier": "Silver",
+      "day": "3",
+      "url": "https://bazaardb.gg/card/b5y2dcj6200ppdnmflv24jsd08/Street-Gamer",
+      "art": "https://s.bazaardb.gg/v1/z19.0/fe7423090aed8fb81707559f99ac91a8ef14387e_p@256.webp?v=8"
+    },
+    {
+      "name": "Hoverbike Hooligan",
+      "level": 5,
+      "tier": "Gold",
+      "day": "3",
+      "url": "https://bazaardb.gg/card/8w81pgsxz9pfx2l7t82mnwdcty/Hoverbike-Hooligan",
+      "art": "https://s.bazaardb.gg/v1/z19.0/c0cd568d84089117d13cd1f4307220416fd3cc44_p@256.webp?v=8"
+    },
+    {
+      "name": "Castaway Corsair",
+      "level": 5,
+      "tier": "Diamond",
+      "day": "3",
+      "url": "https://bazaardb.gg/card/16gjcsj9fj3zw0kd43pgssfdp9c/Castaway-Corsair",
+      "art": "https://s.bazaardb.gg/v1/z19.0/f9b52acbc3c90284c23b421786c895548a7e0755_p@256.webp?v=8"
+    },
+    {
+      "name": "Mutant Baker",
+      "level": 5,
+      "tier": "Diamond",
+      "day": "3",
+      "url": "https://bazaardb.gg/card/zthxv7p15xl69xz1cjtqfj9ctq/Mutant-Baker",
+      "art": "https://s.bazaardb.gg/v1/z19.0/c450387f54576333caf4ee36b97439583dbb857e_p@256.webp?v=8"
+    },
+    {
+      "name": "Outlands Dervish",
+      "level": 4,
+      "tier": "Bronze",
+      "day": "4",
+      "url": "https://bazaardb.gg/card/qwmgzwwnvxxxtlvlcty1mvf8dt/Outlands-Dervish",
+      "art": "https://s.bazaardb.gg/v1/z19.0/07c116e295bf8bf254600245b41ef01ec931279f_p@256.webp?v=8"
+    },
+    {
+      "name": "Overwhelmed Student",
+      "level": 3,
+      "tier": "Bronze",
+      "day": "4",
+      "url": "https://bazaardb.gg/card/hwmxlhjj20mhlv99v9jzjc25v5/Overwhelmed-Student",
+      "art": "https://s.bazaardb.gg/v1/z19.0/b81e873ea79cfc6d836dba81ab0d97881dfb2a14_p@256.webp?v=8"
+    },
+    {
+      "name": "Retiree",
+      "level": 5,
+      "tier": "Silver",
+      "day": "4",
+      "url": "https://bazaardb.gg/card/tvf707xqd8xq2sdctsb6n148km/Retiree",
+      "art": "https://s.bazaardb.gg/v1/z19.0/cb963921a3d692346eef10213ce6b287f116fcd6_p@256.webp?v=8"
+    },
+    {
+      "name": "Wild Boar",
+      "level": 5,
+      "tier": "Silver",
+      "day": "4",
+      "url": "https://bazaardb.gg/card/nw61bbz6c05mpkdqlfgvvkdbfh/Wild-Boar",
+      "art": "https://s.bazaardb.gg/v1/z19.0/dd882138ef6a04a64c1becb3b67c41d747f1d2e1_p@256.webp?v=8"
+    },
+    {
+      "name": "Worry Wart",
+      "level": 5,
+      "tier": "Silver",
+      "day": "4",
+      "url": "https://bazaardb.gg/card/dv1tc6l7cpbl84nc23knw1tsbj/Worry-Wart",
+      "art": "https://s.bazaardb.gg/v1/z19.0/af109b3482d3d6080b1f0f51eade1fe1569a3fb3_p@256.webp?v=8"
+    },
+    {
+      "name": "Hellbilly",
+      "level": 6,
+      "tier": "Gold",
+      "day": "4",
+      "url": "https://bazaardb.gg/card/qcn3dbxkmtx6flh02w5bwthkqt/Hellbilly",
+      "art": "https://s.bazaardb.gg/v1/z19.0/1f56e394a1fd15fe8a75239e6ae8e0e7b36dcf6f_p@256.webp?v=8"
+    },
+    {
+      "name": "Prince Marianas",
+      "level": 6,
+      "tier": "Gold",
+      "day": "4",
+      "url": "https://bazaardb.gg/card/dxfyktdm2g779gd9cqktxms5vd/Prince-Marianas",
+      "art": "https://s.bazaardb.gg/v1/z19.0/dde711457979405556990b168d3257543ecb694a_p@256.webp?v=8"
+    },
+    {
+      "name": "Flame Juggler",
+      "level": 7,
+      "tier": "Diamond",
+      "day": "4",
+      "url": "https://bazaardb.gg/card/12dp2b5z1qhpj027b18h5jmhlzv/Flame-Juggler",
+      "art": "https://s.bazaardb.gg/v1/z19.0/135d9ba0f804aecb69ff0f2fa9d43ed440fa6668_p@256.webp?v=8"
+    },
+    {
+      "name": "Preening Duelist",
+      "level": 5,
+      "tier": "Bronze",
+      "day": "5",
+      "url": "https://bazaardb.gg/card/x972z1g8296z7ts7pqsjqb2knn/Preening-Duelist",
+      "art": "https://s.bazaardb.gg/v1/z19.0/895bab12fec76b67deefc7b21b3ad5f4a7d7ffaa_p@256.webp?v=8"
+    },
+    {
+      "name": "Sabretooth",
+      "level": 5,
+      "tier": "Bronze",
+      "day": "5",
+      "url": "https://bazaardb.gg/card/c7nnfxzp5whdpz3w78nbm3kdz7/Sabretooth",
+      "art": "https://s.bazaardb.gg/v1/z19.0/811a20ef63e45ca7fc212bc85094e00b0371721d_p@256.webp?v=8"
+    },
+    {
+      "name": "Infernal Envoy",
+      "level": 6,
+      "tier": "Silver",
+      "day": "5",
+      "url": "https://bazaardb.gg/card/w7jkxh64s09nvq1l9m85kdzl2m/Infernal-Envoy",
+      "art": "https://s.bazaardb.gg/v1/z19.0/23d204f8d071b757f0755980152ae74bd73e42b4_p@256.webp?v=8"
+    },
+    {
+      "name": "Kyver Commander",
+      "level": 6,
+      "tier": "Silver",
+      "day": "5",
+      "url": "https://bazaardb.gg/card/f8tj12qmlm9vkts691lt4jg6kz/Kyver-Commander",
+      "art": "https://s.bazaardb.gg/v1/z19.0/f89c825487169fa821e74cbcc96c1112483ee73c_p@256.webp?v=8"
+    },
+    {
+      "name": "Gorgon Noble",
+      "level": 7,
+      "tier": "Gold",
+      "day": "5",
+      "url": "https://bazaardb.gg/card/14g702cp8g961mvt8v233b3tk28/Gorgon-Noble",
+      "art": "https://s.bazaardb.gg/v1/z19.0/277ebed25a723af1aefa0620abfecdeec01e6990_p@256.webp?v=8"
+    },
+    {
+      "name": "Mod Squad",
+      "level": 7,
+      "tier": "Gold",
+      "day": "5",
+      "url": "https://bazaardb.gg/card/10tjy3fqbmn5tfd3thk2k7bcjmk/Mod-Squad",
+      "art": "https://s.bazaardb.gg/v1/z19.0/a5eef0c7455c1e662d455f8d43f12a960f51ad4d_p@256.webp?v=8"
+    },
+    {
+      "name": "Trashtown Mayor",
+      "level": 7,
+      "tier": "Gold",
+      "day": "5",
+      "url": "https://bazaardb.gg/card/tglc80p2mzd2j51fdyl0fzkc06/Trashtown-Mayor",
+      "art": "https://s.bazaardb.gg/v1/z19.0/16a25df1d88c1e5e9ae70a2244383b564cc5b69a_p@256.webp?v=8"
+    },
+    {
+      "name": "Scovyle",
+      "level": 8,
+      "tier": "Diamond",
+      "day": "5",
+      "url": "https://bazaardb.gg/card/qvzz6nqv0hp0x6byjhz0373pbx/Scovyle",
+      "art": "https://s.bazaardb.gg/v1/z19.0/336b8a37df2e43b89c35551db8041c342c47aaac_p@256.webp?v=8"
+    },
+    {
+      "name": "Slumcee",
+      "level": 8,
+      "tier": "Diamond",
+      "day": "5",
+      "url": "https://bazaardb.gg/card/174hd6pwjt2y40jh245jjq4hy2q/Slumcee",
+      "art": "https://s.bazaardb.gg/v1/z19.0/df19556785287cc134dc601df70fae064ca00c60_p@256.webp?v=8"
+    },
+    {
+      "name": "Trash Golem",
+      "level": 6,
+      "tier": "Bronze",
+      "day": "6",
+      "url": "https://bazaardb.gg/card/wlmx85ny2clgjm6smkq61nf3x3/Trash-Golem",
+      "art": "https://s.bazaardb.gg/v1/z19.0/788c558763b4e9b606ccdb9d78131d01024aa39b_p@256.webp?v=8"
+    },
+    {
+      "name": "Zookeeper",
+      "level": 6,
+      "tier": "Bronze",
+      "day": "6",
+      "url": "https://bazaardb.gg/card/kz82jk2tkpgs3m9kqv4bkxfk7l/Zookeeper",
+      "art": "https://s.bazaardb.gg/v1/z19.0/3b5a35a9e8a86cc10dc41ab125f5753c1008b17d_p@256.webp?v=8"
+    },
+    {
+      "name": "Not a Spy",
+      "level": 7,
+      "tier": "Silver",
+      "day": "6",
+      "url": "https://bazaardb.gg/card/cn9wkkys7m2wsxbvkqz6jjnqpb/Not-a-Spy",
+      "art": "https://s.bazaardb.gg/v1/z19.0/e6819a9898d6161d571ae92e4445b659616c0298_p@256.webp?v=8"
+    },
+    {
+      "name": "Sandwich Artist",
+      "level": 7,
+      "tier": "Silver",
+      "day": "6",
+      "url": "https://bazaardb.gg/card/16g2vt95jy8s5zqppmhv3zd2cy3/Sandwich-Artist",
+      "art": "https://s.bazaardb.gg/v1/z19.0/294053c39753e9a19a47c661db4a8a6d76496f2d_p@256.webp?v=8"
+    },
+    {
+      "name": "Loan Shark",
+      "level": 8,
+      "tier": "Gold",
+      "day": "6",
+      "url": "https://bazaardb.gg/card/13djv347bssgj7wbznpx3sbmsw9/Loan-Shark",
+      "art": "https://s.bazaardb.gg/v1/z19.0/dc7011040e2574130928ba44aa3676df79843464_p@256.webp?v=8"
+    },
+    {
+      "name": "Foreman",
+      "level": 7,
+      "tier": "Diamond",
+      "day": "6",
+      "url": "https://bazaardb.gg/card/vhw77tdhq8qxnxpxnk2pvfxhzs/Foreman",
+      "art": "https://s.bazaardb.gg/v1/z19.0/68b0203b6c42de411a3e35553c4c5123a2b83d2c_p@256.webp?v=8"
+    },
+    {
+      "name": "Infernal",
+      "level": 9,
+      "tier": "Diamond",
+      "day": "6",
+      "url": "https://bazaardb.gg/card/15pfsx40d6gp9q38m2hvxvfw5cw/Infernal",
+      "art": "https://s.bazaardb.gg/v1/z19.0/f09026dea732464f82979658c99a568a77491300_p@256.webp?v=8"
+    },
+    {
+      "name": "Lich",
+      "level": 10,
+      "tier": "Legendary",
+      "day": "6",
+      "url": "https://bazaardb.gg/card/jkct1mjfkpzf7swqg2v3vvyk18/Lich",
+      "art": "https://s.bazaardb.gg/v1/z19.0/1877c350f74b6f4192a900b9bf3d48ecf3c6578e_p@256.webp?v=8"
+    },
+    {
+      "name": "Viper Tyrant",
+      "level": 7,
+      "tier": "Bronze",
+      "day": "7",
+      "url": "https://bazaardb.gg/card/5cd7vxj3clfc1mg0kspq4ptcjg/Viper-Tyrant",
+      "art": "https://s.bazaardb.gg/v1/z19.0/be7953d4991c89249e1af38102c956b862627e51_p@256.webp?v=8"
+    },
+    {
+      "name": "Treasure Turtle",
+      "level": 8,
+      "tier": "Silver",
+      "day": "7",
+      "url": "https://bazaardb.gg/card/mc20n4nbnlkkv2fw3nytgz041t/Treasure-Turtle",
+      "art": "https://s.bazaardb.gg/v1/z19.0/66c5e9bfa13ea37edb97dc387752afce98538d5e_p@256.webp?v=8"
+    },
+    {
+      "name": "Wildman",
+      "level": 8,
+      "tier": "Silver",
+      "day": "7",
+      "url": "https://bazaardb.gg/card/qnvnmv94932s695cx96nspzg8b/Wildman",
+      "art": "https://s.bazaardb.gg/v1/z19.0/93b0aa3c5fa751f594d61aa3b2681e57bc54f2b7_p@256.webp?v=8"
+    },
+    {
+      "name": "Capital Punisher",
+      "level": 9,
+      "tier": "Gold",
+      "day": "7",
+      "url": "https://bazaardb.gg/card/16201dp8lq780bbl6w6l2zt1t38/Capital-Punisher",
+      "art": "https://s.bazaardb.gg/v1/z19.0/c9650edf48c852cc40d991675b4c0071747fc7e0_p@256.webp?v=8"
+    },
+    {
+      "name": "Chilly Charles",
+      "level": 9,
+      "tier": "Gold",
+      "day": "7",
+      "url": "https://bazaardb.gg/card/5kp416402xw62357d6kthgh08h/Chilly-Charles",
+      "art": "https://s.bazaardb.gg/v1/z19.0/880a917bdbf1ccf3b574d8553ea39a474fc13f28_p@256.webp?v=8"
+    },
+    {
+      "name": "Cortek Music Generator",
+      "level": 9,
+      "tier": "Gold",
+      "day": "7",
+      "url": "https://bazaardb.gg/card/1p0mgmt78ckymwh9c5wcjxplw4/Cortek-Music-Generator",
+      "art": "https://s.bazaardb.gg/v1/z19.0/d4ff76edf0c76e0b0dcea76154f9d790c3864258_p@256.webp?v=8"
+    },
+    {
+      "name": "Sergeant Suds",
+      "level": 8,
+      "tier": "Gold",
+      "day": "7",
+      "url": "https://bazaardb.gg/card/19616f82nmbptj1zs8ns4s695y8/Sergeant-Suds",
+      "art": "https://s.bazaardb.gg/v1/z19.0/b3885fc181e326489ebc89fa264d7e6e4160c490_p@256.webp?v=8"
+    },
+    {
+      "name": "Thug",
+      "level": 10,
+      "tier": "Diamond",
+      "day": "7",
+      "url": "https://bazaardb.gg/card/6qfkp2q20mhlhjv54gg7sc1py9/Thug",
+      "art": "https://s.bazaardb.gg/v1/z19.0/f265024b41cc4ada5e454308f51eacdea0bbbe15_p@256.webp?v=8"
+    },
+    {
+      "name": "Byg",
+      "level": 12,
+      "tier": "Legendary",
+      "day": "7",
+      "url": "https://bazaardb.gg/card/y5zpmgfwkshkfvkf0v2ywsxcg3/Byg",
+      "art": "https://s.bazaardb.gg/v1/z19.0/a6eb39384558d41691b7d722f26fd8a1fedc5867_p@256.webp?v=8"
+    },
+    {
+      "name": "Radiant Corsair",
+      "level": 12,
+      "tier": "Legendary",
+      "day": "7",
+      "url": "https://bazaardb.gg/card/h4f4xbgpdkzlg3ld16dmd9qnjn/Radiant-Corsair",
+      "art": "https://s.bazaardb.gg/v1/z19.0/655b931944204a40c0e670360f6f0c80d388f3d4_p@256.webp?v=8"
+    },
+    {
+      "name": "Cosmic Roc",
+      "level": 8,
+      "tier": "Bronze",
+      "day": "8",
+      "url": "https://bazaardb.gg/card/kxnyt8jvbbyqzxg2h59246wkv6/Cosmic-Roc",
+      "art": "https://s.bazaardb.gg/v1/z19.0/5d65530f0fce83ea7e704e06f7cd71c7cd3a4401_p@256.webp?v=8"
+    },
+    {
+      "name": "Joyful Jack",
+      "level": 8,
+      "tier": "Bronze",
+      "day": "8",
+      "url": "https://bazaardb.gg/card/5x6kbbcwjftdq7v0cv9ssk8dm6/Joyful-Jack",
+      "art": "https://s.bazaardb.gg/v1/z19.0/cc85aab16b40883c6411733a2b1fba6e58e1037f_p@256.webp?v=8"
+    },
+    {
+      "name": "Stew",
+      "level": 8,
+      "tier": "Bronze",
+      "day": "8",
+      "url": "https://bazaardb.gg/card/ctxqs29ks0m2vd4j7xzxw5c1mc/Stew",
+      "art": "https://s.bazaardb.gg/v1/z19.0/51bf0e6c6b874a2a5ecf9220bb836fa56f738116_p@256.webp?v=8"
+    },
+    {
+      "name": "Car Conductor",
+      "level": 9,
+      "tier": "Silver",
+      "day": "8",
+      "url": "https://bazaardb.gg/card/lm1fpjkq3j0cqcpkd11t7t1pg7/Car-Conductor",
+      "art": "https://s.bazaardb.gg/v1/z19.0/312a8272cd7d6db2c94dd66ea1be3552eda312a2_p@256.webp?v=8"
+    },
+    {
+      "name": "Infernal Frigate",
+      "level": 9,
+      "tier": "Silver",
+      "day": "8",
+      "url": "https://bazaardb.gg/card/h05mqwzwkbphnsbd5m5vqxldx2/Infernal-Frigate",
+      "art": "https://s.bazaardb.gg/v1/z19.0/4adf7461e0842a723324758780fb3a3264732300_p@256.webp?v=8"
+    },
+    {
+      "name": "Wolverine",
+      "level": 9,
+      "tier": "Silver",
+      "day": "8",
+      "url": "https://bazaardb.gg/card/16dqkzq5y8bgp9bz98qyzys13pn/Wolverine",
+      "art": "https://s.bazaardb.gg/v1/z19.0/b0649f6220f1a906fc05704f8bbc41f2ca4e42c3_p@256.webp?v=8"
+    },
+    {
+      "name": "Dr. Vortex",
+      "level": 10,
+      "tier": "Gold",
+      "day": "8",
+      "url": "https://bazaardb.gg/card/s5t6zb32p5fp3189dnw0thh04w/Dr.-Vortex",
+      "art": "https://s.bazaardb.gg/v1/z19.0/6436ac5768f4e2507a85fe04c92472760a238496_p@256.webp?v=8"
+    },
+    {
+      "name": "Oasis Guardian",
+      "level": 10,
+      "tier": "Gold",
+      "day": "8",
+      "url": "https://bazaardb.gg/card/p8h7scj5mff7pj3zt1y4x0dbk9/Oasis-Guardian",
+      "art": "https://s.bazaardb.gg/v1/z19.0/8cee0f6eafd1a8eb9ee27260ccb845c3e50c4f70_p@256.webp?v=8"
+    },
+    {
+      "name": "Wandering Shoal",
+      "level": 10,
+      "tier": "Gold",
+      "day": "8",
+      "url": "https://bazaardb.gg/card/v4d6pdqd00xl5t9wyfvchmntl6/Wandering-Shoal",
+      "art": "https://s.bazaardb.gg/v1/z19.0/d69f4d52160e9bf89a98adf139127deb49553b36_p@256.webp?v=8"
+    },
+    {
+      "name": "Dragon",
+      "level": 13,
+      "tier": "Legendary",
+      "day": "8",
+      "url": "https://bazaardb.gg/card/12mhp4h4whdsjjzj5t1chbfzkgy/Dragon",
+      "art": "https://s.bazaardb.gg/v1/z19.0/b63740dea976aeebbc4951e697665d4dba588c49_p@256.webp?v=8"
+    },
+    {
+      "name": "Cloudtop Admiral",
+      "level": 9,
+      "tier": "Bronze",
+      "day": "9",
+      "url": "https://bazaardb.gg/card/18ctxf7w2txch3tf9z0dgm0xgwk/Cloudtop-Admiral",
+      "art": "https://s.bazaardb.gg/v1/z19.0/8f8cc5cb45bdc8e983a6ba7da5dfad5ec3206645_p@256.webp?v=8"
+    },
+    {
+      "name": "Elite Duelist",
+      "level": 9,
+      "tier": "Bronze",
+      "day": "9",
+      "url": "https://bazaardb.gg/card/82mszstl7dbvmcbpcpkp048c55/Elite-Duelist",
+      "art": "https://s.bazaardb.gg/v1/z19.0/9432e3fcaa16e41f809d0ccdd0176b957948ef2f_p@256.webp?v=8"
+    },
+    {
+      "name": "Surly Mechanic",
+      "level": 9,
+      "tier": "Bronze",
+      "day": "9",
+      "url": "https://bazaardb.gg/card/6x5j39lnx97b74kc8b16h49vvf/Surly-Mechanic",
+      "art": "https://s.bazaardb.gg/v1/z19.0/79ad70412fd17ea05c336c7621d6397c7d829cd3_p@256.webp?v=8"
+    },
+    {
+      "name": "Oasis Guardian",
+      "level": 10,
+      "tier": "Silver",
+      "day": "9",
+      "url": "https://bazaardb.gg/card/1qwg17z9nm9msf2dfsmqsbdgz6/Oasis-Guardian",
+      "art": "https://s.bazaardb.gg/v1/z19.0/8cee0f6eafd1a8eb9ee27260ccb845c3e50c4f70_p@256.webp?v=8"
+    },
+    {
+      "name": "Roaming Isle",
+      "level": 10,
+      "tier": "Silver",
+      "day": "9",
+      "url": "https://bazaardb.gg/card/5vhp4th2dg2gfk3ffcs1yp45d7/Roaming-Isle",
+      "art": "https://s.bazaardb.gg/v1/z19.0/94e0d9a4a61830a9f03ca5d034062f61444bd830_p@256.webp?v=8"
+    },
+    {
+      "name": "Terrorform",
+      "level": 10,
+      "tier": "Silver",
+      "day": "9",
+      "url": "https://bazaardb.gg/card/9t503jx9km5pdpncmtn8fv9gts/Terrorform",
+      "art": "https://s.bazaardb.gg/v1/z19.0/6119ecb4dbcdff950b0e5972eb1cc38265de917a_p@256.webp?v=8"
+    },
+    {
+      "name": "Weapons Platform",
+      "level": 11,
+      "tier": "Gold",
+      "day": "9",
+      "url": "https://bazaardb.gg/card/13lb5zpjjxbfjzzqfd17typ965b/Weapons-Platform",
+      "art": "https://s.bazaardb.gg/v1/z19.0/fb73585aec6ec66cbf3b33f2430e08563c6c41a5_p@256.webp?v=8"
+    },
+    {
+      "name": "Foundation Revenant",
+      "level": 12,
+      "tier": "Diamond",
+      "day": "9",
+      "url": "https://bazaardb.gg/card/19k4kjdfqfy1mtcyjjk6cf5l8tg/Foundation-Revenant",
+      "art": "https://s.bazaardb.gg/v1/z19.0/69431932b218bd74e3c3eae02ca8493403222eb4_p@256.webp?v=8"
+    },
+    {
+      "name": "Lost Hero",
+      "level": 12,
+      "tier": "Diamond",
+      "day": "9",
+      "url": "https://bazaardb.gg/card/d20lkw58q22qnk4l1pxm9kv1yp/Lost-Hero",
+      "art": "https://s.bazaardb.gg/v1/z19.0/ec0a12f1d3a5328dde7a4f12cceec7244c3be13b_p@256.webp?v=8"
+    },
+    {
+      "name": "Yerdan",
+      "level": 9,
+      "tier": "Diamond",
+      "day": "9",
+      "url": "https://bazaardb.gg/card/vs7jxxw106y86kpyslyhczybmj/Yerdan",
+      "art": "https://s.bazaardb.gg/v1/z19.0/20733ebfec6361e8746f3a9d009fcfc92019140d_p@256.webp?v=8"
+    },
+    {
+      "name": "Void Knight",
+      "level": 13,
+      "tier": "Legendary",
+      "day": "9",
+      "url": "https://bazaardb.gg/card/zwcdmgv83sjm5j6jsmwn81130p/Void-Knight",
+      "art": "https://s.bazaardb.gg/v1/z19.0/606e063afd47941db09bfdc75c7cb9bb4bffe9fe_p@256.webp?v=8"
+    },
+    {
+      "name": "Hulking Experiment",
+      "level": 10,
+      "tier": "Bronze",
+      "day": "10",
+      "url": "https://bazaardb.gg/card/cgck3mqsb3m5t75ndb252zyg66/Hulking-Experiment",
+      "art": "https://s.bazaardb.gg/v1/z19.0/c1c4096f1d50a7e0fd13f80a49535a73c7cc7ec7_p@256.webp?v=8"
+    },
+    {
+      "name": "Master Alchemist",
+      "level": 10,
+      "tier": "Bronze",
+      "day": "10",
+      "url": "https://bazaardb.gg/card/wds26kf772c6jwj4z1kw2dynbz/Master-Alchemist",
+      "art": "https://s.bazaardb.gg/v1/z19.0/e840c538f3f3952677a8fe116f1521041fcecdf3_p@256.webp?v=8"
+    },
+    {
+      "name": "Infernal Dreadnought",
+      "level": 11,
+      "tier": "Silver",
+      "day": "10",
+      "url": "https://bazaardb.gg/card/9fllk70yzkcm16zk9ktbspvk1v/Infernal-Dreadnought",
+      "art": "https://s.bazaardb.gg/v1/z19.0/9e6405a6b7e1eaf8f1b425fbad7918eb16c36f0a_p@256.webp?v=8"
+    },
+    {
+      "name": "Lord of the Wastes",
+      "level": 11,
+      "tier": "Silver",
+      "day": "10",
+      "url": "https://bazaardb.gg/card/19kn0hl3klqjw82llpwpv0ndpcl/Lord-of-the-Wastes",
+      "art": "https://s.bazaardb.gg/v1/z19.0/7241f3b5f793a9f348da871104ef403e81aa6258_p@256.webp?v=8"
+    },
+    {
+      "name": "Test Subject Alpha",
+      "level": 11,
+      "tier": "Silver",
+      "day": "10",
+      "url": "https://bazaardb.gg/card/19s5lnpq8bk0vx217qdwkc96npp/Test-Subject-Alpha",
+      "art": "https://s.bazaardb.gg/v1/z19.0/94bdf346ff36287b82cd79ea17156f1a3e2f5367_p@256.webp?v=8"
+    },
+    {
+      "name": "Tortuga",
+      "level": 11,
+      "tier": "Silver",
+      "day": "10",
+      "url": "https://bazaardb.gg/card/6t8zjf9zn2g6blq35hvns10nbm/Tortuga",
+      "art": "https://s.bazaardb.gg/v1/z19.0/e6252cd36d2d7dd4d069ec108746708734bddcc1_p@256.webp?v=8"
+    },
+    {
+      "name": "Trash Titan",
+      "level": 11,
+      "tier": "Silver",
+      "day": "10",
+      "url": "https://bazaardb.gg/card/4ps3vpqxqyjf228jgswyjxvvg1/Trash-Titan",
+      "art": "https://s.bazaardb.gg/v1/z19.0/2891c5b669320a20fdef5338889b6cac5752697e_p@256.webp?v=8"
+    },
+    {
+      "name": "Boss Harrow",
+      "level": 12,
+      "tier": "Gold",
+      "day": "10",
+      "url": "https://bazaardb.gg/card/d1g3zgq6htlwdy8mmzh97k3qmg/Boss-Harrow",
+      "art": "https://s.bazaardb.gg/v1/z19.0/b2d0bfb18c5fd3371305d63dbf94e9b6183c6dba_p@256.webp?v=8"
+    },
+    {
+      "name": "Dooltron",
+      "level": 12,
+      "tier": "Gold",
+      "day": "10",
+      "url": "https://bazaardb.gg/card/5ymcgq60b9xfn41lzmtkghf1pj/Dooltron",
+      "art": "https://s.bazaardb.gg/v1/z19.0/de8de1dce704fae015ed3c650d6e54c89342a01d_p@256.webp?v=8"
+    },
+    {
+      "name": "Outlands Terror",
+      "level": 12,
+      "tier": "Gold",
+      "day": "10",
+      "url": "https://bazaardb.gg/card/j5gv88g39ty0v15wkp0c336xn2/Outlands-Terror",
+      "art": "https://s.bazaardb.gg/v1/z19.0/0c2b2dd9e6a977bb69820ded705979cf9de41512_p@256.webp?v=8"
+    },
+    {
+      "name": "Rex Spex",
+      "level": 12,
+      "tier": "Gold",
+      "day": "10",
+      "url": "https://bazaardb.gg/card/6847znsxmgnn97n3f93625gkhq/Rex-Spex",
+      "art": "https://s.bazaardb.gg/v1/z19.0/ab651e8fd43544f25f134981d3c0ca1d91304e9f_p@256.webp?v=8"
+    },
+    {
+      "name": "Volkas Enforcer",
+      "level": 12,
+      "tier": "Gold",
+      "day": "10",
+      "url": "https://bazaardb.gg/card/fvgb9ntkdw3y1qn4fzmbn6vym7/Volkas-Enforcer",
+      "art": "https://s.bazaardb.gg/v1/z19.0/58636e8d86967e421d45c464ddec6f0dcc747ae6_p@256.webp?v=8"
+    },
+    {
+      "name": "Annexed Army",
+      "level": 13,
+      "tier": "Diamond",
+      "day": "10",
+      "url": "https://bazaardb.gg/card/qxn59msyvkyymd557xw9nl71db/Annexed-Army",
+      "art": "https://s.bazaardb.gg/v1/z19.0/708391aa034b05896d48058b17939be4ab6d8af4_p@256.webp?v=8"
+    },
+    {
+      "name": "Frost Street Champion",
+      "level": 13,
+      "tier": "Diamond",
+      "day": "10",
+      "url": "https://bazaardb.gg/card/bytt91q7t8qt3ghmj0bxsnqs0z/Frost-Street-Champion",
+      "art": "https://s.bazaardb.gg/v1/z19.0/15a7f30594d87ae55658fe9ad523fe25eb052322_p@256.webp?v=8"
+    },
+    {
+      "name": "Gibbus",
+      "level": 13,
+      "tier": "Diamond",
+      "day": "10",
+      "url": "https://bazaardb.gg/card/smn5wn7wmtv4mcj74yv7d0m6nk/Gibbus",
+      "art": "https://s.bazaardb.gg/v1/z19.0/756fa578b23c904276ac036bc0ace07b88188d69_p@256.webp?v=8"
+    },
+    {
+      "name": "Mad Diver",
+      "level": 13,
+      "tier": "Diamond",
+      "day": "10",
+      "url": "https://bazaardb.gg/card/1348v1qp3vkvtvc4f5sw86vsvll/Mad-Diver",
+      "art": "https://s.bazaardb.gg/v1/z19.0/313fcaad09d053cee32fb7723bee40b0c64051cf_p@256.webp?v=8"
+    },
+    {
+      "name": "Property Baron",
+      "level": 13,
+      "tier": "Diamond",
+      "day": "10",
+      "url": "https://bazaardb.gg/card/60jlxbb5djvk3wglfjfztvpq0h/Property-Baron",
+      "art": "https://s.bazaardb.gg/v1/z19.0/84c18311ecc94e5c21dd55463f38903ca278b77f_p@256.webp?v=8"
+    },
+    {
+      "name": "Void Colossus",
+      "level": 13,
+      "tier": "Diamond",
+      "day": "10",
+      "url": "https://bazaardb.gg/card/lq1h73207ww17yfbsx3hy2cw49/Void-Colossus",
+      "art": "https://s.bazaardb.gg/v1/z19.0/0859218719e4516f58507e4c9a26791cc1e99b9e_p@256.webp?v=8"
+    },
+    {
+      "name": "Awakened District",
+      "level": 15,
+      "tier": "Legendary",
+      "day": "10",
+      "url": "https://bazaardb.gg/card/19d4nhccb2d5zbw19gbnc9yy2gf/Awakened-District",
+      "art": "https://s.bazaardb.gg/v1/z19.0/2d3529d83746b3c3c61f2af290c34ca42cd9abf7_p@256.webp?v=8"
+    },
+    {
+      "name": "Eight Arm Davvy",
+      "level": 13,
+      "tier": "Legendary",
+      "day": "10",
+      "url": "https://bazaardb.gg/card/sjxttmxjkqwx3wfbw099ynxgbb/Eight-Arm-Davvy",
+      "art": "https://s.bazaardb.gg/v1/z19.0/7e823251072d1a197e880531b4c67c20de7180a3_p@256.webp?v=8"
+    },
+    {
+      "name": "Lord Arken",
+      "level": 15,
+      "tier": "Legendary",
+      "day": "10",
+      "url": "https://bazaardb.gg/card/qh4btzg467xc9zy687jq29746n/Lord-Arken",
+      "art": "https://s.bazaardb.gg/v1/z19.0/b0d18a72ef99ed5c908da6c784daf22f07ae153b_p@256.webp?v=8"
+    },
+    {
+      "name": "Morguloth",
+      "level": 15,
+      "tier": "Legendary",
+      "day": "10",
+      "url": "https://bazaardb.gg/card/53252nyjtm5ggjllpy51c1g8sz/Morguloth",
+      "art": "https://s.bazaardb.gg/v1/z19.0/547cb0f6d97e587b25d88a0cfc54e38eeb7af267_p@256.webp?v=8"
+    },
+    {
+      "name": "Void Golem",
+      "level": 15,
+      "tier": "Legendary",
+      "day": "10",
+      "url": "https://bazaardb.gg/card/fkbcxpvg28kygd2f382xn05x7m/Void-Golem",
+      "art": "https://s.bazaardb.gg/v1/z19.0/1f7bce45336bb94a4d63bae3eca00e80b8ddcdba_p@256.webp?v=8"
+    },
+    {
+      "name": "Blowguns Trap",
+      "level": 9,
+      "tier": "Bronze",
+      "day": "",
+      "url": "https://bazaardb.gg/card/ldpnjzx3qzf4bwg6tlzbskkmdn/Blowguns-Trap",
+      "art": "https://s.bazaardb.gg/v1/z19.0/ae1d72739fc24e4b0b7f05bd9a872c276de3ac2f_p@256.webp?v=8"
+    },
+    {
+      "name": "Blowguns Trap",
+      "level": 9,
+      "tier": "Bronze",
+      "day": "",
+      "url": "https://bazaardb.gg/card/qzjp0mtv4y06fwbkx8jmmq10fl/Blowguns-Trap",
+      "art": "https://s.bazaardb.gg/v1/z19.0/ae1d72739fc24e4b0b7f05bd9a872c276de3ac2f_p@256.webp?v=8"
+    },
+    {
+      "name": "Conspiracy Theorist",
+      "level": 6,
+      "tier": "Bronze",
+      "day": "",
+      "url": "https://bazaardb.gg/card/lnh7hllybzyykcbtzdj73z0xgy/Conspiracy-Theorist",
+      "art": "https://s.bazaardb.gg/v1/z19.0/568982e625f1cceaac35078655d982ea96075d4a_p@256.webp?v=8"
+    },
+    {
+      "name": "Mimic",
+      "level": 3,
+      "tier": "Bronze",
+      "day": "",
+      "url": "https://bazaardb.gg/card/nx4zh4p75fvjz4z0035k21mlbh/Mimic",
+      "art": "https://s.bazaardb.gg/v1/z19.0/1308660bc56232d3e78a008372f339b6fb8c93ed_p@256.webp?v=8"
+    },
+    {
+      "name": "Mythkeeper",
+      "level": 9,
+      "tier": "Bronze",
+      "day": "",
+      "url": "https://bazaardb.gg/card/d1xxf87l420n68m5hg9nx0tshs/Mythkeeper",
+      "art": "https://s.bazaardb.gg/v1/z19.0/a2ca510f219d350b3bc161863c06b51517a26242_p@256.webp?v=8"
+    },
+    {
+      "name": "Caltrops Trap",
+      "level": 10,
+      "tier": "Silver",
+      "day": "",
+      "url": "https://bazaardb.gg/card/3jmp13hlm2x5d92vztvjcsgjpd/Caltrops-Trap",
+      "art": "https://s.bazaardb.gg/v1/z19.0/55331bf83c5b300414bffcdcd5400c368e253fd1_p@256.webp?v=8"
+    },
+    {
+      "name": "Caltrops Trap",
+      "level": 10,
+      "tier": "Silver",
+      "day": "",
+      "url": "https://bazaardb.gg/card/sl3c6s8l3s411k8v1zf7yv6gyy/Caltrops-Trap",
+      "art": "https://s.bazaardb.gg/v1/z19.0/55331bf83c5b300414bffcdcd5400c368e253fd1_p@256.webp?v=8"
+    },
+    {
+      "name": "Caltrops Trap",
+      "level": 10,
+      "tier": "Silver",
+      "day": "",
+      "url": "https://bazaardb.gg/card/16jzvnb93tqh08wgkz5flpz5ctm/Caltrops-Trap",
+      "art": "https://s.bazaardb.gg/v1/z19.0/55331bf83c5b300414bffcdcd5400c368e253fd1_p@256.webp?v=8"
+    },
+    {
+      "name": "Greenheart Guardian",
+      "level": 10,
+      "tier": "Silver",
+      "day": "",
+      "url": "https://bazaardb.gg/card/12xnhh8tx5zb66gy28329x0844v/Greenheart-Guardian",
+      "art": "https://s.bazaardb.gg/v1/z19.0/e8f77662d5e8b98f7cf1597599752edea6a051a5_p@256.webp?v=8"
+    },
+    {
+      "name": "Mimic",
+      "level": 7,
+      "tier": "Silver",
+      "day": "",
+      "url": "https://bazaardb.gg/card/125ksjz3x3c0lh4kpl72j3ghvg1/Mimic",
+      "art": "https://s.bazaardb.gg/v1/z19.0/1308660bc56232d3e78a008372f339b6fb8c93ed_p@256.webp?v=8"
+    },
+    {
+      "name": "Boulder Trap",
+      "level": 11,
+      "tier": "Gold",
+      "day": "",
+      "url": "https://bazaardb.gg/card/97wp551fc6m8h6f1fljy9k5775/Boulder-Trap",
+      "art": "https://s.bazaardb.gg/v1/z19.0/bc07b69529f94c8a8da26be87286d7fd2a5f947a_p@256.webp?v=8"
+    },
+    {
+      "name": "Boulder Trap",
+      "level": 11,
+      "tier": "Gold",
+      "day": "",
+      "url": "https://bazaardb.gg/card/yl3ql1qp7d9lkn4fkhc964sxyc/Boulder-Trap",
+      "art": "https://s.bazaardb.gg/v1/z19.0/bc07b69529f94c8a8da26be87286d7fd2a5f947a_p@256.webp?v=8"
+    },
+    {
+      "name": "Mimic",
+      "level": 10,
+      "tier": "Gold",
+      "day": "",
+      "url": "https://bazaardb.gg/card/16skq9x9cmvmjbkglchlx1zw69t/Mimic",
+      "art": "https://s.bazaardb.gg/v1/z19.0/1308660bc56232d3e78a008372f339b6fb8c93ed_p@256.webp?v=8"
+    },
+    {
+      "name": "Qomatz",
+      "level": 11,
+      "tier": "Gold",
+      "day": "",
+      "url": "https://bazaardb.gg/card/vwvmp7xb3cmf95s1z6dbpqjj2b/Qomatz",
+      "art": "https://s.bazaardb.gg/v1/z19.0/b9d6b3bc662d0ffb2ba1657b8697d6eef84df8bf_p@256.webp?v=8"
+    },
+    {
+      "name": "The Vessel",
+      "level": 8,
+      "tier": "Gold",
+      "day": "",
+      "url": "https://bazaardb.gg/card/dclnh6gj2b9yz84xmlpx9gg9ln/The-Vessel",
+      "art": "https://s.bazaardb.gg/v1/z19.0/e55e240cfb475aa8e52a36cd18e78bf9cacf540f_p@256.webp?v=8"
+    },
+    {
+      "name": "Aleppa Tantius",
+      "level": 11,
+      "tier": "Diamond",
+      "day": "",
+      "url": "https://bazaardb.gg/card/z35yyk9m4y950ggvxdkb20kt1n/Aleppa-Tantius",
+      "art": "https://s.bazaardb.gg/v1/z19.0/642521afc14eac9349811869d96db21877a65ad9_p@256.webp?v=8"
+    },
+    {
+      "name": "Bounty Hunter",
+      "level": 9,
+      "tier": "Diamond",
+      "day": "",
+      "url": "https://bazaardb.gg/card/2bt0kdnjmxzzjf2hs805shhdhj/Bounty-Hunter",
+      "art": "https://s.bazaardb.gg/v1/z19.0/e4779527fb80e116fbcc65e3375710a2041b92d0_p@256.webp?v=8"
+    },
+    {
+      "name": "Mimic",
+      "level": 13,
+      "tier": "Diamond",
+      "day": "",
+      "url": "https://bazaardb.gg/card/3ys1m02qk2x8kzqc987x4963cf/Mimic",
+      "art": "https://s.bazaardb.gg/v1/z19.0/1308660bc56232d3e78a008372f339b6fb8c93ed_p@256.webp?v=8"
+    },
+    {
+      "name": "Mr. Moo",
+      "level": 10,
+      "tier": "Diamond",
+      "day": "",
+      "url": "https://bazaardb.gg/card/kxptgjnpgtmtyfbcblbbmy0l7g/Mr.-Moo",
+      "art": "https://s.bazaardb.gg/v1/z19.0/2714536b754b926c841405594e970c0ba6e4e8a1_p@256.webp?v=8"
+    }
+  ],
+  "cards": {
+    "447c40e6-7aec-4391-8be7-df4952815d40": {
+      "art": "https://s.bazaardb.gg/v1/z19.0/ec651203b9f5c072dc57c9aeece7099458a4beae@400S.webp",
+      "art_key": "d5021437ee1b5cf4290fd95b969e246e"
+    },
+    "6f70e0cf-8349-4f14-a121-6c9065dc514c": {
+      "art": "https://s.bazaardb.gg/v1/z19.0/b2d32942b245a0eec83a8d5774ce12b87b25d748@400.webp",
+      "art_key": "1350a1051b254264f93f288740206026"
+    },
+    "0c710f33-d0fd-40c8-aa2d-34fc20f23140": {
+      "art": "https://s.bazaardb.gg/v1/z19.0/fb16e8b5d751ba5b8cf2cbceb3b2f501c3389d77@400.webp",
+      "art_key": "39e364b00b451fd46808142933c618f0"
+    },
+    "86f9a35d-73d6-456c-b56d-ddb6adc64175": {
+      "art": "https://s.bazaardb.gg/v1/z19.0/27c4656face042b0b7faf14612399efc8478c502@400.webp",
+      "art_key": "a799d140873d4c740bd867ac8bf4bf5c"
+    },
+    "a0345f93-0c0a-44fa-a7e4-2135acb16bcc": {
+      "art": "https://s.bazaardb.gg/v1/z19.0/1cc8201e7b8d9431a0e605da5f37e34c8e66b5c2@400L.webp",
+      "art_key": "b39a99ab6726a67429f4e3ee40fc99cd"
+    },
+    "09f668a1-82f6-42d5-94fa-88af3568edd8": {
+      "art": "https://s.bazaardb.gg/v1/z19.0/b70365f681bee63d5c2d146808f548f84d9796a9@256.webp?v=8",
+      "art_key": "Icon_Skill_FinesseWeapon.png"
+    },
+    "b607f75b-e245-4e4a-809e-899fcdd1e6e5": {
+      "art": "https://s.bazaardb.gg/v1/z19.0/4a0849851183b7dbc2057c945a4f6f40120e5cf3@256.webp?v=8",
+      "art_key": "Icon_Skill_ClosingSpeed.png"
+    }
+  }
+}

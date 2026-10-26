@@ -71,7 +71,8 @@ class FeatureEventWriter:
 
     def submit(self, feature: str, page: str, outcome: str, fingerprint: str, ip: str) -> bool:
         try:
-            self.queue.put_nowait((feature, page, outcome, fingerprint, ip))
+            created_at = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
+            self.queue.put_nowait((feature, page, outcome, fingerprint, ip, created_at))
             return True
         except queue.Full:
             return False
@@ -79,9 +80,9 @@ class FeatureEventWriter:
     def _run(self) -> None:
         cleanup_after = 0.0
         while True:
-            feature, page, outcome, fingerprint, ip = self.queue.get()
+            feature, page, outcome, fingerprint, ip, created_at = self.queue.get()
             try:
-                log_feature_event(self.db_path, feature, page, outcome, fingerprint, ip)
+                log_feature_event(self.db_path, feature, page, outcome, fingerprint, ip, created_at)
                 now = __import__('time').time()
                 if now >= cleanup_after:
                     cleanup_old_events(self.db_path)
@@ -104,7 +105,9 @@ def aggregate_hot_card_queries(rows, canonicalize=None, limit: int = 10) -> list
             continue
         if query_type in {'runs', 'winrate'}:
             values = params.get('cards') or []
-        elif query_type in {'partner', 'comp_card'}:
+        elif query_type == 'comp_card':
+            values = params.get('cards') or [params.get('card')]
+        elif query_type == 'partner':
             values = [params.get('card')]
         else:
             continue
@@ -132,6 +135,125 @@ CORE_MODULE_FEATURES = {
     'routes_query', 'feedback_submit', 'feedback_like', 'feedback_comment',
     'trivia_submit', 'trivia_vote', 'trivia_share', 'donation_qr_open',
 }
+
+
+_BEIJING = timezone(timedelta(hours=8))
+_UV_IDENTITY = """CASE
+    WHEN COALESCE(fingerprint, '') != '' THEN 'fp:' || fingerprint
+    WHEN COALESCE(ip, '') NOT IN ('', '*.*.*.*') THEN 'ip:' || ip
+    ELSE NULL END"""
+
+
+def intraday(db_path: str, date: str | None = None, now: datetime | None = None) -> dict:
+    """Hourly usage and prior-day comparison, clipped to the same local time.
+
+    UTC ISO timestamps are range-filtered before bucketing so time indexes remain
+    usable. UV is queried separately for each hour and entire period, including
+    the all-module scope; it is never obtained by adding distinct counts.
+    """
+    now = now or datetime.now(timezone.utc)
+    if now.tzinfo is None:
+        now = now.replace(tzinfo=timezone.utc)
+    local_now = now.astimezone(_BEIJING)
+    today = local_now.date()
+    min_date = today - timedelta(days=89)
+    if date is None:
+        selected = today
+    else:
+        try:
+            selected = datetime.strptime(date, '%Y-%m-%d').date()
+        except (TypeError, ValueError) as exc:
+            raise ValueError('日期格式应为 YYYY-MM-DD') from exc
+        if selected.isoformat() != date:
+            raise ValueError('日期格式应为 YYYY-MM-DD')
+    if not min_date <= selected <= today:
+        raise ValueError('请选择最近 90 天内的日期，不能选择未来日期')
+
+    is_today = selected == today
+    elapsed = (local_now - local_now.replace(hour=0, minute=0, second=0, microsecond=0)
+               if is_today else timedelta(days=1))
+    previous_date = selected - timedelta(days=1)
+    module_names = set()
+    conn = _connect(db_path)
+    try:
+        # One snapshot keeps source availability and all totals consistent.
+        conn.execute('BEGIN')
+        first_seen = {}
+        for source, table in (('core', 'feature_event'), ('pv', 'page_view'), ('api', 'api_log')):
+            raw = conn.execute(f'SELECT MIN(created_at) FROM {table}').fetchone()[0]
+            first_seen[source] = (
+                datetime.fromisoformat(raw).replace(tzinfo=timezone.utc).astimezone(_BEIJING).date()
+                if raw else None
+            )
+
+        def period(day):
+            start = datetime.combine(day, datetime.min.time(), tzinfo=_BEIJING)
+            end = start + elapsed
+            bounds = tuple(value.astimezone(timezone.utc).replace(tzinfo=None).isoformat()
+                           for value in (start, end))
+            available = {source: bool(first and day >= first and day >= min_date)
+                         for source, first in first_seen.items()}
+
+            def empty_scope():
+                hours = []
+                for hour in range(24):
+                    state = ('future' if is_today and hour > local_now.hour else
+                             'partial' if is_today and hour == local_now.hour else 'complete')
+                    hours.append({'hour': hour, 'state': state, 'uses': 0, 'uv': 0,
+                                  'successes': 0, 'empty_results': 0, 'errors': 0,
+                                  'pv': 0, 'api_calls': 0})
+                return {'hours': hours, 'summary': {'uses': 0, 'uv': 0, 'successes': 0,
+                                                  'empty_results': 0, 'errors': 0,
+                                                  'pv': 0, 'api_calls': 0}}
+
+            result = {'date': day.isoformat(), 'available': available,
+                      'all': empty_scope(), 'modules': {}}
+            placeholders = ','.join('?' for _ in CORE_MODULE_FEATURES)
+            where = f'created_at >= ? AND created_at < ? AND feature IN ({placeholders})'
+            args = (*bounds, *sorted(CORE_MODULE_FEATURES))
+            counts = f"""COUNT(*), COUNT(DISTINCT {_UV_IDENTITY}),
+                SUM(outcome='success'), SUM(outcome='empty'), SUM(outcome='error')"""
+            metrics = ('uses', 'uv', 'successes', 'empty_results', 'errors')
+            for by_module in (False, True):
+                module_expr = 'page' if by_module else "'all'"
+                rows = conn.execute(f"""SELECT {module_expr},
+                    CAST(STRFTIME('%H', created_at, '+8 hours') AS INTEGER), {counts}
+                    FROM feature_event WHERE {where}
+                    GROUP BY 1, 2 ORDER BY 1, 2""", args).fetchall()
+                summaries = conn.execute(f"""SELECT {module_expr}, {counts}
+                    FROM feature_event WHERE {where} GROUP BY 1""", args).fetchall()
+                for module, hour, *values in rows:
+                    if by_module:
+                        module_names.add(module)
+                        scope = result['modules'].setdefault(module, empty_scope())
+                    else:
+                        scope = result['all']
+                    scope['hours'][hour].update(zip(metrics, values))
+                for module, *values in summaries:
+                    scope = result['modules'][module] if by_module else result['all']
+                    scope['summary'].update(zip(metrics, values))
+            for table, metric in (('page_view', 'pv'), ('api_log', 'api_calls')):
+                rows = conn.execute(f"""SELECT
+                    CAST(STRFTIME('%H', created_at, '+8 hours') AS INTEGER), COUNT(*)
+                    FROM {table} WHERE created_at >= ? AND created_at < ?
+                    GROUP BY 1 ORDER BY 1""", bounds).fetchall()
+                for hour, count in rows:
+                    result['all']['hours'][hour][metric] = count
+                result['all']['summary'][metric] = sum(row[1] for row in rows)
+            return result
+
+        current = period(selected)
+        previous = period(previous_date)
+    finally:
+        conn.close()
+    return {
+        'date': selected.isoformat(), 'previous_date': previous_date.isoformat(),
+        'today': today.isoformat(), 'min_date': min_date.isoformat(),
+        'timezone': 'Asia/Shanghai', 'is_today': is_today,
+        'generated_at': local_now.isoformat(),
+        'cutoff_time': local_now.strftime('%H:%M:%S') if is_today else '24:00:00',
+        'modules': sorted(module_names), 'current': current, 'previous': previous,
+    }
 
 
 def overview(db_path: str, days: int, now: datetime | None = None) -> dict:

@@ -2,62 +2,94 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
+<script src="/static/theme.js?v=1"></script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>巴扎阵容库 · 数据看板</title>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="/static/vendor/chart.umd-4.4.0.min.js"></script>
+<script src="/static/stats-dashboard.js?v=comp-tracking-20261019-131736" defer></script>
+<script src="/static/stats-comp.js?v=comp-tracking-20261019-131736" defer></script>
+<script src="/static/stats-search.js?v=20261016-search" defer></script>
+<link rel="stylesheet" href="/static/stats-search.css?v=20261016-search">
+<script src="/static/stats-intraday.js" defer></script>
+<script src="/static/stats-acquisition.js?v=1" defer></script>
+<meta name="robots" content="noindex, nofollow">
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:'Inter','PingFang SC','Microsoft YaHei',sans-serif;background:#0a0e1a;color:#e2e8f0;min-height:100vh}
-.navbar{background:#0d1221;border-bottom:1px solid #1f2937;padding:0 28px;height:56px;display:flex;align-items:center;justify-content:space-between}
-.logo{font-size:16px;font-weight:700;color:#f59e0b}
-.nav-link{font-size:13px;color:#9ca3af;text-decoration:none;transition:color .2s}
-.nav-link:hover{color:#f59e0b}
+body{font-family:'Inter','PingFang SC','Microsoft YaHei',sans-serif;background:var(--theme-bg, #0a0e1a);color:var(--theme-text, #e2e8f0);min-height:100vh}
+.navbar{background:var(--theme-surface, #0d1221);border-bottom:1px solid var(--theme-border, #1f2937);padding:0 28px;height:56px;display:flex;align-items:center;justify-content:space-between}
+.logo{font-size:16px;font-weight:700;color:var(--theme-gold, #f59e0b)}
+.nav-link{font-size:13px;color:var(--theme-muted, #9ca3af);text-decoration:none;transition:color .2s}
+.nav-link:hover{color:var(--theme-gold, #f59e0b)}
 .main{max-width:1200px;margin:0 auto;padding:28px 20px}
-.page-title{font-size:20px;font-weight:700;color:#e2e8f0;margin-bottom:6px}
-.page-sub{font-size:13px;color:#6b7280;margin-bottom:24px}
+.page-title{font-size:20px;font-weight:700;color:var(--theme-text, #e2e8f0);margin-bottom:6px}
+.page-sub{font-size:13px;color:var(--theme-dim, #6b7280);margin-bottom:24px}
 .controls{display:flex;gap:10px;margin-bottom:24px;flex-wrap:wrap;align-items:center}
-.ctrl-label{font-size:13px;color:#6b7280}
-.day-btn{padding:6px 16px;border-radius:20px;border:1px solid #374151;background:transparent;color:#9ca3af;cursor:pointer;font-size:13px;transition:all .2s}
-.day-btn:hover{border-color:#f59e0b;color:#f59e0b}
-.day-btn.active{background:#f59e0b;color:#0a0e1a;border-color:#f59e0b;font-weight:600}
+.ctrl-label{font-size:13px;color:var(--theme-dim, #6b7280)}
+.day-btn{padding:6px 16px;border-radius:20px;border:1px solid var(--theme-border-strong, #374151);background:transparent;color:var(--theme-muted, #9ca3af);cursor:pointer;font-size:13px;transition:all .2s}
+.day-btn:hover{border-color:var(--theme-gold, #f59e0b);color:var(--theme-gold, #f59e0b)}
+.day-btn.active{background:var(--theme-gold, #f59e0b);color:var(--theme-bg, #0a0e1a);border-color:var(--theme-gold, #f59e0b);font-weight:600}
 .kpi-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:16px;margin-bottom:24px}
-.kpi-card{background:#111827;border:1px solid #1f2937;border-radius:12px;padding:20px}
-.kpi-label{font-size:12px;color:#6b7280;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px}
-.kpi-value{font-size:32px;font-weight:800;color:#f59e0b;line-height:1}
-.kpi-sub{font-size:12px;color:#6b7280;margin-top:6px}
+.kpi-card{background:var(--theme-surface, #111827);border:1px solid var(--theme-border, #1f2937);border-radius:12px;padding:20px}
+.kpi-label{font-size:12px;color:var(--theme-dim, #6b7280);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px}
+.kpi-value{font-size:32px;font-weight:800;color:var(--theme-gold, #f59e0b);line-height:1}
+.kpi-sub{font-size:12px;color:var(--theme-dim, #6b7280);margin-top:6px}
 .section{margin-bottom:24px}
-.section-title{font-size:14px;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:.06em;margin-bottom:14px}
-.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
-@media(max-width:768px){.grid-2{grid-template-columns:1fr}}
-.chart-card{background:#111827;border:1px solid #1f2937;border-radius:12px;padding:20px}
-.chart-title{font-size:13px;font-weight:600;color:#e2e8f0;margin-bottom:14px}
+.section-title{font-size:14px;font-weight:600;color:var(--theme-muted, #9ca3af);text-transform:uppercase;letter-spacing:.06em;margin-bottom:14px}
+.grid-2{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px}
+@media(max-width:768px){.grid-2{grid-template-columns:minmax(0,1fr)}}
+.chart-card{background:var(--theme-surface, #111827);border:1px solid var(--theme-border, #1f2937);border-radius:12px;padding:20px}
+.chart-title{font-size:13px;font-weight:600;color:var(--theme-text, #e2e8f0);margin-bottom:14px}
 .chart-wrap{position:relative;height:220px}
-.table-card{background:#111827;border:1px solid #1f2937;border-radius:12px;overflow:hidden}
+.table-card{background:var(--theme-surface, #111827);border:1px solid var(--theme-border, #1f2937);border-radius:12px;overflow:hidden}
 .tbl{width:100%;border-collapse:collapse;font-size:13px}
-.tbl th{padding:10px 16px;text-align:left;font-size:11px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid #1f2937;background:#0d1221}
-.tbl td{padding:10px 16px;border-bottom:1px solid #1a2235;color:#e2e8f0}
+.tbl th{padding:10px 16px;text-align:left;font-size:11px;font-weight:600;color:var(--theme-dim, #6b7280);text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid var(--theme-border, #1f2937);background:var(--theme-surface, #0d1221)}
+.tbl td{padding:10px 16px;border-bottom:1px solid var(--theme-panel, #1a2235);color:var(--theme-text, #e2e8f0)}
 .tbl tr:last-child td{border-bottom:none}
-.tbl tr:hover td{background:#1a2235}
+.tbl tr:hover td{background:var(--theme-panel, #1a2235)}
+.feature-note{font-size:12px;line-height:1.7;color:var(--theme-muted, #9ca3af);margin-bottom:12px}
+.feature-table-wrap{overflow-x:auto}
+.feature-table{min-width:850px}
+.feature-info{min-width:260px;max-width:420px;white-space:normal}
+.feature-name{font-weight:600;color:var(--theme-text, #e2e8f0)}
+.feature-description{font-size:12px;line-height:1.6;color:var(--theme-muted, #9ca3af);margin-top:5px}
+.feature-extra{margin-top:14px}
+.feature-extra>summary{cursor:pointer;color:var(--theme-muted, #9ca3af);font-size:13px;padding:10px 0}
 .badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600}
-.badge-green{background:#065f46;color:#34d399}
-.badge-yellow{background:#78350f;color:#fbbf24}
-.badge-red{background:#7f1d1d;color:#f87171}
-.tab-bar-item{display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid #1a2235}
+.badge-green{background:var(--theme-success-bg, #065f46);color:var(--theme-teal, #34d399)}
+.badge-yellow{background:var(--theme-warning-bg, #78350f);color:var(--theme-gold, #fbbf24)}
+.badge-red{background:var(--theme-error-bg, #7f1d1d);color:var(--theme-coral, #f87171)}
+.tab-bar-item{display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid var(--theme-panel, #1a2235)}
 .tab-bar-item:last-child{border-bottom:none}
-.tab-bar-name{flex:1;font-size:13px;color:#e2e8f0}
-.tab-bar-count{font-size:13px;font-weight:600;color:#f59e0b}
-.tab-bar-fill{height:6px;border-radius:3px;background:#f59e0b;transition:width .5s ease}
-.tab-bar-wrap{flex:2;background:#1f2937;border-radius:3px;overflow:hidden}
-.loading{text-align:center;padding:60px;color:#6b7280}
-.error-msg{background:#1f1010;border:1px solid #7f1d1d;border-radius:10px;padding:14px;color:#f87171;font-size:13px;margin-bottom:16px}
+.tab-bar-name{flex:1;font-size:13px;color:var(--theme-text, #e2e8f0)}
+.tab-bar-count{font-size:13px;font-weight:600;color:var(--theme-gold, #f59e0b)}
+.tab-bar-fill{height:6px;border-radius:3px;background:var(--theme-gold, #f59e0b);transition:width .5s ease}
+.tab-bar-wrap{flex:2;background:var(--theme-border, #1f2937);border-radius:3px;overflow:hidden}
+.loading{text-align:center;padding:60px;color:var(--theme-dim, #6b7280)}
+.error-msg{background:var(--theme-error-bg, #1f1010);border:1px solid var(--theme-error-bg, #7f1d1d);border-radius:10px;padding:14px;color:var(--theme-coral, #f87171);font-size:13px;margin-bottom:16px}
 .fb-action-grid{display:flex;gap:16px;flex-wrap:wrap}
-.fb-action-card{background:#111827;border:1px solid #1f2937;border-radius:12px;padding:18px 24px;flex:1;min-width:120px;text-align:center}
+.fb-action-card{background:var(--theme-surface, #111827);border:1px solid var(--theme-border, #1f2937);border-radius:12px;padding:18px 24px;flex:1;min-width:120px;text-align:center}
 .fb-action-icon{font-size:28px;margin-bottom:6px}
-.fb-action-value{font-size:24px;font-weight:700;color:#e2e8f0}
-.fb-action-label{font-size:12px;color:#6b7280;margin-top:4px}
+.fb-action-value{font-size:24px;font-weight:700;color:var(--theme-text, #e2e8f0)}
+.fb-action-label{font-size:12px;color:var(--theme-dim, #6b7280);margin-top:4px}
+.intraday-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px}
+.intraday-heading h2{font-size:16px;color:var(--theme-text, #e2e8f0)}
+.intraday-controls{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:16px;font-size:13px;color:var(--theme-muted, #9ca3af)}
+.intraday-controls input[type=date],.intraday-controls select{background:var(--theme-surface, #0d1221);color:var(--theme-text, #e2e8f0);border:1px solid var(--theme-border-strong, #374151);border-radius:8px;padding:7px 10px;color-scheme:dark;max-width:100%}
+.intraday-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:16px}
+.intraday-summary>div{background:var(--theme-surface, #0d1221);border:1px solid var(--theme-border, #1f2937);border-radius:10px;padding:14px}
+.intraday-value{font-size:23px;font-weight:700;color:var(--theme-gold, #f59e0b);margin:8px 0;overflow-wrap:anywhere}
+.intraday-note{font-size:12px;line-height:1.7;color:var(--theme-muted, #9ca3af)}
+#intraday-status{margin-bottom:12px}
+#intraday-panel .chart-wrap{height:280px;margin-bottom:12px}
+#intraday-details summary{cursor:pointer;font-size:13px;color:var(--theme-muted, #9ca3af);padding:12px 0}
+.intraday-table-wrap{overflow:auto;max-height:320px}
+.intraday-table-wrap .tbl{min-width:650px}
+@media(max-width:600px){.intraday-summary{grid-template-columns:1fr}.intraday-controls label{max-width:100%}.intraday-heading{align-items:flex-start}}
 </style>
   <link rel="stylesheet" href="/static/query-progress.css">
   <script src="/static/query-progress.js"></script>
+<link rel="stylesheet" href="/static/theme.css?v=1">
+<link rel="stylesheet" href="/static/stats-dashboard.css?v=20261015-layout">
 </head>
 <body>
 <nav class="navbar">
@@ -65,270 +97,174 @@ body{font-family:'Inter','PingFang SC','Microsoft YaHei',sans-serif;background:#
   <a href="/" class="nav-link">← 返回查询页</a>
 </nav>
 <div class="main">
-  <div class="page-title">数据看板</div>
-  <div class="page-sub" id="update-time">加载中...</div>
-
-  <div class="controls">
-    <span class="ctrl-label">统计周期：</span>
-    <button class="day-btn" onclick="setDays(1)">今天</button>
-    <button class="day-btn active" onclick="setDays(7)">近 7 天</button>
-    <button class="day-btn" onclick="setDays(30)">近 30 天</button>
-    <button class="day-btn" onclick="setDays(90)">近 90 天</button>
-    <button class="day-btn" style="margin-left:auto;background:#0ea5e9;color:#fff;border-color:#0ea5e9" onclick="openFeedbackAdminModal()">意见反馈管理</button>
-    <button class="day-btn" style="background:#8A4DFF;color:#fff;border-color:#8A4DFF" onclick="openSupportersModal()">赞赏者管理</button>
-    <button class="day-btn" style="background:#F5C76A;color:#0a0e1a;border-color:#F5C76A" onclick="openTriviaModal()">冷知识管理</button>
-    <button class="day-btn" style="background:#34d399;color:#0a0e1a;border-color:#34d399" onclick="openAnnouncementModal()">公告管理</button>
+  <header class="admin-heading">
+    <div><h1 class="page-title">管理后台</h1><p class="page-sub" id="update-time">正在加载统计…</p></div>
+    <button type="button" class="admin-button" id="dashboard-refresh">刷新数据</button>
+  </header>
+  <div class="admin-tabs" role="tablist" aria-label="后台功能">
+    <button type="button" role="tab" id="tab-overview" data-admin-tab="overview" aria-controls="panel-overview" aria-selected="true">概览</button>
+    <button type="button" role="tab" id="tab-features" data-admin-tab="features" aria-controls="panel-features" aria-selected="false" tabindex="-1">功能分析</button>
+    <button type="button" role="tab" id="tab-monitor" data-admin-tab="monitor" aria-controls="panel-monitor" aria-selected="false" tabindex="-1">运行监控</button>
+    <button type="button" role="tab" id="tab-manage" data-admin-tab="manage" aria-controls="panel-manage" aria-selected="false" tabindex="-1">内容管理</button>
   </div>
+  <div class="controls" aria-label="概览与分析统计周期">
+    <span class="ctrl-label">统计周期</span>
+    <button type="button" class="day-btn" data-days="1" onclick="setDays(1)" aria-pressed="false">今天</button>
+    <button type="button" class="day-btn active" data-days="7" onclick="setDays(7)" aria-pressed="true">近 7 天</button>
+    <button type="button" class="day-btn" data-days="30" onclick="setDays(30)" aria-pressed="false">近 30 天</button>
+    <button type="button" class="day-btn" data-days="90" onclick="setDays(90)" aria-pressed="false">近 90 天</button>
+  </div>
+  <div id="main-content" class="dashboard-status" role="status" aria-live="polite">正在加载统计…</div>
 
-  <div id="main-content"><div class="loading">加载中...</div></div>
+  <section class="admin-panel" id="panel-overview" data-admin-panel="overview" role="tabpanel" aria-labelledby="tab-overview">
+    <div id="overview-kpis"></div>
+    <section class="section" id="acquisition-panel" aria-labelledby="acquisition-title">
+      <div class="section-heading"><h2 id="acquisition-title">访问来源与主动查询</h2><button type="button" class="admin-button" id="acquisition-refresh">刷新来源</button></div>
+      <p id="acquisition-summary"></p><p class="panel-note" id="acquisition-status" role="status"></p>
+      <div class="table-scroll"><table class="tbl"><thead><tr><th>来源／方式</th><th>活动／入口</th><th>首次进入页面</th><th>访问 UV</th><th>浏览量</th><th>主动查询 UV</th><th>查询比例</th></tr></thead><tbody id="acquisition-body"></tbody></table></div>
+      <p class="panel-note">按匿名设备去重；各行 UV 可能重叠，不能相加。主动查询仅计入新版查询埋点确认的玩家操作，含缓存结果；榜单自动加载不计入。来源关联同一标签页的访问，页面访问间隔超过 30 分钟或进入新活动链接后开始新的归因。</p>
+      <details><summary>生成 B站／社群渠道链接</summary>
+        <form id="campaign-link-form" class="search-controls">
+          <label>内容路径<input name="landing" value="/runs" aria-label="内容路径"></label>
+          <label>渠道<select name="source"><option value="bilibili">B站</option><option value="qq">QQ</option><option value="wechat">微信</option></select></label>
+          <label>方式<select name="medium"><option value="video">视频</option><option value="social">社群</option><option value="profile">个人主页</option></select></label>
+          <label>活动标记<input name="campaign" placeholder="weekly_20261019"></label>
+          <label>入口标记<input name="content" value="video_intro"></label>
+          <button type="submit" class="admin-button">生成链接</button>
+        </form>
+        <label for="campaign-link-output">渠道链接</label><input id="campaign-link-output" readonly style="width:100%;margin:10px 0;padding:10px" aria-describedby="campaign-link-hint">
+        <button type="button" class="admin-button" id="campaign-link-copy">复制链接</button><p class="panel-note" id="campaign-link-hint"></p>
+      </details>
+    </section>
+    <div id="overview-alerts" class="overview-alerts" aria-label="本周期错误记录" hidden></div>
+    <section class="trend-section" aria-labelledby="trend-title">
+      <div class="section-heading"><h2 id="trend-title">使用趋势</h2><span class="panel-note" id="trend-scope">近 7 天</span></div>
+      <div class="trend-controls" role="group" aria-label="趋势时间粒度">
+        <button type="button" data-trend-view="daily" aria-pressed="true">周期趋势 · 按天</button>
+        <button type="button" data-trend-view="hourly" aria-pressed="false">单日明细 · 按小时</button>
+      </div>
+      <div id="trend-range">
+        <div class="trend-controls"><label for="daily-metric">指标</label><select id="daily-metric"><option value="api_calls">API 调用量与访客估算</option><option value="uses">当前功能记录</option><option value="uv">API 访客估算</option></select></div>
+        <div class="chart-wrap" id="trend-chart-wrap"><canvas id="trend-chart" role="img" aria-label="所选周期按天统计趋势"></canvas></div>
+        <details id="daily-details"><summary>每日明细</summary><div class="table-scroll"><table class="tbl"><thead><tr><th>北京时间日期</th><th>API 调用量</th><th>API 访客估算</th><th>当前功能记录</th></tr></thead><tbody id="daily-hourly-body"></tbody></table></div></details>
+      </div>
+      <div id="trend-hourly" hidden>
+        <p class="panel-note">独立选择某一天查看小时分布和前一天同期，不改变上方周期内的排行与摘要。</p>
+          <section id="intraday-panel" class="chart-card section" aria-labelledby="intraday-title">
+    <div class="intraday-heading">
+      <h2 id="intraday-title">日内使用趋势</h2>
+      <button type="button" class="day-btn" id="intraday-refresh">刷新</button>
+    </div>
+    <div class="intraday-controls">
+      <button type="button" class="day-btn active" id="intraday-today">今天</button>
+      <button type="button" class="day-btn" id="intraday-yesterday">昨天</button>
+      <label for="intraday-date">日期</label><input type="date" id="intraday-date">
+      <label for="intraday-metric">指标</label>
+      <select id="intraday-metric">
+        <option value="uses">核心功能使用次数</option>
+        <option value="uv">核心活跃 UV（估算）</option>
+        <option value="pv">页面 PV</option>
+        <option value="api_calls">API 调用量</option>
+      </select>
+      <label for="intraday-module">模块</label><select id="intraday-module"><option value="all">全部模块</option></select>
+      <label><input type="checkbox" id="intraday-compare" checked> 对比前一天同期</label>
+    </div>
+    <div class="intraday-summary">
+      <div><div class="intraday-note" id="intraday-total-label">当日累计</div><div class="intraday-value" id="intraday-total">—</div><div class="intraday-note" id="intraday-total-note">北京时间</div></div>
+      <div><div class="intraday-note">较前一天同期</div><div class="intraday-value" id="intraday-change">—</div><div class="intraday-note" id="intraday-previous-total">—</div></div>
+      <div><div class="intraday-note">截至当前的峰值小时</div><div class="intraday-value" id="intraday-peak">—</div><div class="intraday-note" id="intraday-peak-note">—</div></div>
+    </div>
+    <p id="intraday-status" class="intraday-note" role="status" aria-live="polite">正在加载日内统计…</p>
+    <div class="chart-wrap" id="intraday-chart-wrap"><canvas id="intraday-chart" role="img" aria-label="单日逐小时使用趋势，数据详见下方逐小时明细"></canvas></div>
+    <details id="intraday-details"><summary>逐小时明细</summary><div class="intraday-table-wrap"><table class="tbl"><thead><tr><th>北京时间</th><th id="intraday-table-metric">使用次数</th><th>前一天同期</th><th>核心 UV</th><th>成功</th><th>空结果</th><th>错误</th></tr></thead><tbody id="intraday-hourly-body"></tbody></table></div></details>
+    <p class="intraday-note">按北京时间每小时统计；核心功能沿用现有 10 秒去重规则。UV 优先按指纹去重，缺少指纹时按脱敏 IP 估算，全天 UV 单独去重。当前小时尚未结束，未来小时留空。今天每 5 分钟自动刷新，数据最多缓存 60 秒。</p>
+  </section>
+      </div>
+    </section>
+    <section class="section" aria-labelledby="overview-top-title">
+      <div class="section-heading"><h2 id="overview-top-title">功能 Top 5</h2><button type="button" class="admin-button" onclick="showAdminPanel('features')">完整分析 →</button></div>
+      <p class="scroll-hint">左右滑动查看完整功能名称与用户数。</p>
+      <div class="table-card table-scroll"><table class="tbl overview-top"><thead><tr><th>#</th><th>前台页面 → 功能</th><th>记录次数</th><th>独立用户</th></tr></thead><tbody id="overview-top-body"></tbody></table></div>
+    </section>
+    <details class="method-note"><summary>摘要统计口径</summary><p>访客 UV 沿用现有 API 日志中的匿名身份估算，不等于全部页面访客。当前功能记录与功能分析中的主排行一致，含首次自动加载，排除已单列的页面访问和下线历史项；它与日内统计的既有核心功能范围不同，不应直接相加或对账。接口错误率沿用现有日志覆盖范围，包含下线接口请求，不代表全站所有请求。历史记录和原始指标均保留在功能分析与运行监控。</p></details>
+  </section>
+
+  <section class="admin-panel" id="panel-features" data-admin-panel="features" role="tabpanel" aria-labelledby="tab-features" hidden>
+
+    <section class="section" aria-labelledby="comp-analytics-title">
+      <div class="section-heading"><div><h2 id="comp-analytics-title">阵容分析 · 查询与分享</h2><p data-period-label>近 7 天</p></div><button type="button" class="admin-button" id="comp-stats-refresh">刷新统计</button></div>
+      <p class="panel-note" id="comp-stats-status" role="status">等待加载阵容分析统计…</p>
+      <div id="comp-stats-content"></div>
+      <p class="panel-note">主动查询沿用已签名、相同访客相同条件 10 秒去重的搜索口径，自动加载与排序不计入主动查询。交互次数由浏览器上报；下载次数指点击下载。接口请求量含自动加载与排序，不等于主动查询量。</p>
+    </section>
+    <section class="section search-rankings" aria-labelledby="search-ranking-title">
+      <div class="section-heading"><div><h2 id="search-ranking-title">搜索排行榜</h2><p data-period-label>近 7 天</p></div><button type="button" class="admin-button" id="search-refresh">刷新榜单</button></div>
+      <div class="search-controls">
+        <label>搜索入口<select id="search-feature"><option value="all">全部搜索</option><option value="runs">阵容查询 → 阵容列表</option><option value="comp_card">阵容查询 → 阵容分析</option><option value="winrate">胜率查询 → 10胜率查询</option><option value="partner">最佳搭档 → 最佳搭档查询</option></select></label>
+        <label>榜单<select id="search-board"><option value="cards">热门卡牌</option><option value="conditions">完整搜索条件</option><option value="empty">空结果关注</option></select></label>
+      </div>
+      <details class="method-note" id="search-advanced"><summary>高级筛选</summary><div class="search-controls">
+        <label>查询职业<select id="search-hero"><option value="">不限条件</option><option value="Vanessa">瓦内莎</option><option value="Dooley">杜利</option><option value="Mak">马克</option><option value="Pygmalien">皮格马利翁</option><option value="Stelle">斯黛尔</option><option value="Jules">朱尔斯</option><option value="Karnok">卡诺克</option><option value="The Dragons">双龙</option></select></label>
+        <label>查询段位<select id="search-rank"><option value="">不限条件</option><option value="all">全部段位</option><option value="legendary">传奇</option></select></label>
+        <label>对局 Day<input id="search-day" type="number" min="1" max="365000" placeholder="不限"></label>
+        <label>卡牌附魔<select id="search-enchantment"><option value="">不限条件</option><option value="none">未限制附魔</option><option value="Deadly">致命</option><option value="Fiery">炽焰</option><option value="Golden">黄金</option><option value="Heavy">沉重</option><option value="Icy">寒冰</option><option value="Obsidian">黑曜石</option><option value="Radiant">辉耀</option><option value="Restorative">回复</option><option value="Shielded">护盾</option><option value="Shiny">闪亮</option><option value="Toxic">毒素</option><option value="Turbo">疾速</option><option value="Mossy">长青</option></select></label>
+        <label class="search-checkbox"><input id="search-combos" type="checkbox">仅联合卡牌条件</label>
+      </div><p class="panel-note">筛选提交时携带的条件；“仅联合卡牌条件”指同一次查询要求同时包含多张卡，胜率多卡分别比较不属于联合条件。</p></details>
+      <p id="search-coverage" class="panel-note">新口径数据加载后显示采集起点。</p>
+      <p id="search-status" role="status" aria-live="polite"></p>
+      <p class="scroll-hint">左右滑动表格查看搜索次数、独立访客和空结果率。</p>
+      <div class="table-card table-scroll"><table class="tbl search-table"><thead><tr><th>#</th><th id="search-item-heading">卡牌</th><th>搜索次数</th><th>独立访客</th><th>空／样本不足率</th></tr></thead><tbody id="search-ranking-body"></tbody></table></div>
+      <div class="search-paging"><span id="search-page-info"></span><div><button type="button" class="admin-button" id="search-prev" disabled>上一页</button> <button type="button" class="admin-button" id="search-next" disabled>下一页</button></div></div>
+      <section id="search-detail" hidden aria-labelledby="search-detail-title" tabindex="-1"></section>
+      <details class="method-note"><summary>搜索统计口径</summary><p>仅记录四个入口的主动有效提交；同一匿名访客、同一入口、完整条件相同，10 秒内去重。自动加载、翻页、输入建议与自动重试不计数，浏览器缓存命中仍计数。热门卡牌将每次提交中的卡牌各记一次，因此卡牌次数之和可能大于提交总数；完整搜索条件保留职业、段位、附魔、Day、查询范围和赛季赛段，纯职业查询也保留。</p><p>空／样本不足率＝（无匹配＋样本不足）÷（有结果＋部分有结果＋无匹配＋样本不足）；未识别、异常和结果未验证不进入分母。空结果关注至少有 5 次已完成查询，按无匹配与样本不足次数排序。独立访客按匿名浏览器标识估算，跨设备不合并。新口径与历史请求热度分开，不混算增长率。</p></details>
+    </section>
+    <section class="section" id="feature-usage-section">
+      <div class="section-heading"><div><h2>核心功能使用排行</h2><p data-period-label>近 7 天</p></div><button type="button" class="admin-button" id="feature-details-toggle" aria-pressed="false">说明与详细结果</button></div>
+      <details class="method-note"><summary>位置说明与统计口径</summary><p>功能名称按“前台页面 → 区域／操作”对应。点击“说明与详细结果”查看入口、触发方式、成功、空结果和错误数。次数按请求或事件记录，不等于按钮点击量；同一访客同一功能 10 秒内去重，前端缓存命中时可能不新增。职业概况、卡牌榜包含首次自动加载。</p></details>
+      <p class="scroll-hint">左右滑动表格查看完整数据。</p>
+      <div class="table-card feature-table-wrap"><table class="tbl feature-table">
+        <thead><tr><th>前台位置／操作</th><th>使用次数</th><th>独立用户</th><th class="feature-detail-col">成功</th><th class="feature-detail-col">空结果</th><th class="feature-detail-col">错误</th><th>成功率</th></tr></thead>
+        <tbody id="feature-usage-body"></tbody>
+      </table></div>
+      <details class="feature-extra" id="feature-auto-section">
+        <summary>页面访问与自动加载 · <span id="feature-auto-count"></span></summary>
+        <p class="feature-note">以下为单独记录的页面访问与辅助加载，不计入上方排行，不代表独立的功能操作。</p>
+        <div class="table-card feature-table-wrap"><table class="tbl feature-table"><thead><tr><th>前台位置／触发方式</th><th>记录次数</th><th>独立用户</th><th class="feature-detail-col">成功</th><th class="feature-detail-col">空结果</th><th class="feature-detail-col">错误</th><th>成功率</th></tr></thead><tbody id="feature-auto-body"></tbody></table></div>
+      </details>
+      <details class="feature-extra" id="feature-retired-section">
+        <summary>已下线功能（历史数据） · <span id="feature-retired-count"></span></summary>
+        <p class="feature-note">阵容路线暂时下线，以下仅保留所选统计周期内的历史记录，不计入上方排行，也不代表当前有可用入口。</p>
+        <div class="table-card feature-table-wrap"><table class="tbl feature-table"><thead><tr><th>原前台位置／操作</th><th>历史次数</th><th>独立用户</th><th class="feature-detail-col">成功</th><th class="feature-detail-col">空结果</th><th class="feature-detail-col">错误</th><th>成功率</th></tr></thead><tbody id="feature-retired-body"></tbody></table></div>
+      </details>
+    </section>
+    <div class="grid-2 analysis-secondary">
+      <section class="section"><div class="section-heading"><h2>模块使用分布</h2></div><p class="panel-note">沿用现有核心功能范围，保留周期内的历史下线功能记录。</p><div class="table-card" id="module-usage-list"></div></section>
+      <section class="section"><div class="section-heading"><h2>页面访问量</h2></div><p class="panel-note">各页面的 PV 记录，重复访问会累计。</p><div class="table-card" id="tab-pv-list"></div></section>
+    </div>
+    <details class="method-note"><summary>历史请求热度（旧口径）· Top 10</summary><p>沿用查询接口的成功请求日志，可能包含翻页与自动加载，不等同于上方主动搜索次数；历史日志无法补算精确独立访客与结果分类。</p><div class="table-card table-scroll"><table class="tbl"><thead><tr><th>#</th><th>卡牌</th><th>请求次数</th></tr></thead><tbody id="hot-cards-body"></tbody></table></div></details>
+  </section>
+
+  <section class="admin-panel" id="panel-monitor" data-admin-panel="monitor" role="tabpanel" aria-labelledby="tab-monitor" hidden>
+    <div class="section-heading"><h2>接口运行监控</h2><span class="panel-note" data-period-label>近 7 天</span></div>
+    <p class="panel-note">保留当前已记录接口的调用、访客、耗时和失败数据。采集任务状态与埋点写入健康尚未接入此面板，不能据此判断数据采集正常。</p>
+    <div id="monitor-kpis"></div>
+    <p class="scroll-hint">左右滑动表格查看完整数据。</p>
+    <div class="table-card table-scroll"><table class="tbl monitor-table"><thead><tr><th>接口</th><th>调用量</th><th>平均耗时</th><th>错误数</th><th>状态</th></tr></thead><tbody id="api-detail-body"></tbody></table></div>
+    <details class="method-note"><summary>监控范围与耗时口径</summary><p>接口范围和成功／失败判定沿用现有实现，部分业务接口尚未纳入。平均响应时间保留原先“各接口平均耗时再取均值”的算法，暂不作为全部请求的加权平均值。状态标签沿用原先错误占比阈值：超过 10% 为异常，超过 3% 为注意，其余为正常；没有请求时不判断正常。</p></details>
+  </section>
+
+  <section class="admin-panel" id="panel-manage" data-admin-panel="manage" role="tabpanel" aria-labelledby="tab-manage" hidden>
+    <div class="section-heading"><h2>内容与空间管理</h2></div><p class="panel-note">在这里进入原有管理工具。反馈互动统计使用上方所选周期；待处理数量请在对应工具中查看。</p>
+    <div class="manage-grid">
+      <article class="manage-card"><h2>意见反馈</h2><p>搜索反馈、回复情况和处理状态，维护管理员备注。</p><div class="feedback-counts">本周期：提交 <span id="feedback-submit-count">—</span> · 点赞 <span id="feedback-like-count">—</span> · 评论 <span id="feedback-comment-count">—</span></div><button type="button" class="admin-button" onclick="openFeedbackAdminModal()">管理意见反馈</button></article>
+      <article class="manage-card"><h2>冷知识</h2><p>审核玩家问题、编辑答案，以及发布或置顶内容。</p><button type="button" class="admin-button" onclick="openTriviaModal()">管理冷知识</button></article>
+      <article class="manage-card"><h2>公告</h2><p>维护公告草稿、编辑内容，并切换发布状态。</p><button type="button" class="admin-button" onclick="openAnnouncementModal()">管理公告</button></article>
+      <article class="manage-card"><h2>赞赏者</h2><p>维护支持者名单、显示名称与公开状态。</p><button type="button" class="admin-button" onclick="openSupportersModal()">管理赞赏者</button></article>
+      <article class="manage-card"><h2>扎扎空间</h2><p>进入原有空间管理页，审核申请与管理空间状态。</p><a class="admin-button" href="/admin/zaza">进入空间管理 →</a></article>
+    </div>
+  </section>
 </div>
 
-<script>
-let _days = 7;
-let _trendChart = null, _apiChart = null;
-
-function setDays(d) {
-  _days = d;
-  document.querySelectorAll('.day-btn').forEach(b => b.classList.remove('active'));
-  event.target.classList.add('active');
-  loadStats();
-
-// 自动刷新（每30分钟）
-setInterval(() => {
-  loadStats();
-}, 1800000);
-}
-
-const TAB_NAMES = {runs:'阵容查询', winrate:'胜率查询', partner:'最佳搭档', topcard:'职业榜单', feedback:'意见反馈', stats:'数据看板'};
-const API_NAMES = {
-  '/api/runs':'阵容查询','/api/winrate':'胜率查询','/api/partner':'最佳搭档',
-  '/api/topcard':'职业榜单','/api/feedback':'意见反馈','/api/track/pv':'页面埋点','/api/ingest':'数据采集'
-};
-const MODULE_NAMES = {
-  runs:'阵容查询', winrate:'胜率查询', partner:'最佳搭档', topcard:'职业榜单',
-  routes:'阵容路线', feedback:'意见反馈', trivia:'冷知识', support:'支持',
-  stats:'数据看板'
-};
-const FEATURE_NAMES = {
-  runs_query:'阵容查询', winrate_query:'胜率查询', partner_query:'最佳搭档',
-  topcard_query:'职业榜单', comp_query:'阵容分析', comp_card_query:'以卡找阵容',
-  hero_overview:'职业概览', routes_query:'阵容路线查询', routes_summary:'阵容路线概览加载', routes_latest:'阵容路线版本加载',
-  routes_cores:'阵容路线核心列表', routes_detail:'阵容路线详情',
-  feedback_submit:'提交反馈', feedback_like:'反馈点赞',
-  feedback_comment:'反馈评论', trivia_submit:'提交冷知识', trivia_vote:'冷知识投票',
-  support_page_view:'支持页访问', donation_qr_open:'打开赞赏码', trivia_share:'分享冷知识'
-};
-
-function fmtN(n) {
-  if (n >= 10000) return (n/10000).toFixed(1) + 'w';
-  if (n >= 1000) return (n/1000).toFixed(1) + 'k';
-  return n;
-}
-
-function escapeHtml(value) {
-  return String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
-}
-
-function renderFeatureUsage(features) {
-  if (!features.length) return '<tr><td colspan="7" style="color:#6b7280;text-align:center;padding:20px">暂无功能事件数据</td></tr>';
-  return features.map(f => {
-    const rate = f.uses ? (f.successes / f.uses * 100).toFixed(1) : '0.0';
-    return `<tr><td>${escapeHtml(FEATURE_NAMES[f.feature] || f.feature)}</td><td>${f.uses}</td><td>${f.uv}</td><td>${f.successes}</td><td>${f.empty_results}</td><td>${f.errors}</td><td>${rate}%</td></tr>`;
-  }).join('');
-}
-
-async function loadStats() {
-  try {
-    const resp = await fetch('/api/stats/overview?days=' + _days);
-    if (!resp.ok) throw new Error('请求失败');
-    const d = await resp.json();
-    renderStats(d);
-    const now = new Date().toLocaleString('zh-CN');
-    document.getElementById('update-time').textContent = '最后更新：' + now + '  · 统计周期：近 ' + _days + ' 天  · 30min 后自动刷新';
-    // 倒计时
-    let countdown = 1800;
-    clearInterval(window._countdownTimer);
-    window._countdownTimer = setInterval(() => {
-      countdown--;
-      const el = document.getElementById('update-time');
-      const mins = Math.floor(countdown / 60), secs = countdown % 60;
-      const countdownStr = mins > 0 ? mins + 'm' + (secs > 0 ? secs + 's' : '') : secs + 's';
-      if (el) el.textContent = '最后更新：' + now + '  · 统计周期：近 ' + _days + ' 天  · ' + countdownStr + ' 后自动刷新';
-      if (countdown <= 0) clearInterval(window._countdownTimer);
-    }, 1000);
-  } catch(e) {
-    document.getElementById('main-content').innerHTML = '<div class="error-msg">加载失败: ' + e.message + '</div>';
-  }
-}
-
-function renderStats(d) {
-  const el = document.getElementById('main-content');
-
-  // KPI
-  const totalCalls = d.total_calls || 0;
-  const totalUV = d.total_uv || 0;
-  const apiDist = d.api_dist || [];
-  const errorRate = totalCalls > 0 ? ((apiDist.reduce((s,a)=>s+(a.errors||0),0)/totalCalls)*100).toFixed(1) : '0.0';
-  const avgMs = apiDist.length > 0 ? Math.round(apiDist.reduce((s,a)=>s+(a.avg_ms||0),0)/apiDist.length) : 0;
-
-  el.innerHTML = `
-    <div class="kpi-grid">
-      <div class="kpi-card">
-        <div class="kpi-label">API 调用量</div>
-        <div class="kpi-value">${fmtN(totalCalls)}</div>
-        <div class="kpi-sub">近 ${_days} 天</div>
-      </div>
-      <div class="kpi-card">
-        <div class="kpi-label">独立访客 UV</div>
-        <div class="kpi-value">${fmtN(totalUV)}</div>
-        <div class="kpi-sub">fingerprint 去重</div>
-      </div>
-      <div class="kpi-card">
-        <div class="kpi-label">平均响应时间</div>
-        <div class="kpi-value">${avgMs}<span style="font-size:16px;font-weight:400;color:#9ca3af">ms</span></div>
-        <div class="kpi-sub">API 平均耗时</div>
-      </div>
-      <div class="kpi-card">
-        <div class="kpi-label">错误率</div>
-        <div class="kpi-value" style="color:${parseFloat(errorRate)>5?'#ef4444':'#10b981'}">${errorRate}<span style="font-size:16px;font-weight:400;color:#9ca3af">%</span></div>
-        <div class="kpi-sub">API 失败占比</div>
-      </div>
-    </div>
-
-    <div class="section">
-      <div class="section-title">核心功能使用排行（统计周期内）</div>
-      <div class="table-card">
-        <table class="tbl">
-          <thead><tr><th>功能</th><th>使用次数</th><th>独立用户</th><th>成功</th><th>空结果</th><th>错误</th><th>成功率</th></tr></thead>
-          <tbody id="feature-usage-body"></tbody>
-        </table>
-      </div>
-    </div>
-
-    <div class="section">
-      <div class="section-title">Feedback 互动</div>
-      <div class="fb-action-grid">
-        <div class="fb-action-card"><div class="fb-action-icon">✍️</div><div class="fb-action-value">${d.fb_actions?.submit||0}</div><div class="fb-action-label">提交反馈</div></div>
-        <div class="fb-action-card"><div class="fb-action-icon">❤️</div><div class="fb-action-value">${d.fb_actions?.like||0}</div><div class="fb-action-label">点赞</div></div>
-        <div class="fb-action-card"><div class="fb-action-icon">💬</div><div class="fb-action-value">${d.fb_actions?.comment||0}</div><div class="fb-action-label">评论</div></div>
-      </div>
-    </div>
-
-    <div class="grid-2 section">
-      <div class="chart-card">
-        <div class="chart-title">📈 每日 API 调用趋势</div>
-        <div class="chart-wrap"><canvas id="trend-chart"></canvas></div>
-      </div>
-      <div class="chart-card">
-        <div class="chart-title">🍩 模块使用分布</div>
-        <div class="chart-wrap"><canvas id="api-chart"></canvas></div>
-      </div>
-    </div>
-
-    <div class="grid-2 section">
-      <div>
-        <div class="section-title">Tab 访问量</div>
-        <div class="table-card" id="tab-pv-list"></div>
-      </div>
-      <div>
-        <div class="section-title">热门查询卡牌</div>
-        <div class="table-card">
-          <table class="tbl">
-            <thead><tr><th>#</th><th>卡牌</th><th>查询次数</th></tr></thead>
-            <tbody id="hot-cards-body"></tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-
-    <div class="section">
-      <div class="section-title">API 接口详情</div>
-      <div class="table-card">
-        <table class="tbl">
-          <thead><tr><th>接口</th><th>调用量</th><th>平均耗时</th><th>错误数</th><th>状态</th></tr></thead>
-          <tbody id="api-detail-body"></tbody>
-        </table>
-      </div>
-    </div>
-  `;
-
-  // 功能使用排行
-  const featureBody = document.getElementById('feature-usage-body');
-  const features = d.feature_usage || [];
-  featureBody.innerHTML = renderFeatureUsage(features);
-
-  // 趋势图
-  const daily = d.daily || [];
-  if (_trendChart) _trendChart.destroy();
-  _trendChart = new Chart(document.getElementById('trend-chart').getContext('2d'), {
-    type: 'bar',
-    data: {
-      labels: daily.map(r => r.day?.slice(5)),
-      datasets: [
-        {label:'调用量', data: daily.map(r=>r.cnt), backgroundColor:'#f59e0b88', borderColor:'#f59e0b', borderWidth:1, yAxisID:'y'},
-        {label:'UV', data: daily.map(r=>r.uv), type:'line', borderColor:'#60a5fa', backgroundColor:'transparent', borderWidth:2, pointRadius:3, yAxisID:'y1'},
-      ]
-    },
-    options: {responsive:true, maintainAspectRatio:false, plugins:{legend:{labels:{color:'#9ca3af',font:{size:11}}}},
-      scales:{
-        x:{ticks:{color:'#6b7280',font:{size:10}}, grid:{color:'#1f2937'}},
-        y:{ticks:{color:'#6b7280',font:{size:10}}, grid:{color:'#1f2937'}, position:'left'},
-        y1:{ticks:{color:'#60a5fa',font:{size:10}}, grid:{display:false}, position:'right'},
-      }}
-  });
-
-  // 模块使用分布：只统计核心功能事件，并按 page/module 合并，排除页面访问、后台刷新和辅助 API。
-  const moduleUsage = d.module_usage || [];
-  if (_apiChart) _apiChart.destroy();
-  _apiChart = new Chart(document.getElementById('api-chart').getContext('2d'), {
-    type: 'doughnut',
-    data: {
-      labels: moduleUsage.map(item => MODULE_NAMES[item.module] || item.module),
-      datasets: [{data: moduleUsage.map(item => item.uses), backgroundColor:['#f59e0b','#60a5fa','#a78bfa','#34d399','#f87171','#fb923c','#e879f9','#22d3ee']}]
-    },
-    options: {responsive:true, maintainAspectRatio:false,
-      plugins:{legend:{position:'right', labels:{color:'#9ca3af',font:{size:11},padding:10}}}}
-  });
-
-  // Tab PV
-  const tabPv = d.tab_pv || [];
-  const maxPv = Math.max(...tabPv.map(t=>t.cnt), 1);
-  document.getElementById('tab-pv-list').innerHTML = tabPv.length ? tabPv.map(t =>
-    `<div class="tab-bar-item">
-      <div class="tab-bar-name">${TAB_NAMES[t.tab]||t.tab}</div>
-      <div class="tab-bar-wrap"><div class="tab-bar-fill" style="width:${Math.round(t.cnt/maxPv*100)}%"></div></div>
-      <div class="tab-bar-count">${t.cnt}</div>
-    </div>`
-  ).join('') : '<div class="loading" style="padding:20px">暂无数据</div>';
-
-  // 热门卡牌
-  const hotCards = d.hot_cards || [];
-  document.getElementById('hot-cards-body').innerHTML = hotCards.length ? hotCards.map((c,i) =>
-    `<tr><td>${['🥇','🥈','🥉'][i]||i+1}</td><td>${escapeHtml(c.card||'-')}</td><td>${c.cnt}</td></tr>`
-  ).join('') : '<tr><td colspan="3" style="color:#6b7280;text-align:center;padding:20px">暂无数据</td></tr>';
-
-  // API 详情
-  document.getElementById('api-detail-body').innerHTML = apiDist.map(a => {
-    const errPct = a.cnt > 0 ? ((a.errors||0)/a.cnt*100).toFixed(0) : 0;
-    const badge = errPct > 10 ? 'badge-red' : errPct > 3 ? 'badge-yellow' : 'badge-green';
-    const status = errPct > 10 ? '异常' : errPct > 3 ? '注意' : '正常';
-    return `<tr>
-      <td style="font-family:monospace;font-size:12px">${a.endpoint}</td>
-      <td>${a.cnt}</td>
-      <td>${Math.round(a.avg_ms||0)} ms</td>
-      <td>${a.errors||0}</td>
-      <td><span class="badge ${badge}">${status}</span></td>
-    </tr>`;
-  }).join('');
-}
-
-loadStats();
-
-// 自动刷新（每30分钟）
-setInterval(() => {
-  loadStats();
-}, 1800000);
-</script>
 
 <!-- 意见反馈管理模态框 -->
 <div class="modal-overlay" id="feedback-admin-modal" role="dialog" aria-modal="true" aria-labelledby="feedback-admin-title">
@@ -358,21 +294,21 @@ setInterval(() => {
 
 <style>
 .feedback-admin-toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:16px}
-.feedback-admin-search{min-width:240px;flex:1;padding:9px 12px;background:#0a0e1a;border:1px solid #374151;border-radius:6px;color:#e2e8f0;font-size:13px}
+.feedback-admin-search{min-width:240px;flex:1;padding:9px 12px;background:var(--theme-bg, #0a0e1a);border:1px solid var(--theme-border-strong, #374151);border-radius:6px;color:var(--theme-text, #e2e8f0);font-size:13px}
 .feedback-admin-search:focus{outline:none;border-color:#0ea5e9;box-shadow:0 0 0 2px rgba(14,165,233,.14)}
 .feedback-admin-filters{display:flex;gap:6px;flex-wrap:wrap}
-.feedback-filter-active{border-color:#0ea5e9!important;color:#38bdf8!important;background:rgba(14,165,233,.1)!important}
-.feedback-admin-count{font-size:12px;color:#6b7280;margin-left:auto}
-.feedback-admin-item{background:#111827;border:1px solid #1f2937;border-radius:10px;padding:15px;margin-bottom:10px}
-.feedback-admin-item:hover{border-color:#374151}
+.feedback-filter-active{border-color:#0ea5e9!important;color:var(--theme-link, #38bdf8)!important;background:rgba(14,165,233,.1)!important}
+.feedback-admin-count{font-size:12px;color:var(--theme-dim, #6b7280);margin-left:auto}
+.feedback-admin-item{background:var(--theme-surface, #111827);border:1px solid var(--theme-border, #1f2937);border-radius:10px;padding:15px;margin-bottom:10px}
+.feedback-admin-item:hover{border-color:var(--theme-border-strong, #374151)}
 .feedback-admin-head{display:flex;gap:10px;align-items:flex-start;margin-bottom:8px}
-.feedback-admin-content{flex:1;white-space:pre-wrap;line-height:1.6;color:#e2e8f0;font-size:14px;word-break:break-word}
+.feedback-admin-content{flex:1;white-space:pre-wrap;line-height:1.6;color:var(--theme-text, #e2e8f0);font-size:14px;word-break:break-word}
 .feedback-status{padding:3px 9px;border-radius:999px;font-size:11px;font-weight:700;white-space:nowrap}
-.feedback-status-open{background:#422006;color:#fbbf24}.feedback-status-in_progress{background:#0c4a6e;color:#7dd3fc}.feedback-status-resolved{background:#064e3b;color:#6ee7b7}.feedback-status-hidden{background:#3f3f46;color:#d4d4d8}.feedback-status-unknown{background:#3f3f46;color:#d4d4d8}
-.feedback-admin-meta{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:#6b7280;margin-bottom:10px}
-.feedback-admin-image{display:block;max-width:180px;max-height:120px;object-fit:contain;border-radius:6px;border:1px solid #374151;margin:8px 0}
+.feedback-status-open{background:var(--theme-warning-bg, #422006);color:var(--theme-gold, #fbbf24)}.feedback-status-in_progress{background:#0c4a6e;color:var(--theme-link, #7dd3fc)}.feedback-status-resolved{background:var(--theme-success-bg, #064e3b);color:var(--theme-teal, #6ee7b7)}.feedback-status-hidden{background:var(--theme-border, #3f3f46);color:var(--theme-muted, #d4d4d8)}.feedback-status-unknown{background:var(--theme-border, #3f3f46);color:var(--theme-muted, #d4d4d8)}
+.feedback-admin-meta{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--theme-dim, #6b7280);margin-bottom:10px}
+.feedback-admin-image{display:block;max-width:180px;max-height:120px;object-fit:contain;border-radius:6px;border:1px solid var(--theme-border-strong, #374151);margin:8px 0}
 .feedback-admin-actions{display:grid;grid-template-columns:150px 1fr auto auto;gap:8px;align-items:start}
-.feedback-admin-actions select,.feedback-admin-note{padding:8px;background:#0a0e1a;border:1px solid #374151;border-radius:5px;color:#e2e8f0;font-size:13px}
+.feedback-admin-actions select,.feedback-admin-note{padding:8px;background:var(--theme-bg, #0a0e1a);border:1px solid var(--theme-border-strong, #374151);border-radius:5px;color:var(--theme-text, #e2e8f0);font-size:13px}
 .feedback-admin-note{min-height:38px;resize:vertical}
 .feedback-admin-pages{display:flex;justify-content:center;align-items:center;gap:8px;margin-top:14px}
 @media(max-width:760px){.feedback-admin-actions{grid-template-columns:1fr}.feedback-admin-filters{width:100%}.feedback-admin-count{margin-left:0}}
@@ -422,7 +358,7 @@ function renderFeedbackAdmin(data) {
   const labels = {open:'待处理',in_progress:'处理中',resolved:'已解决',hidden:'已隐藏'};
   document.getElementById('feedback-admin-count').textContent = `共 ${data.total || 0} 条`;
   if (!feedbackAdminItems.length) {
-    list.innerHTML = '<div style="color:#6b7280;text-align:center;padding:40px">暂无反馈</div>';
+    list.innerHTML = '<div style="color:var(--theme-dim, #6b7280);text-align:center;padding:40px">暂无反馈</div>';
   } else {
     list.innerHTML = feedbackAdminItems.map(item => `
       <div class="feedback-admin-item" id="feedback-admin-${item.id}">
@@ -449,7 +385,7 @@ function renderFeedbackAdmin(data) {
   const pages = Math.max(1, data.pages || 1);
   document.getElementById('feedback-admin-pages').innerHTML = `
     <button class="btn-secondary" ${data.page<=1?'disabled':''} onclick="loadFeedbackAdmin(${data.page-1})">上一页</button>
-    <span style="font-size:12px;color:#9ca3af">${data.page || 1} / ${pages}</span>
+    <span style="font-size:12px;color:var(--theme-muted, #9ca3af)">${data.page || 1} / ${pages}</span>
     <button class="btn-secondary" ${data.page>=pages?'disabled':''} onclick="loadFeedbackAdmin(${data.page+1})">下一页</button>`;
 }
 async function saveFeedbackAdmin(id) {
@@ -487,20 +423,20 @@ document.addEventListener('keydown', event => {
     <div class="modal-body">
       <div style="margin-bottom:16px;display:flex;gap:8px;align-items:center">
         <button class="btn-primary" onclick="showAddForm()">+ 新增</button>
-        <span style="color:#6b7280;font-size:13px;margin-left:auto" id="supporters-count">-</span>
+        <span style="color:var(--theme-dim, #6b7280);font-size:13px;margin-left:auto" id="supporters-count">-</span>
       </div>
 
       <!-- 新增/编辑表单 -->
-      <div id="supporter-form" style="display:none;background:#1a1a2e;border:1px solid #333;border-radius:6px;padding:16px;margin-bottom:16px">
+      <div id="supporter-form" style="display:none;background:var(--theme-panel, #1a1a2e);border:1px solid #333;border-radius:6px;padding:16px;margin-bottom:16px">
         <div style="font-size:14px;font-weight:600;margin-bottom:12px" id="form-title">新增赞赏者</div>
         <input type="hidden" id="edit-id">
         <div style="margin-bottom:10px">
-          <label style="display:block;font-size:12px;color:#9ca3af;margin-bottom:4px">显示名称</label>
-          <input type="text" id="input-name" placeholder="请输入名称" style="width:100%;padding:8px;background:#0a0e1a;border:1px solid #374151;border-radius:4px;color:#e2e8f0;font-size:14px">
+          <label style="display:block;font-size:12px;color:var(--theme-muted, #9ca3af);margin-bottom:4px">显示名称</label>
+          <input type="text" id="input-name" placeholder="请输入名称" style="width:100%;padding:8px;background:var(--theme-bg, #0a0e1a);border:1px solid var(--theme-border-strong, #374151);border-radius:4px;color:var(--theme-text, #e2e8f0);font-size:14px">
         </div>
         <div style="margin-bottom:12px;display:flex;align-items:center;gap:8px">
           <input type="checkbox" id="input-visible" checked style="width:16px;height:16px">
-          <label for="input-visible" style="font-size:13px;color:#9ca3af;cursor:pointer">在支持页面公开显示</label>
+          <label for="input-visible" style="font-size:13px;color:var(--theme-muted, #9ca3af);cursor:pointer">在支持页面公开显示</label>
         </div>
         <div style="display:flex;gap:8px">
           <button class="btn-primary" onclick="submitSupporter()" style="flex:1">保存</button>
@@ -529,8 +465,8 @@ document.addEventListener('keydown', event => {
 }
 .modal-overlay.open { display:flex; }
 .modal {
-  background:#0d1221;
-  border:1px solid #1f2937;
+  background:var(--theme-surface, #0d1221);
+  border:1px solid var(--theme-border, #1f2937);
   border-radius:8px;
   max-width:600px;
   width:100%;
@@ -540,7 +476,7 @@ document.addEventListener('keydown', event => {
 }
 .modal-header {
   padding:16px 20px;
-  border-bottom:1px solid #1f2937;
+  border-bottom:1px solid var(--theme-border, #1f2937);
   display:flex;
   justify-content:space-between;
   align-items:center;
@@ -548,25 +484,25 @@ document.addEventListener('keydown', event => {
 .modal-header h3 {
   font-size:18px;
   font-weight:700;
-  color:#e2e8f0;
+  color:var(--theme-text, #e2e8f0);
   margin:0;
 }
 .modal-close {
   width:32px;
   height:32px;
   border-radius:4px;
-  border:1px solid #374151;
+  border:1px solid var(--theme-border-strong, #374151);
   background:transparent;
-  color:#9ca3af;
+  color:var(--theme-muted, #9ca3af);
   cursor:pointer;
   font-size:20px;
   line-height:1;
   transition:all 0.2s;
 }
 .modal-close:hover {
-  border-color:#f59e0b;
-  color:#f59e0b;
-  background:#1a1500;
+  border-color:var(--theme-gold, #f59e0b);
+  color:var(--theme-gold, #f59e0b);
+  background:var(--theme-warning-bg, #1a1500);
 }
 .modal-body {
   padding:20px;
@@ -578,21 +514,21 @@ document.addEventListener('keydown', event => {
   align-items:center;
   gap:12px;
   padding:10px 14px;
-  background:#111827;
-  border:1px solid #1f2937;
+  background:var(--theme-surface, #111827);
+  border:1px solid var(--theme-border, #1f2937);
   border-radius:6px;
   margin-bottom:8px;
   transition:all 0.2s;
 }
 .supporter-item:hover {
-  border-color:#374151;
-  background:#1a1a2e;
+  border-color:var(--theme-border-strong, #374151);
+  background:var(--theme-panel, #1a1a2e);
 }
 .supporter-name {
   flex:1;
   font-size:14px;
   font-weight:600;
-  color:#e2e8f0;
+  color:var(--theme-text, #e2e8f0);
 }
 .supporter-badge {
   padding:2px 8px;
@@ -601,20 +537,20 @@ document.addEventListener('keydown', event => {
   font-weight:600;
 }
 .badge-visible {
-  background:#065f46;
+  background:var(--theme-success-bg, #065f46);
   color:#10b981;
 }
 .badge-hidden {
-  background:#450a0a;
-  color:#f87171;
+  background:var(--theme-error-bg, #450a0a);
+  color:var(--theme-coral, #f87171);
 }
 .btn-icon {
   width:28px;
   height:28px;
   border-radius:4px;
-  border:1px solid #374151;
+  border:1px solid var(--theme-border-strong, #374151);
   background:transparent;
-  color:#9ca3af;
+  color:var(--theme-muted, #9ca3af);
   cursor:pointer;
   font-size:14px;
   display:flex;
@@ -637,31 +573,31 @@ document.addEventListener('keydown', event => {
   padding:8px 16px;
   border-radius:6px;
   border:none;
-  background:#f59e0b;
-  color:#0a0e1a;
+  background:var(--theme-gold, #f59e0b);
+  color:var(--theme-bg, #0a0e1a);
   cursor:pointer;
   font-size:14px;
   font-weight:600;
   transition:all 0.2s;
 }
 .btn-primary:hover {
-  background:#fbbf24;
+  background:var(--theme-gold, #fbbf24);
 }
 .btn-secondary {
   padding:8px 16px;
   border-radius:6px;
-  border:1px solid #374151;
+  border:1px solid var(--theme-border-strong, #374151);
   background:transparent;
-  color:#9ca3af;
+  color:var(--theme-muted, #9ca3af);
   cursor:pointer;
   font-size:14px;
   font-weight:600;
   transition:all 0.2s;
 }
 .btn-secondary:hover {
-  border-color:#f59e0b;
-  color:#f59e0b;
-  background:#1a1500;
+  border-color:var(--theme-gold, #f59e0b);
+  color:var(--theme-gold, #f59e0b);
+  background:var(--theme-warning-bg, #1a1500);
 }
 </style>
 
@@ -685,7 +621,7 @@ async function loadSupporters() {
     supportersData = data.supporters || [];
     renderSupporters();
   } catch (e) {
-    document.getElementById('supporters-list').innerHTML = '<div style="color:#f87171;text-align:center;padding:20px">加载失败</div>';
+    document.getElementById('supporters-list').innerHTML = '<div style="color:var(--theme-coral, #f87171);text-align:center;padding:20px">加载失败</div>';
   }
 }
 
@@ -694,7 +630,7 @@ function renderSupporters() {
   document.getElementById('supporters-count').textContent = `共 ${supportersData.length} 位`;
   
   if (!supportersData.length) {
-    list.innerHTML = '<div style="color:#6b7280;text-align:center;padding:32px">暂无数据</div>';
+    list.innerHTML = '<div style="color:var(--theme-dim, #6b7280);text-align:center;padding:32px">暂无数据</div>';
     return;
   }
   
@@ -802,49 +738,49 @@ async function deleteSupporter(id) {
     </div>
     <div class="modal-body">
       <div style="margin-bottom:16px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-        <button class="btn-primary" style="background:#F5C76A;color:#0a0e1a" onclick="showTriviaAddForm()">+ 新增</button>
+        <button class="btn-primary" style="background:var(--theme-gold, #F5C76A);color:var(--theme-bg, #0a0e1a)" onclick="showTriviaAddForm()">+ 新增</button>
         <div style="display:flex;gap:6px;margin-left:auto">
           <button class="btn-secondary" onclick="filterTrivia('all')" id="tf-all">全部</button>
           <button class="btn-secondary" onclick="filterTrivia('pending')" id="tf-pending">待审核</button>
           <button class="btn-secondary" onclick="filterTrivia('published')" id="tf-published">已发布</button>
           <button class="btn-secondary" onclick="filterTrivia('pinned')" id="tf-pinned">置顶</button>
         </div>
-        <span style="color:#6b7280;font-size:13px" id="trivia-count">-</span>
+        <span style="color:var(--theme-dim, #6b7280);font-size:13px" id="trivia-count">-</span>
       </div>
 
       <!-- 新增/编辑表单 -->
-      <div id="trivia-form" style="display:none;background:#1a1a2e;border:1px solid #333;border-radius:6px;padding:16px;margin-bottom:16px">
-        <div style="font-size:14px;font-weight:600;margin-bottom:12px;color:#F5C76A" id="trivia-form-title">新增冷知识</div>
+      <div id="trivia-form" style="display:none;background:var(--theme-panel, #1a1a2e);border:1px solid #333;border-radius:6px;padding:16px;margin-bottom:16px">
+        <div style="font-size:14px;font-weight:600;margin-bottom:12px;color:var(--theme-gold, #F5C76A)" id="trivia-form-title">新增冷知识</div>
         <input type="hidden" id="te-id">
         <div style="margin-bottom:10px">
-          <label style="display:block;font-size:12px;color:#9ca3af;margin-bottom:4px">问题标题 *</label>
-          <input type="text" id="te-question" placeholder="问题是什么？" style="width:100%;padding:8px;background:#0a0e1a;border:1px solid #374151;border-radius:4px;color:#e2e8f0;font-size:14px">
+          <label style="display:block;font-size:12px;color:var(--theme-muted, #9ca3af);margin-bottom:4px">问题标题 *</label>
+          <input type="text" id="te-question" placeholder="问题是什么？" style="width:100%;padding:8px;background:var(--theme-bg, #0a0e1a);border:1px solid var(--theme-border-strong, #374151);border-radius:4px;color:var(--theme-text, #e2e8f0);font-size:14px">
         </div>
         <div style="margin-bottom:10px">
-          <label style="display:block;font-size:12px;color:#9ca3af;margin-bottom:4px">补充说明</label>
-          <input type="text" id="te-desc" placeholder="可选的背景信息" style="width:100%;padding:8px;background:#0a0e1a;border:1px solid #374151;border-radius:4px;color:#e2e8f0;font-size:14px">
+          <label style="display:block;font-size:12px;color:var(--theme-muted, #9ca3af);margin-bottom:4px">补充说明</label>
+          <input type="text" id="te-desc" placeholder="可选的背景信息" style="width:100%;padding:8px;background:var(--theme-bg, #0a0e1a);border:1px solid var(--theme-border-strong, #374151);border-radius:4px;color:var(--theme-text, #e2e8f0);font-size:14px">
         </div>
         <div style="margin-bottom:10px">
-          <label style="display:block;font-size:12px;color:#9ca3af;margin-bottom:4px">答案（Markdown）</label>
-          <textarea id="te-answer" rows="10" placeholder="用 Markdown 编写答案..." style="width:100%;padding:8px;background:#0a0e1a;border:1px solid #374151;border-radius:4px;color:#e2e8f0;font-size:13px;font-family:monospace;resize:vertical"></textarea>
+          <label style="display:block;font-size:12px;color:var(--theme-muted, #9ca3af);margin-bottom:4px">答案（Markdown）</label>
+          <textarea id="te-answer" rows="10" placeholder="用 Markdown 编写答案..." style="width:100%;padding:8px;background:var(--theme-bg, #0a0e1a);border:1px solid var(--theme-border-strong, #374151);border-radius:4px;color:var(--theme-text, #e2e8f0);font-size:13px;font-family:monospace;resize:vertical"></textarea>
         </div>
         <div style="margin-bottom:12px">
-          <label style="display:block;font-size:12px;color:#9ca3af;margin-bottom:4px">状态</label>
-          <select id="te-status" style="padding:8px;background:#0a0e1a;border:1px solid #374151;border-radius:4px;color:#e2e8f0;font-size:14px">
+          <label style="display:block;font-size:12px;color:var(--theme-muted, #9ca3af);margin-bottom:4px">状态</label>
+          <select id="te-status" style="padding:8px;background:var(--theme-bg, #0a0e1a);border:1px solid var(--theme-border-strong, #374151);border-radius:4px;color:var(--theme-text, #e2e8f0);font-size:14px">
             <option value="pending">待审核</option>
             <option value="published">发布</option>
             <option value="pinned">置顶</option>
           </select>
         </div>
         <div style="display:flex;gap:8px">
-          <button class="btn-primary" style="background:#F5C76A;color:#0a0e1a;flex:1" onclick="submitTrivia()">保存</button>
+          <button class="btn-primary" style="background:var(--theme-gold, #F5C76A);color:var(--theme-bg, #0a0e1a);flex:1" onclick="submitTrivia()">保存</button>
           <button class="btn-secondary" style="flex:1" onclick="hideTriviaForm()">取消</button>
         </div>
       </div>
 
       <!-- 冷知识列表 -->
       <div id="trivia-admin-list" style="max-height:500px;overflow-y:auto">
-        <div class="loading" style="text-align:center;padding:20px;color:#6b7280">加载中...</div>
+        <div class="loading" style="text-align:center;padding:20px;color:var(--theme-dim, #6b7280)">加载中...</div>
       </div>
     </div>
   </div>
@@ -857,19 +793,19 @@ async function deleteSupporter(id) {
   font-size: 11px;
   font-weight: 600;
 }
-.status-pending { background: #1c1a00; color: #fbbf24; }
-.status-published { background: #065f46; color: #10b981; }
-.status-pinned { background: #1e3a5f; color: #60a5fa; }
+.status-pending { background: var(--theme-warning-bg, #1c1a00); color: var(--theme-gold, #fbbf24); }
+.status-published { background: var(--theme-success-bg, #065f46); color: #10b981; }
+.status-pinned { background: #1e3a5f; color: var(--theme-link, #60a5fa); }
 
 .trivia-admin-item {
-  background: #111827;
-  border: 1px solid #1f2937;
+  background: var(--theme-surface, #111827);
+  border: 1px solid var(--theme-border, #1f2937);
   border-radius: 6px;
   padding: 12px 14px;
   margin-bottom: 8px;
   transition: border-color 0.2s;
 }
-.trivia-admin-item:hover { border-color: #374151; }
+.trivia-admin-item:hover { border-color: var(--theme-border-strong, #374151); }
 .trivia-admin-item-header {
   display: flex;
   align-items: flex-start;
@@ -880,20 +816,20 @@ async function deleteSupporter(id) {
   flex: 1;
   font-size: 14px;
   font-weight: 600;
-  color: #e2e8f0;
+  color: var(--theme-text, #e2e8f0);
 }
 .trivia-admin-meta {
   font-size: 12px;
-  color: #6b7280;
+  color: var(--theme-dim, #6b7280);
   display: flex;
   gap: 12px;
   align-items: center;
   flex-wrap: wrap;
 }
 .trivia-filter-active {
-  border-color: #F5C76A !important;
-  color: #F5C76A !important;
-  background: rgba(245,199,106,0.08) !important;
+  border-color: var(--theme-gold, #F5C76A) !important;
+  color: var(--theme-gold, #F5C76A) !important;
+  background: rgba(var(--theme-gold-rgb, 245, 199, 106), 0.08) !important;
 }
 </style>
 
@@ -918,7 +854,7 @@ async function loadTriviaAdmin() {
     triviaAdminData = data.trivia || [];
     renderTriviaAdmin();
   } catch(e) {
-    document.getElementById('trivia-admin-list').innerHTML = '<div style="color:#f87171;text-align:center;padding:20px">加载失败</div>';
+    document.getElementById('trivia-admin-list').innerHTML = '<div style="color:var(--theme-coral, #f87171);text-align:center;padding:20px">加载失败</div>';
   }
 }
 
@@ -937,7 +873,7 @@ function renderTriviaAdmin() {
   document.getElementById('trivia-count').textContent = `共 ${filtered.length} 条`;
 
   if (!filtered.length) {
-    list.innerHTML = '<div style="color:#6b7280;text-align:center;padding:32px">无数据</div>';
+    list.innerHTML = '<div style="color:var(--theme-dim, #6b7280);text-align:center;padding:32px">无数据</div>';
     return;
   }
 
@@ -949,18 +885,18 @@ function renderTriviaAdmin() {
         <div class="trivia-admin-question">${t.question}</div>
         <span class="status-badge status-${t.status}">${statusLabels[t.status] || t.status}</span>
       </div>
-      ${t.description ? `<div style="font-size:12px;color:#6b7280;margin-bottom:6px">${t.description}</div>` : ''}
+      ${t.description ? `<div style="font-size:12px;color:var(--theme-dim, #6b7280);margin-bottom:6px">${t.description}</div>` : ''}
       <div class="trivia-admin-meta">
         <span>👍 ${t.upvotes} 👎 ${t.downvotes}</span>
         ${t.authorName ? `<span>提问者: ${t.authorName}</span>` : ''}
         ${t.authorContact ? `<span>联系: ${t.authorContact}</span>` : ''}
         <span>${(t.createdAt || '').slice(0, 10)}</span>
-        <span style="color:${t.answer ? '#10b981' : '#6b7280'}">${t.answer ? '✓ 有答案' : '无答案'}</span>
+        <span style="color:${t.answer ? '#10b981' : 'var(--theme-dim, #6b7280)'}">${t.answer ? '✓ 有答案' : '无答案'}</span>
       </div>
       <div style="display:flex;gap:6px;margin-top:10px">
         <button class="btn-icon" onclick="editTrivia(${t.id})" title="编辑/答题">✏️</button>
-        ${t.status === 'pending' ? `<button class="btn-icon" style="color:#10b981;border-color:#065f46" onclick="quickStatus(${t.id},'published')" title="发布">✅</button>` : ''}
-        ${t.status === 'published' ? `<button class="btn-icon" style="color:#60a5fa;border-color:#1e3a5f" onclick="quickStatus(${t.id},'pinned')" title="置顶">📌</button>` : ''}
+        ${t.status === 'pending' ? `<button class="btn-icon" style="color:#10b981;border-color:var(--theme-success-bg, #065f46)" onclick="quickStatus(${t.id},'published')" title="发布">✅</button>` : ''}
+        ${t.status === 'published' ? `<button class="btn-icon" style="color:var(--theme-link, #60a5fa);border-color:#1e3a5f" onclick="quickStatus(${t.id},'pinned')" title="置顶">📌</button>` : ''}
         ${t.status === 'pinned' ? `<button class="btn-icon" onclick="quickStatus(${t.id},'published')" title="取消置顶">📍</button>` : ''}
         <button class="btn-icon danger" onclick="deleteTriviaItem(${t.id})" title="删除">🗑️</button>
       </div>
@@ -1062,28 +998,28 @@ async function deleteTriviaItem(id) {
     </div>
     <div class="modal-body">
       <div style="margin-bottom:16px;display:flex;gap:8px;align-items:center">
-        <button class="btn-primary" style="background:#34d399;color:#0a0e1a" onclick="showAnnForm()">+ 新增公告</button>
-        <span style="color:#6b7280;font-size:13px;margin-left:auto" id="ann-admin-count">-</span>
+        <button class="btn-primary" style="background:var(--theme-teal, #34d399);color:var(--theme-bg, #0a0e1a)" onclick="showAnnForm()">+ 新增公告</button>
+        <span style="color:var(--theme-dim, #6b7280);font-size:13px;margin-left:auto" id="ann-admin-count">-</span>
       </div>
 
       <!-- 新增/编辑表单 -->
-      <div id="ann-form" style="display:none;background:#1a1a2e;border:1px solid #333;border-radius:6px;padding:16px;margin-bottom:16px">
-        <div style="font-size:14px;font-weight:600;margin-bottom:12px;color:#34d399" id="ann-form-title">新增公告</div>
+      <div id="ann-form" style="display:none;background:var(--theme-panel, #1a1a2e);border:1px solid #333;border-radius:6px;padding:16px;margin-bottom:16px">
+        <div style="font-size:14px;font-weight:600;margin-bottom:12px;color:var(--theme-teal, #34d399)" id="ann-form-title">新增公告</div>
         <input type="hidden" id="ann-edit-id">
         <div style="margin-bottom:10px">
-          <label style="display:block;font-size:12px;color:#9ca3af;margin-bottom:4px">标题</label>
-          <input type="text" id="ann-input-title" placeholder="公告标题" style="width:100%;padding:8px;background:#0a0e1a;border:1px solid #374151;border-radius:4px;color:#e2e8f0;font-size:14px;box-sizing:border-box">
+          <label style="display:block;font-size:12px;color:var(--theme-muted, #9ca3af);margin-bottom:4px">标题</label>
+          <input type="text" id="ann-input-title" placeholder="公告标题" style="width:100%;padding:8px;background:var(--theme-bg, #0a0e1a);border:1px solid var(--theme-border-strong, #374151);border-radius:4px;color:var(--theme-text, #e2e8f0);font-size:14px;box-sizing:border-box">
         </div>
         <div style="margin-bottom:10px">
-          <label style="display:block;font-size:12px;color:#9ca3af;margin-bottom:4px">内容（支持 Markdown）</label>
-          <textarea id="ann-input-content" rows="8" placeholder="公告内容，支持 Markdown 格式..." style="width:100%;padding:8px;background:#0a0e1a;border:1px solid #374151;border-radius:4px;color:#e2e8f0;font-size:14px;box-sizing:border-box;resize:vertical;font-family:monospace"></textarea>
+          <label style="display:block;font-size:12px;color:var(--theme-muted, #9ca3af);margin-bottom:4px">内容（支持 Markdown）</label>
+          <textarea id="ann-input-content" rows="8" placeholder="公告内容，支持 Markdown 格式..." style="width:100%;padding:8px;background:var(--theme-bg, #0a0e1a);border:1px solid var(--theme-border-strong, #374151);border-radius:4px;color:var(--theme-text, #e2e8f0);font-size:14px;box-sizing:border-box;resize:vertical;font-family:monospace"></textarea>
         </div>
         <div style="margin-bottom:12px;display:flex;align-items:center;gap:8px">
-          <input type="checkbox" id="ann-input-published" style="width:15px;height:15px;accent-color:#34d399">
-          <label for="ann-input-published" style="font-size:13px;color:#9ca3af;cursor:pointer">立即发布</label>
+          <input type="checkbox" id="ann-input-published" style="width:15px;height:15px;accent-color:var(--theme-teal, #34d399)">
+          <label for="ann-input-published" style="font-size:13px;color:var(--theme-muted, #9ca3af);cursor:pointer">立即发布</label>
         </div>
         <div style="display:flex;gap:8px">
-          <button class="btn-primary" style="background:#34d399;color:#0a0e1a;flex:1" onclick="submitAnnouncement()">保存</button>
+          <button class="btn-primary" style="background:var(--theme-teal, #34d399);color:var(--theme-bg, #0a0e1a);flex:1" onclick="submitAnnouncement()">保存</button>
           <button class="btn-secondary" style="flex:1" onclick="hideAnnForm()">取消</button>
         </div>
       </div>
@@ -1094,13 +1030,13 @@ async function deleteTriviaItem(id) {
 </div>
 
 <style>
-.ann-item { background:#111827; border:1px solid #1f2937; border-radius:8px; padding:14px 16px; margin-bottom:10px; }
-.ann-item:hover { border-color:#374151; }
+.ann-item { background:var(--theme-surface, #111827); border:1px solid var(--theme-border, #1f2937); border-radius:8px; padding:14px 16px; margin-bottom:10px; }
+.ann-item:hover { border-color:var(--theme-border-strong, #374151); }
 .ann-item-header { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; margin-bottom:6px; }
-.ann-item-title { font-size:14px; font-weight:600; color:#f9fafb; }
-.ann-item-meta { font-size:12px; color:#6b7280; margin-top:4px; }
-.ann-badge-published { background:#065f46; color:#34d399; padding:2px 8px; border-radius:4px; font-size:11px; font-weight:600; }
-.ann-badge-draft { background:#1f2937; color:#9ca3af; padding:2px 8px; border-radius:4px; font-size:11px; font-weight:600; }
+.ann-item-title { font-size:14px; font-weight:600; color:var(--theme-text, #f9fafb); }
+.ann-item-meta { font-size:12px; color:var(--theme-dim, #6b7280); margin-top:4px; }
+.ann-badge-published { background:var(--theme-success-bg, #065f46); color:var(--theme-teal, #34d399); padding:2px 8px; border-radius:4px; font-size:11px; font-weight:600; }
+.ann-badge-draft { background:var(--theme-border, #1f2937); color:var(--theme-muted, #9ca3af); padding:2px 8px; border-radius:4px; font-size:11px; font-weight:600; }
 </style>
 
 <script>
@@ -1146,7 +1082,7 @@ async function loadAnnAdmin() {
     annAdminData = data.announcements || [];
     renderAnnList();
   } catch(e) {
-    document.getElementById('ann-admin-list').innerHTML = '<div style="color:#f87171;text-align:center;padding:20px">加载失败</div>';
+    document.getElementById('ann-admin-list').innerHTML = '<div style="color:var(--theme-coral, #f87171);text-align:center;padding:20px">加载失败</div>';
   }
 }
 
@@ -1154,7 +1090,7 @@ function renderAnnList() {
   const list = document.getElementById('ann-admin-list');
   document.getElementById('ann-admin-count').textContent = `共 ${annAdminData.length} 条`;
   if (!annAdminData.length) {
-    list.innerHTML = '<div style="color:#6b7280;text-align:center;padding:30px">暂无公告</div>';
+    list.innerHTML = '<div style="color:var(--theme-dim, #6b7280);text-align:center;padding:30px">暂无公告</div>';
     return;
   }
   list.innerHTML = annAdminData.map(a => `
@@ -1173,7 +1109,7 @@ function renderAnnList() {
           <button class="btn-icon danger" onclick="deleteAnn(${a.id})" title="删除">🗑️</button>
         </div>
       </div>
-      <div style="font-size:13px;color:#6b7280;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${a.content.replace(/</g,'&lt;').replace(/>/g,'&gt;').slice(0,80)}${a.content.length>80?'...':''}</div>
+      <div style="font-size:13px;color:var(--theme-dim, #6b7280);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${a.content.replace(/</g,'&lt;').replace(/>/g,'&gt;').slice(0,80)}${a.content.length>80?'...':''}</div>
     </div>`).join('');
 }
 

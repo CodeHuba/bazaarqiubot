@@ -151,7 +151,8 @@ def test_modifier_accessor_reads_modifier_value():
 def test_modify_attribute_uses_action_value_before_target_attribute():
     module = load_gamedata_module()
     abilities = {"Damage": {"Action": {"$type": "TActionCardModifyAttribute", "AttributeType": "DamageAmount", "Value": {"$type": "TFixedValue", "Value": 9}}}}
-    assert module.render_tooltip("修改 {ability.Damage}", abilities, {}, {"DamageAmount": 100}) == "修改 9"
+    # The implicit unit is retained; the action's 9 must win over the target's 100.
+    assert module.render_tooltip("修改 {ability.Damage}", abilities, {}, {"DamageAmount": 100}) == "修改 9伤害"
 
 
 def test_legendary_quest_uses_diamond_reward_tier():

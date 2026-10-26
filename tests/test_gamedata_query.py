@@ -89,3 +89,41 @@ def test_suggest_cards_returns_close_normalized_name(tmp_path):
     suggestions = gdc.suggest_cards("pipe orgn", path, limit=3)
 
     assert [card["Id"] for card in suggestions] == ["pipe-organ"]
+
+
+def test_name_lookup_and_suggestions_filter_kind_before_limit(tmp_path):
+    gdc = load_gamedata_module()
+    cards = [{'Id': f'item-{i}', 'Type': 'Item', 'InternalName': f'Test {i}'} for i in range(12)]
+    cards += [{'Id': f'skill-{i}', 'Type': 'Skill', 'InternalName': f'Test {i}'} for i in range(2)]
+    path = make_cards_db(tmp_path, cards)
+
+    assert gdc.query_raw_by_name('Test 0', path, 'skill')['Id'] == 'skill-0'
+    assert gdc.query_raw_by_name('Test 0', path, 'item')['Id'] == 'item-0'
+    assert gdc.query_raw_by_name('Test 2', path, 'skill') is None
+    suggestions = gdc.suggest_cards('Test', path, limit=10, kind='skill')
+    assert {card['Id'] for card in suggestions} == {'skill-0', 'skill-1'}
+
+
+def test_merchant_name_prefers_regular_record_over_tutorial_or_debug(tmp_path):
+    gdc = load_gamedata_module()
+    cards = [
+        {'Id': 'tutorial', 'Type': 'EventEncounter', 'InternalName': 'Tutorial Day 1 - Mittel',
+         'Localization': {'Title': {'Text': 'Mittel'}}},
+        {'Id': 'debug', 'Type': 'EventEncounter', 'InternalName': '[DEBUG] Mittel',
+         'Localization': {'Title': {'Text': 'Mittel'}}},
+        {'Id': 'normal', 'Type': 'EventEncounter', 'InternalName': 'Mittel',
+         'Localization': {'Title': {'Text': 'Mittel'}}},
+    ]
+    path = make_cards_db(tmp_path, cards)
+    assert gdc.query_raw_by_name('Mittel', path)['Id'] == 'normal'
+    assert gdc.query_raw_by_name('Tutorial Day 1 - Mittel', path)['Id'] == 'tutorial'
+
+
+def test_valid_merchant_named_the_tester_is_not_treated_as_debug(tmp_path):
+    gdc = load_gamedata_module()
+    path = make_cards_db(tmp_path, [
+        {'Id': 'tutorial', 'Type': 'EventEncounter', 'InternalName': 'Tutorial The Tester',
+         'Localization': {'Title': {'Text': 'The Tester'}}},
+        {'Id': 'normal', 'Type': 'EventEncounter', 'InternalName': 'The Tester'},
+    ])
+    assert gdc.query_raw_by_name('The Tester', path)['Id'] == 'normal'

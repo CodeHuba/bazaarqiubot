@@ -2,19 +2,21 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
+<script src="/static/acquisition.js?v=1"></script>
+<script src="/static/theme.js?v=1"></script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>阵容查询 | 巴扎丘Bot</title>
-<meta name="description" content="查询 The Bazaar 天梯真实阵容与对局构成。">
+<title>大巴扎 The Bazaar 中文阵容、卡牌胜率与搭配查询 | 巴扎丘Bot</title>
+<meta name="description" content="大巴扎 The Bazaar 中文社区数据平台，查询当前版本真实 10 胜阵容、卡牌胜率与搭档，查看游戏机制冷知识。">
 <meta name="keywords" content="The Bazaar,巴扎,阵容查询,胜率,天梯,卡牌,攻略,瓦内莎,杜利,马克,皮格马利翁,斯黛尔,朱尔斯,卡诺克,双龙">
 <meta name="author" content="BazaarQiuBot">
 <meta name="robots" content="index, follow">
-<meta property="og:title" content="巴扎丘Bot">
-<meta property="og:description" content="The Bazaar 中文社区数据平台。查询阵容、胜率统计、物品搭配分析。">
+<meta property="og:title" content="大巴扎 The Bazaar 中文阵容、卡牌胜率与搭配查询 | 巴扎丘Bot">
+<meta property="og:description" content="大巴扎 The Bazaar 中文社区数据平台，查询当前版本真实 10 胜阵容、卡牌胜率与搭档，查看游戏机制冷知识。">
 <meta property="og:type" content="website">
-<meta property="og:url" content="https://bazaarqiubot.com">
+<meta property="og:url" content="https://bazaarqiubot.com/">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="巴扎丘Bot">
-<link rel="canonical" href="https://bazaarqiubot.com/runs">
+<link rel="canonical" href="https://bazaarqiubot.com/">
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐉</text></svg>">
 <style>
 /* ============================================
@@ -24,28 +26,28 @@
 /* CSS 变量 - 色彩系统 */
 :root {
   /* 主色 */
-  --bg-deep: #090A2A;
-  --bg-surface: #171047;
-  --neon-magenta: #F438B8;
-  --neon-cyan: #26D9F2;
-  --neon-violet: #8A4DFF;
-  --neon-teal: #36E3C1;
-  --neon-coral: #FF536A;
-  --neon-gold: #F5C76A;
-  --text-primary: #F5F4FF;
-  --text-secondary: #B5B3D7;
+  --bg-deep: var(--theme-bg, #090A2A);
+  --bg-surface: var(--theme-surface, #171047);
+  --neon-magenta: var(--theme-magenta, #F438B8);
+  --neon-cyan: var(--theme-cyan, #26D9F2);
+  --neon-violet: var(--theme-violet, #8A4DFF);
+  --neon-teal: var(--theme-teal, #36E3C1);
+  --neon-coral: var(--theme-coral, #FF536A);
+  --neon-gold: var(--theme-gold, #F5C76A);
+  --text-primary: var(--theme-text, #F5F4FF);
+  --text-secondary: var(--theme-muted, #B5B3D7);
 
   /* 功能色 */
-  --border-dim: rgba(138, 77, 255, 0.15);
-  --border-bright: rgba(38, 217, 242, 0.4);
-  --glow-magenta: 0 0 20px rgba(244, 56, 184, 0.5);
-  --glow-cyan: 0 0 20px rgba(38, 217, 242, 0.5);
-  --glow-violet: 0 0 16px rgba(138, 77, 255, 0.4);
+  --border-dim: rgba(var(--theme-violet-rgb, 138, 77, 255), 0.15);
+  --border-bright: rgba(var(--theme-cyan-rgb, 38, 217, 242), 0.4);
+  --glow-magenta: 0 0 20px rgba(var(--theme-magenta-rgb, 244, 56, 184), 0.5);
+  --glow-cyan: 0 0 20px rgba(var(--theme-cyan-rgb, 38, 217, 242), 0.5);
+  --glow-violet: 0 0 16px rgba(var(--theme-violet-rgb, 138, 77, 255), 0.4);
 
   /* 胜率渐变 */
-  --win-high: #36E3C1;
-  --win-mid: #F5C76A;
-  --win-low: #FF536A;
+  --win-high: var(--theme-teal, #36E3C1);
+  --win-mid: var(--theme-gold, #F5C76A);
+  --win-low: var(--theme-coral, #FF536A);
 }
 
 /* 全局重置 */
@@ -60,8 +62,8 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif;
   background: var(--bg-deep);
   background-image:
-    linear-gradient(rgba(138, 77, 255, 0.03) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(138, 77, 255, 0.03) 1px, transparent 1px);
+    linear-gradient(rgba(var(--theme-violet-rgb, 138, 77, 255), 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(var(--theme-violet-rgb, 138, 77, 255), 0.03) 1px, transparent 1px);
   background-size: 24px 24px;
   color: var(--text-primary);
   min-height: 100vh;
@@ -82,8 +84,8 @@ body::before {
     0deg,
     transparent,
     transparent 2px,
-    rgba(38, 217, 242, 0.02) 2px,
-    rgba(38, 217, 242, 0.02) 4px
+    rgba(var(--theme-cyan-rgb, 38, 217, 242), 0.02) 2px,
+    rgba(var(--theme-cyan-rgb, 38, 217, 242), 0.02) 4px
   );
   pointer-events: none;
   z-index: 1;
@@ -104,7 +106,7 @@ body::before {
   align-items: center;
   height: 64px;
   gap: 32px;
-  box-shadow: 0 4px 24px rgba(244, 56, 184, 0.15);
+  box-shadow: 0 4px 24px rgba(var(--theme-magenta-rgb, 244, 56, 184), 0.15);
 }
 
 .logo {
@@ -150,12 +152,12 @@ body::before {
 .nav-tab:hover {
   color: var(--text-primary);
   border-color: var(--border-bright);
-  background: rgba(38, 217, 242, 0.08);
+  background: rgba(var(--theme-cyan-rgb, 38, 217, 242), 0.08);
 }
 
 .nav-tab.active {
   color: var(--text-primary);
-  background: linear-gradient(135deg, rgba(244, 56, 184, 0.15), rgba(38, 217, 242, 0.15));
+  background: linear-gradient(135deg, rgba(var(--theme-magenta-rgb, 244, 56, 184), 0.15), rgba(var(--theme-cyan-rgb, 38, 217, 242), 0.15));
   border-color: var(--neon-magenta);
   box-shadow: var(--glow-magenta);
 }
@@ -200,12 +202,12 @@ body::before {
 /* 筛选卡片 - 品红主边框 + 青色角标 */
 .form-card {
   background: var(--bg-surface);
-  border: 1px solid rgba(244, 56, 184, 0.35);
+  border: 1px solid rgba(var(--theme-magenta-rgb, 244, 56, 184), 0.35);
   border-radius: 8px;
   padding: 20px 24px;
   margin-bottom: 24px;
   position: relative;
-  box-shadow: inset 0 0 40px rgba(244, 56, 184, 0.04);
+  box-shadow: inset 0 0 40px rgba(var(--theme-magenta-rgb, 244, 56, 184), 0.04);
 }
 
 /* 青色角标 */
@@ -272,8 +274,8 @@ body::before {
 
 /* 输入框 / 下拉框 */
 input, select {
-  background: rgba(9, 10, 42, 0.8);
-  border: 1px solid rgba(138, 77, 255, 0.3);
+  background: rgba(var(--theme-bg-rgb, 9, 10, 42), 0.8);
+  border: 1px solid rgba(var(--theme-violet-rgb, 138, 77, 255), 0.3);
   border-radius: 6px;
   padding: 9px 14px;
   color: var(--text-primary);
@@ -285,33 +287,34 @@ input, select {
 }
 
 input:hover, select:hover {
-  border-color: rgba(38, 217, 242, 0.5);
+  border-color: rgba(var(--theme-cyan-rgb, 38, 217, 242), 0.5);
 }
 
 input:focus, select:focus {
   border-color: var(--neon-cyan);
-  box-shadow: 0 0 0 2px rgba(38, 217, 242, 0.15);
-  background: rgba(9, 10, 42, 1);
+  box-shadow: 0 0 0 2px rgba(var(--theme-cyan-rgb, 38, 217, 242), 0.15);
+  background: rgba(var(--theme-bg-rgb, 9, 10, 42), 1);
 }
 
 input::placeholder {
-  color: rgba(181, 179, 215, 0.4);
+  color: rgba(var(--theme-muted-rgb, 181, 179, 215), 0.4);
 }
 
 /* 阵容查询：可连续添加多张卡牌的联想标签输入框 */
 .runs-card-picker { position:relative; min-width:0; max-width:none; }
-.runs-card-picker-box { height:40px; min-height:40px; padding:5px 9px; display:flex; align-items:center; flex-wrap:nowrap; gap:6px; overflow-x:auto; overflow-y:hidden; background:rgba(9,10,42,.8); border:1px solid rgba(138,77,255,.3); border-radius:6px; cursor:text; transition:.2s; scrollbar-width:thin; }
-.runs-card-picker-box:focus-within { border-color:var(--neon-cyan); box-shadow:0 0 0 2px rgba(38,217,242,.15); }
+.runs-card-picker-box { height:40px; min-height:40px; padding:5px 9px; display:flex; align-items:center; flex-wrap:nowrap; gap:6px; overflow-x:auto; overflow-y:hidden; background:rgba(var(--theme-bg-rgb, 9, 10, 42), .8); border:1px solid rgba(var(--theme-violet-rgb, 138, 77, 255), .3); border-radius:6px; cursor:text; transition:.2s; scrollbar-width:thin; }
+.runs-card-picker-box:focus-within { border-color:var(--neon-cyan); box-shadow:0 0 0 2px rgba(var(--theme-cyan-rgb, 38, 217, 242), .15); }
 .runs-card-tags { display:flex; align-items:center; gap:6px; flex:none; }
-.runs-card-tag { display:inline-flex; align-items:center; gap:5px; padding:4px 7px; border:1px solid rgba(38,217,242,.45); border-radius:5px; color:var(--text-primary); background:rgba(38,217,242,.1); font-size:13px; line-height:1; white-space:nowrap; flex:none; }
+.runs-card-tag { display:inline-flex; align-items:center; gap:5px; padding:4px 7px; border:1px solid rgba(var(--theme-cyan-rgb, 38, 217, 242), .45); border-radius:5px; color:var(--text-primary); background:rgba(var(--theme-cyan-rgb, 38, 217, 242), .1); font-size:13px; line-height:1; white-space:nowrap; flex:none; }
 .runs-card-tag button { border:0; background:transparent; color:var(--text-secondary); cursor:pointer; font-size:16px; line-height:1; padding:0; }
 .runs-card-tag button:hover { color:var(--neon-coral); }
+.runs-card-tag .runs-enchantment-select { width:auto; min-width:88px; height:24px; padding:1px 18px 1px 4px; border:0; border-left:1px solid rgba(var(--theme-cyan-rgb, 38, 217, 242), .3); border-radius:0; font:inherit; font-size:11px; color:var(--neon-gold); background-color:transparent; cursor:pointer; }
 #runs-card-search { flex:1 1 130px; min-width:120px; width:auto; padding:4px 2px; border:0; box-shadow:none; background:transparent; }
 #runs-card-search:focus { border:0; box-shadow:none; background:transparent; }
-.runs-card-suggestions { display:none; position:absolute; z-index:120; left:0; right:0; top:calc(100% + 5px); max-height:330px; overflow:auto; padding:5px; border:1px solid rgba(38,217,242,.45); border-radius:8px; background:#100c35; box-shadow:0 14px 32px rgba(0,0,0,.45); }
+.runs-card-suggestions { display:none; position:absolute; z-index:120; left:0; right:0; top:calc(100% + 5px); max-height:330px; overflow:auto; padding:5px; border:1px solid rgba(var(--theme-cyan-rgb, 38, 217, 242), .45); border-radius:8px; background:var(--theme-surface, #100c35); box-shadow:0 14px 32px rgba(0,0,0,.45); }
 .runs-card-suggestions.open { display:block; }
 .runs-card-option { width:100%; padding:8px 10px; border:0; border-radius:6px; background:transparent; color:var(--text-primary); cursor:pointer; display:flex; align-items:center; gap:9px; text-align:left; }
-.runs-card-option:hover,.runs-card-option.active { background:rgba(38,217,242,.13); }
+.runs-card-option:hover,.runs-card-option.active { background:rgba(var(--theme-cyan-rgb, 38, 217, 242), .13); }
 .runs-card-option img { width:42px; height:42px; object-fit:contain; flex:none; }
 .runs-card-option-text { min-width:0; display:flex; flex-direction:column; }
 .runs-card-option-text small { color:var(--text-secondary); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
@@ -343,22 +346,22 @@ select option {
 .btn-primary {
   background: linear-gradient(135deg, var(--neon-magenta), var(--neon-violet));
   color: #fff;
-  box-shadow: 0 4px 16px rgba(244, 56, 184, 0.4);
+  box-shadow: 0 4px 16px rgba(var(--theme-magenta-rgb, 244, 56, 184), 0.4);
 }
 
 .btn-primary:hover {
   transform: translateY(-1px);
-  box-shadow: 0 6px 24px rgba(244, 56, 184, 0.6);
+  box-shadow: 0 6px 24px rgba(var(--theme-magenta-rgb, 244, 56, 184), 0.6);
   filter: brightness(1.1);
 }
 
 .btn-primary:active {
   transform: translateY(0);
-  box-shadow: 0 2px 8px rgba(244, 56, 184, 0.4);
+  box-shadow: 0 2px 8px rgba(var(--theme-magenta-rgb, 244, 56, 184), 0.4);
 }
 
 .btn-primary:disabled {
-  background: rgba(138, 77, 255, 0.15);
+  background: rgba(var(--theme-violet-rgb, 138, 77, 255), 0.15);
   color: var(--text-secondary);
   cursor: not-allowed;
   box-shadow: none;
@@ -387,8 +390,8 @@ select option {
   border-radius: 4px;
   font-size: 13px;
   cursor: pointer;
-  border: 1px solid rgba(38, 217, 242, 0.2);
-  background: rgba(38, 217, 242, 0.05);
+  border: 1px solid rgba(var(--theme-cyan-rgb, 38, 217, 242), 0.2);
+  background: rgba(var(--theme-cyan-rgb, 38, 217, 242), 0.05);
   color: var(--text-secondary);
   transition: all 0.2s;
   font-weight: 500;
@@ -397,13 +400,13 @@ select option {
 .chip:hover {
   border-color: var(--neon-cyan);
   color: var(--neon-cyan);
-  background: rgba(38, 217, 242, 0.12);
-  box-shadow: 0 0 8px rgba(38, 217, 242, 0.3);
+  background: rgba(var(--theme-cyan-rgb, 38, 217, 242), 0.12);
+  box-shadow: 0 0 8px rgba(var(--theme-cyan-rgb, 38, 217, 242), 0.3);
 }
 
 .chip .cnt {
   font-size: 10px;
-  color: rgba(181, 179, 215, 0.5);
+  color: rgba(var(--theme-muted-rgb, 181, 179, 215), 0.5);
   margin-left: 4px;
 }
 
@@ -413,13 +416,13 @@ select option {
 
 /* 青色主边框 + 品红角标 */
 .result-card {
-  background: rgba(23, 16, 71, 0.7);
-  border: 1px solid rgba(38, 217, 242, 0.3);
+  background: rgba(var(--theme-surface-rgb, 23, 16, 71), 0.7);
+  border: 1px solid rgba(var(--theme-cyan-rgb, 38, 217, 242), 0.3);
   border-radius: 8px;
   overflow: hidden;
   margin-bottom: 24px;
   position: relative;
-  box-shadow: 0 0 0 0 transparent, inset 0 0 32px rgba(38, 217, 242, 0.03);
+  box-shadow: 0 0 0 0 transparent, inset 0 0 32px rgba(var(--theme-cyan-rgb, 38, 217, 242), 0.03);
   transition: box-shadow 0.3s;
 }
 
@@ -438,30 +441,30 @@ select option {
 }
 
 .result-card:hover {
-  box-shadow: 0 0 20px rgba(38, 217, 242, 0.12);
+  box-shadow: 0 0 20px rgba(var(--theme-cyan-rgb, 38, 217, 242), 0.12);
 }
 
 .result-header {
   padding: 12px 20px;
-  border-bottom: 1px solid rgba(38, 217, 242, 0.15);
+  border-bottom: 1px solid rgba(var(--theme-cyan-rgb, 38, 217, 242), 0.15);
   font-size: 13px;
   color: var(--text-secondary);
   display: flex;
   justify-content: space-between;
   align-items: center;
-  background: rgba(9, 10, 42, 0.4);
+  background: rgba(var(--theme-bg-rgb, 9, 10, 42), 0.4);
 }
 
 .total {
   color: var(--neon-cyan);
   font-weight: 700;
-  text-shadow: 0 0 8px rgba(38, 217, 242, 0.6);
+  text-shadow: 0 0 8px rgba(var(--theme-cyan-rgb, 38, 217, 242), 0.6);
 }
 
 /* 阵容列表项 */
 .run-item {
   padding: 12px 20px;
-  border-bottom: 1px solid rgba(138, 77, 255, 0.1);
+  border-bottom: 1px solid rgba(var(--theme-violet-rgb, 138, 77, 255), 0.1);
   display: flex;
   gap: 12px;
   align-items: center;
@@ -469,7 +472,7 @@ select option {
 }
 
 .run-item:hover {
-  background: rgba(244, 56, 184, 0.05);
+  background: rgba(var(--theme-magenta-rgb, 244, 56, 184), 0.05);
 }
 
 .run-item:last-child {
@@ -482,9 +485,9 @@ select option {
   font-size: 12px;
   font-weight: 700;
   white-space: nowrap;
-  background: rgba(244, 56, 184, 0.12);
+  background: rgba(var(--theme-magenta-rgb, 244, 56, 184), 0.12);
   color: var(--neon-magenta);
-  border: 1px solid rgba(244, 56, 184, 0.35);
+  border: 1px solid rgba(var(--theme-magenta-rgb, 244, 56, 184), 0.35);
 }
 
 .run-meta {
@@ -500,11 +503,13 @@ select option {
 }
 
 .run-items{display:flex;flex-wrap:wrap;gap:5px;align-items:center;min-width:0;}
-.run-card-chip{display:inline-flex;align-items:center;gap:4px;padding:2px 6px;border:1px solid rgba(138,77,255,.25);border-radius:4px;background:rgba(138,77,255,.08);font-size:11px;color:var(--text-primary);white-space:nowrap;}
+.run-card-chip{display:inline-flex;align-items:center;gap:4px;padding:2px 6px;border:1px solid rgba(var(--theme-violet-rgb, 138, 77, 255), .25);border-radius:4px;background:rgba(var(--theme-violet-rgb, 138, 77, 255), .08);font-size:11px;color:var(--text-primary);white-space:nowrap;}
 .run-card-chip img{object-fit:contain;border-radius:2px;flex-shrink:0;display:block;}
 .run-card-chip img.size-Small{width:12px;height:24px;}
 .run-card-chip img.size-Medium{width:24px;height:24px;}
 .run-card-chip img.size-Large{width:36px;height:24px;}
+.run-card-chip.is-filter-match{border-color:var(--neon-cyan);background:rgba(var(--theme-cyan-rgb, 38, 217, 242), .13);}
+.run-card-enchantment{color:var(--neon-gold);font-size:10px;}
 
 /* 胜率徽章 */
 .win-badge {
@@ -535,7 +540,7 @@ select option {
 .page-btn {
   padding: 6px 14px;
   border-radius: 4px;
-  border: 1px solid rgba(138, 77, 255, 0.3);
+  border: 1px solid rgba(var(--theme-violet-rgb, 138, 77, 255), 0.3);
   background: transparent;
   color: var(--text-secondary);
   cursor: pointer;
@@ -548,7 +553,7 @@ select option {
 .page-btn:hover {
   border-color: var(--neon-violet);
   color: var(--neon-violet);
-  background: rgba(138, 77, 255, 0.1);
+  background: rgba(var(--theme-violet-rgb, 138, 77, 255), 0.1);
 }
 
 .page-btn.active {
@@ -565,8 +570,8 @@ select option {
 
 /* 胜率查询 - 偏电光青 */
 .winrate-card {
-  background: rgba(23, 16, 71, 0.7);
-  border: 1px solid rgba(38, 217, 242, 0.3);
+  background: rgba(var(--theme-surface-rgb, 23, 16, 71), 0.7);
+  border: 1px solid rgba(var(--theme-cyan-rgb, 38, 217, 242), 0.3);
   border-radius: 8px;
   padding: 36px;
   text-align: center;
@@ -604,7 +609,7 @@ select option {
 }
 
 .winrate-bar-wrap {
-  background: rgba(138, 77, 255, 0.1);
+  background: rgba(var(--theme-violet-rgb, 138, 77, 255), 0.1);
   border-radius: 4px;
   height: 8px;
   width: 320px;
@@ -617,7 +622,7 @@ select option {
   content: '';
   position: absolute;
   inset: 0;
-  border: 1px solid rgba(38, 217, 242, 0.2);
+  border: 1px solid rgba(var(--theme-cyan-rgb, 38, 217, 242), 0.2);
   border-radius: 4px;
 }
 
@@ -668,8 +673,8 @@ select option {
   text-transform: uppercase;
   letter-spacing: 0.1em;
   padding: 10px 20px 8px;
-  border-bottom: 1px solid rgba(54, 227, 193, 0.15);
-  background: rgba(54, 227, 193, 0.04);
+  border-bottom: 1px solid rgba(var(--theme-teal-rgb, 54, 227, 193), 0.15);
+  background: rgba(var(--theme-teal-rgb, 54, 227, 193), 0.04);
 }
 
 .partner-item {
@@ -677,12 +682,12 @@ select option {
   align-items: center;
   gap: 14px;
   padding: 12px 20px;
-  border-bottom: 1px solid rgba(138, 77, 255, 0.1);
+  border-bottom: 1px solid rgba(var(--theme-violet-rgb, 138, 77, 255), 0.1);
   transition: background 0.15s;
 }
 
 .partner-item:hover {
-  background: rgba(54, 227, 193, 0.05);
+  background: rgba(var(--theme-teal-rgb, 54, 227, 193), 0.05);
 }
 
 .partner-item:last-child {
@@ -717,7 +722,7 @@ select option {
 
 .partner-bar-wrap {
   width: 80px;
-  background: rgba(138, 77, 255, 0.1);
+  background: rgba(var(--theme-violet-rgb, 138, 77, 255), 0.1);
   border-radius: 4px;
   height: 5px;
   overflow: hidden;
@@ -740,8 +745,8 @@ select option {
 }
 
 .topcard-hero-card {
-  background: rgba(23, 16, 71, 0.7);
-  border: 1px solid rgba(138, 77, 255, 0.35);
+  background: rgba(var(--theme-surface-rgb, 23, 16, 71), 0.7);
+  border: 1px solid rgba(var(--theme-violet-rgb, 138, 77, 255), 0.35);
   border-radius: 8px;
   overflow: hidden;
   position: relative;
@@ -764,8 +769,8 @@ select option {
   align-items: center;
   justify-content: space-between;
   padding: 12px 18px;
-  border-bottom: 1px solid rgba(138, 77, 255, 0.2);
-  background: rgba(9, 10, 42, 0.5);
+  border-bottom: 1px solid rgba(var(--theme-violet-rgb, 138, 77, 255), 0.2);
+  background: rgba(var(--theme-bg-rgb, 9, 10, 42), 0.5);
 }
 
 .topcard-hero-name {
@@ -785,12 +790,12 @@ select option {
   align-items: center;
   gap: 12px;
   padding: 10px 18px;
-  border-bottom: 1px solid rgba(138, 77, 255, 0.08);
+  border-bottom: 1px solid rgba(var(--theme-violet-rgb, 138, 77, 255), 0.08);
   transition: background 0.15s;
 }
 
 .topcard-item:hover {
-  background: rgba(138, 77, 255, 0.05);
+  background: rgba(var(--theme-violet-rgb, 138, 77, 255), 0.05);
 }
 
 .topcard-item:last-child {
@@ -849,7 +854,7 @@ select option {
 
 .topcard-bar-wrap {
   width: 60px;
-  background: rgba(138, 77, 255, 0.1);
+  background: rgba(var(--theme-violet-rgb, 138, 77, 255), 0.1);
   border-radius: 4px;
   height: 4px;
   overflow: hidden;
@@ -887,8 +892,8 @@ select option {
 .fb-textarea {
   width: 100%;
   min-height: 100px;
-  background: rgba(9, 10, 42, 0.8);
-  border: 1px solid rgba(255, 83, 106, 0.3);
+  background: rgba(var(--theme-bg-rgb, 9, 10, 42), 0.8);
+  border: 1px solid rgba(var(--theme-coral-rgb, 255, 83, 106), 0.3);
   border-radius: 6px;
   padding: 12px;
   color: var(--text-primary);
@@ -902,8 +907,8 @@ select option {
 
 .fb-textarea:focus {
   border-color: var(--neon-coral);
-  box-shadow: 0 0 0 2px rgba(255, 83, 106, 0.15);
-  background: rgba(9, 10, 42, 1);
+  box-shadow: 0 0 0 2px rgba(var(--theme-coral-rgb, 255, 83, 106), 0.15);
+  background: rgba(var(--theme-bg-rgb, 9, 10, 42), 1);
 }
 
 .fb-contact-input {
@@ -916,12 +921,12 @@ select option {
   background: linear-gradient(135deg, var(--neon-coral), var(--neon-magenta));
   color: #fff;
   font-weight: 700;
-  box-shadow: 0 4px 16px rgba(255, 83, 106, 0.4);
+  box-shadow: 0 4px 16px rgba(var(--theme-coral-rgb, 255, 83, 106), 0.4);
 }
 
 .fb-submit-btn:hover {
   transform: translateY(-1px);
-  box-shadow: 0 6px 24px rgba(255, 83, 106, 0.6);
+  box-shadow: 0 6px 24px rgba(var(--theme-coral-rgb, 255, 83, 106), 0.6);
   filter: brightness(1.1);
 }
 
@@ -933,8 +938,8 @@ select option {
 }
 
 .fb-card {
-  background: rgba(23, 16, 71, 0.7);
-  border: 1px solid rgba(255, 83, 106, 0.3);
+  background: rgba(var(--theme-surface-rgb, 23, 16, 71), 0.7);
+  border: 1px solid rgba(var(--theme-coral-rgb, 255, 83, 106), 0.3);
   border-radius: 8px;
   padding: 16px 20px;
   margin-bottom: 12px;
@@ -973,13 +978,13 @@ select option {
   gap: 10px;
   margin-top: 10px;
   padding-top: 10px;
-  border-top: 1px solid rgba(138, 77, 255, 0.15);
+  border-top: 1px solid rgba(var(--theme-violet-rgb, 138, 77, 255), 0.15);
 }
 
 .fb-like-btn {
   padding: 4px 12px;
   border-radius: 4px;
-  border: 1px solid rgba(255, 83, 106, 0.3);
+  border: 1px solid rgba(var(--theme-coral-rgb, 255, 83, 106), 0.3);
   background: transparent;
   color: var(--text-secondary);
   cursor: pointer;
@@ -995,13 +1000,13 @@ select option {
 .fb-like-btn:hover {
   border-color: var(--neon-coral);
   color: var(--neon-coral);
-  background: rgba(255, 83, 106, 0.08);
+  background: rgba(var(--theme-coral-rgb, 255, 83, 106), 0.08);
 }
 
 .fb-like-btn.liked {
   border-color: var(--neon-coral);
   color: var(--neon-coral);
-  background: rgba(255, 83, 106, 0.15);
+  background: rgba(var(--theme-coral-rgb, 255, 83, 106), 0.15);
 }
 
 /* 通用状态 - Loading / Empty / Error */
@@ -1047,8 +1052,8 @@ select option {
 }
 
 .error-msg {
-  background: rgba(255, 83, 106, 0.08);
-  border: 1px solid rgba(255, 83, 106, 0.35);
+  background: rgba(var(--theme-coral-rgb, 255, 83, 106), 0.08);
+  border: 1px solid rgba(var(--theme-coral-rgb, 255, 83, 106), 0.35);
   border-radius: 6px;
   padding: 12px 16px;
   color: var(--neon-coral);
@@ -1075,7 +1080,7 @@ select option {
 
 .run-link:hover {
   color: var(--neon-teal);
-  text-shadow: 0 0 8px rgba(38, 217, 242, 0.5);
+  text-shadow: 0 0 8px rgba(var(--theme-cyan-rgb, 38, 217, 242), 0.5);
 }
 
 /* Footer */
@@ -1087,7 +1092,7 @@ body {
 footer {
   margin-top: auto;
   padding: 30px 20px;
-  border-top: 1px solid rgba(138, 77, 255, 0.2);
+  border-top: 1px solid rgba(var(--theme-violet-rgb, 138, 77, 255), 0.2);
   text-align: center;
   color: var(--text-secondary);
   font-size: 12px;
@@ -1104,7 +1109,7 @@ footer a {
 
 footer a:hover {
   color: var(--neon-teal);
-  text-shadow: 0 0 8px rgba(38, 217, 242, 0.5);
+  text-shadow: 0 0 8px rgba(var(--theme-cyan-rgb, 38, 217, 242), 0.5);
 }
 
 /* 移动端适配 (< 768px) */
@@ -1246,11 +1251,11 @@ footer a:hover {
 
 .fb-form-card {
   background: var(--bg-surface);
-  border: 1px solid rgba(255, 83, 106, 0.35);
+  border: 1px solid rgba(var(--theme-coral-rgb, 255, 83, 106), 0.35);
   border-radius: 8px;
   padding: 20px;
   position: relative;
-  box-shadow: inset 0 0 40px rgba(255, 83, 106, 0.04);
+  box-shadow: inset 0 0 40px rgba(var(--theme-coral-rgb, 255, 83, 106), 0.04);
   position: sticky;
   top: 80px;
 }
@@ -1269,7 +1274,7 @@ footer a:hover {
 
 .fb-success {
   display: none;
-  background: rgba(54, 227, 193, 0.12);
+  background: rgba(var(--theme-teal-rgb, 54, 227, 193), 0.12);
   border: 1px solid var(--neon-teal);
   border-radius: 6px;
   padding: 10px 14px;
@@ -1295,7 +1300,7 @@ footer a:hover {
 }
 
 .fb-upload-hint {
-  border: 1px dashed rgba(255, 83, 106, 0.3);
+  border: 1px dashed rgba(var(--theme-coral-rgb, 255, 83, 106), 0.3);
   border-radius: 6px;
   padding: 10px;
   text-align: center;
@@ -1307,7 +1312,7 @@ footer a:hover {
 
 .fb-upload-hint:hover {
   border-color: var(--neon-coral);
-  background: rgba(255, 83, 106, 0.05);
+  background: rgba(var(--theme-coral-rgb, 255, 83, 106), 0.05);
 }
 
 .fb-preview {
@@ -1316,14 +1321,14 @@ footer a:hover {
   max-height: 200px;
   border-radius: 6px;
   margin-top: 10px;
-  border: 1px solid rgba(138, 77, 255, 0.2);
+  border: 1px solid rgba(var(--theme-violet-rgb, 138, 77, 255), 0.2);
 }
 
 .fb-load-more {
   width: 100%;
   padding: 10px;
   border-radius: 6px;
-  border: 1px solid rgba(255, 83, 106, 0.3);
+  border: 1px solid rgba(var(--theme-coral-rgb, 255, 83, 106), 0.3);
   background: transparent;
   color: var(--text-secondary);
   cursor: pointer;
@@ -1336,7 +1341,7 @@ footer a:hover {
 .fb-load-more:hover {
   border-color: var(--neon-coral);
   color: var(--neon-coral);
-  background: rgba(255, 83, 106, 0.08);
+  background: rgba(var(--theme-coral-rgb, 255, 83, 106), 0.08);
 }
 
 .masonry {
@@ -1402,7 +1407,7 @@ input[type="file"] {
 .fb-comment-btn {
   padding: 4px 12px;
   border-radius: 4px;
-  border: 1px solid rgba(255, 83, 106, 0.3);
+  border: 1px solid rgba(var(--theme-coral-rgb, 255, 83, 106), 0.3);
   background: transparent;
   color: var(--text-secondary);
   cursor: pointer;
@@ -1415,14 +1420,14 @@ input[type="file"] {
 .fb-comment-btn:hover {
   border-color: var(--neon-coral);
   color: var(--neon-coral);
-  background: rgba(255, 83, 106, 0.08);
+  background: rgba(var(--theme-coral-rgb, 255, 83, 106), 0.08);
 }
 
 /* 回复按钮 - 更小，品红风格 */
 .fb-reply-btn {
   padding: 3px 10px;
   border-radius: 4px;
-  border: 1px solid rgba(244, 56, 184, 0.25);
+  border: 1px solid rgba(var(--theme-magenta-rgb, 244, 56, 184), 0.25);
   background: transparent;
   color: var(--text-secondary);
   cursor: pointer;
@@ -1435,7 +1440,7 @@ input[type="file"] {
 .fb-reply-btn:hover {
   border-color: var(--neon-magenta);
   color: var(--neon-magenta);
-  background: rgba(244, 56, 184, 0.08);
+  background: rgba(var(--theme-magenta-rgb, 244, 56, 184), 0.08);
 }
 
 /* 发送按钮 - 青色风格 */
@@ -1450,20 +1455,20 @@ input[type="file"] {
   font-weight: 700;
   transition: all 0.2s;
   font-family: inherit;
-  box-shadow: 0 2px 10px rgba(38, 217, 242, 0.3);
+  box-shadow: 0 2px 10px rgba(var(--theme-cyan-rgb, 38, 217, 242), 0.3);
 }
 
 .fb-comment-submit:hover {
   transform: translateY(-1px);
-  box-shadow: 0 4px 16px rgba(38, 217, 242, 0.5);
+  box-shadow: 0 4px 16px rgba(var(--theme-cyan-rgb, 38, 217, 242), 0.5);
   filter: brightness(1.1);
 }
 
 /* 评论输入框 */
 .fb-comment-input {
   flex: 1;
-  background: rgba(9, 10, 42, 0.8);
-  border: 1px solid rgba(38, 217, 242, 0.2);
+  background: rgba(var(--theme-bg-rgb, 9, 10, 42), 0.8);
+  border: 1px solid rgba(var(--theme-cyan-rgb, 38, 217, 242), 0.2);
   border-radius: 6px;
   padding: 7px 12px;
   color: var(--text-primary);
@@ -1476,11 +1481,11 @@ input[type="file"] {
 
 .fb-comment-input:focus {
   border-color: var(--neon-cyan);
-  box-shadow: 0 0 0 2px rgba(38, 217, 242, 0.1);
+  box-shadow: 0 0 0 2px rgba(var(--theme-cyan-rgb, 38, 217, 242), 0.1);
 }
 
 .fb-comment-input::placeholder {
-  color: rgba(181, 179, 215, 0.4);
+  color: rgba(var(--theme-muted-rgb, 181, 179, 215), 0.4);
 }
 
 /* 评论区域容器 */
@@ -1495,16 +1500,16 @@ input[type="file"] {
 .fb-comment-list {
   margin-top: 10px;
   padding: 10px 0 0;
-  border-top: 1px solid rgba(138, 77, 255, 0.1);
+  border-top: 1px solid rgba(var(--theme-violet-rgb, 138, 77, 255), 0.1);
 }
 
 .fb-comment-item {
   padding: 8px 12px;
-  border-left: 2px solid rgba(38, 217, 242, 0.2);
+  border-left: 2px solid rgba(var(--theme-cyan-rgb, 38, 217, 242), 0.2);
   margin-bottom: 8px;
   font-size: 13px;
   color: var(--text-primary);
-  background: rgba(9, 10, 42, 0.3);
+  background: rgba(var(--theme-bg-rgb, 9, 10, 42), 0.3);
   border-radius: 0 4px 4px 0;
 }
 
@@ -1520,39 +1525,39 @@ input[type="file"] {
 .variant-rate{font-size:14px;font-weight:800;}
 .variant-count{font-size:12px;color:var(--text-secondary);}
 /* ===== 阵容分析视图 ===== */
-.view-toggle{display:flex;gap:0;border:1px solid rgba(138,77,255,.35);border-radius:6px;overflow:hidden;margin-bottom:16px;}
+.view-toggle{display:flex;gap:0;border:1px solid rgba(var(--theme-violet-rgb, 138, 77, 255), .35);border-radius:6px;overflow:hidden;margin-bottom:16px;}
 .view-toggle-btn{flex:1;padding:7px 0;font-size:13px;font-weight:600;cursor:pointer;border:none;background:transparent;color:var(--text-secondary);transition:all .2s;}
-.view-toggle-btn.active{background:rgba(138,77,255,.25);color:var(--text-primary);}
+.view-toggle-btn.active{background:rgba(var(--theme-violet-rgb, 138, 77, 255), .25);color:var(--text-primary);}
 .comp-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:14px;}
-.comp-summary-card{padding:12px 14px;background:rgba(23,16,71,.7);border:1px solid rgba(38,217,242,.24);border-radius:7px;}
+.comp-summary-card{padding:12px 14px;background:rgba(var(--theme-surface-rgb, 23, 16, 71), .7);border:1px solid rgba(var(--theme-cyan-rgb, 38, 217, 242), .24);border-radius:7px;}
 .comp-summary-label{font-size:11px;color:var(--text-secondary);}
 .comp-summary-value{font-size:18px;font-weight:800;color:var(--neon-cyan);overflow-wrap:anywhere;}
 .comp-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:12px 0;}
 .comp-sort-tabs{display:flex;gap:6px;flex-wrap:wrap;}
-.comp-sort-btn{padding:5px 11px;border:1px solid rgba(138,77,255,.35);border-radius:4px;background:transparent;color:var(--text-secondary);cursor:pointer;font-family:inherit;}
-.comp-sort-btn.active{color:#fff;background:rgba(138,77,255,.28);border-color:var(--neon-violet);}
-.comp-idea-card{background:rgba(23,16,71,.72);border:1px solid rgba(138,77,255,.35);border-radius:8px;padding:16px;margin-bottom:12px;position:relative;}
+.comp-sort-btn{padding:5px 11px;border:1px solid rgba(var(--theme-violet-rgb, 138, 77, 255), .35);border-radius:4px;background:transparent;color:var(--text-secondary);cursor:pointer;font-family:inherit;}
+.comp-sort-btn.active{color:#fff;background:rgba(var(--theme-violet-rgb, 138, 77, 255), .28);border-color:var(--neon-violet);}
+.comp-idea-card{background:rgba(var(--theme-surface-rgb, 23, 16, 71), .72);border:1px solid rgba(var(--theme-violet-rgb, 138, 77, 255), .35);border-radius:8px;padding:16px;margin-bottom:12px;position:relative;}
 .comp-idea-head{display:flex;align-items:flex-start;gap:12px;justify-content:space-between;}
 .comp-idea-title{font-size:14px;font-weight:800;margin-bottom:8px;}
 .comp-metrics{display:flex;gap:12px;text-align:right;flex-shrink:0;}
 .comp-metric strong{display:block;font-size:16px;}
 .comp-metric span{font-size:10px;color:var(--text-secondary);}
-.comp-anchor{border-color:var(--neon-magenta)!important;background:rgba(244,56,184,.22)!important;box-shadow:0 0 8px rgba(244,56,184,.3);}
+.comp-anchor{border-color:var(--neon-magenta)!important;background:rgba(var(--theme-magenta-rgb, 244, 56, 184), .22)!important;box-shadow:0 0 8px rgba(var(--theme-magenta-rgb, 244, 56, 184), .3);}
 .comp-anchor::after{content:'查询卡';font-size:9px;color:var(--neon-magenta);margin-left:3px;}
-.comp-details{margin-top:12px;padding-top:12px;border-top:1px solid rgba(138,77,255,.2);}
+.comp-details{margin-top:12px;padding-top:12px;border-top:1px solid rgba(var(--theme-violet-rgb, 138, 77, 255), .2);}
 .comp-detail-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;}
-.comp-link-btn{display:inline-flex;padding:4px 10px;border:1px solid rgba(38,217,242,.35);border-radius:4px;color:var(--neon-cyan);text-decoration:none;font-size:11px;background:transparent;cursor:pointer;font-family:inherit;}
+.comp-link-btn{display:inline-flex;padding:4px 10px;border:1px solid rgba(var(--theme-cyan-rgb, 38, 217, 242), .35);border-radius:4px;color:var(--neon-cyan);text-decoration:none;font-size:11px;background:transparent;cursor:pointer;font-family:inherit;}
 .comp-note{font-size:11px;color:var(--text-secondary);margin-top:6px;}
-.comp-system-toggle{margin-top:16px;border-top:1px solid rgba(138,77,255,.2);padding-top:12px;}
+.comp-system-toggle{margin-top:16px;border-top:1px solid rgba(var(--theme-violet-rgb, 138, 77, 255), .2);padding-top:12px;}
 @media(max-width:900px){.page-runs #panel-runs > .form-card > .form-row{grid-template-columns:repeat(2,minmax(0,1fr));}.page-runs #panel-runs > .form-card > .form-row .runs-card-picker{grid-column:span 2;}.page-runs #panel-runs > .form-card > .form-row > .btn{margin-top:0;}}
 @media(max-width:700px){.page-runs #panel-runs > .form-card > .form-row{grid-template-columns:1fr;}.page-runs #panel-runs > .form-card > .form-row .runs-card-picker{grid-column:auto;}.runs-card-picker{min-width:0;max-width:100%;}.comp-summary{grid-template-columns:repeat(2,minmax(0,1fr));}.comp-idea-head{flex-direction:column}.comp-metrics{text-align:left}.comp-toolbar{align-items:flex-start;flex-direction:column}}
-.comp-group{background:rgba(23,16,71,.7);border:1px solid rgba(138,77,255,.3);border-radius:8px;margin-bottom:14px;overflow:hidden;transition:all .2s;position:relative;}
-.comp-group::before{content:'';position:absolute;top:-1px;right:-1px;width:12px;height:12px;background:var(--neon-violet,#8a4dff);clip-path:polygon(100% 0,0 0,100% 100%);border-radius:0 8px 0 0;}
-.comp-group:hover{border-color:rgba(138,77,255,.55);box-shadow:0 0 16px rgba(138,77,255,.2);}
-.comp-group-header{padding:14px 20px;display:flex;align-items:center;gap:14px;cursor:pointer;user-select:none;background:rgba(9,10,42,.35);}
-.comp-card-chip{padding:3px 9px;border-radius:4px;font-size:12px;font-weight:600;background:rgba(138,77,255,.12);color:var(--text-primary);border:1px solid rgba(138,77,255,.3);white-space:nowrap;}
+.comp-group{background:rgba(var(--theme-surface-rgb, 23, 16, 71), .7);border:1px solid rgba(var(--theme-violet-rgb, 138, 77, 255), .3);border-radius:8px;margin-bottom:14px;overflow:hidden;transition:all .2s;position:relative;}
+.comp-group::before{content:'';position:absolute;top:-1px;right:-1px;width:12px;height:12px;background:var(--neon-violet,var(--theme-violet, #8a4dff));clip-path:polygon(100% 0,0 0,100% 100%);border-radius:0 8px 0 0;}
+.comp-group:hover{border-color:rgba(var(--theme-violet-rgb, 138, 77, 255), .55);box-shadow:0 0 16px rgba(var(--theme-violet-rgb, 138, 77, 255), .2);}
+.comp-group-header{padding:14px 20px;display:flex;align-items:center;gap:14px;cursor:pointer;user-select:none;background:rgba(var(--theme-bg-rgb, 9, 10, 42), .35);}
+.comp-card-chip{padding:3px 9px;border-radius:4px;font-size:12px;font-weight:600;background:rgba(var(--theme-violet-rgb, 138, 77, 255), .12);color:var(--text-primary);border:1px solid rgba(var(--theme-violet-rgb, 138, 77, 255), .3);white-space:nowrap;}
 .comp-card-chip.has-img{padding:3px 6px;display:flex;align-items:center;gap:4px;}
-.comp-card-chip.is-new{background:rgba(244,56,184,0.25);border-color:rgba(244,56,184,0.8);color:#F438B8;font-weight:700;box-shadow:0 0 6px rgba(244,56,184,0.4);}
+.comp-card-chip.is-new{background:rgba(var(--theme-magenta-rgb, 244, 56, 184), 0.25);border-color:rgba(var(--theme-magenta-rgb, 244, 56, 184), 0.8);color:var(--theme-magenta, #F438B8);font-weight:700;box-shadow:0 0 6px rgba(var(--theme-magenta-rgb, 244, 56, 184), 0.4);}
 .comp-card-img{width:auto;height:32px;object-fit:contain;border-radius:3px;flex-shrink:0;display:block;}
 /* #bz db 原图按卡牌 Size 区分比例：Small / Medium / Large。保持原始比例，不裁切。 */
 .comp-card-img.size-Small{width:16px;height:32px;}
@@ -1560,9 +1565,9 @@ input[type="file"] {
 .comp-card-img.size-Large{width:48px;height:32px;}
 .comp-expand-icon{font-size:13px;color:var(--text-secondary);transition:transform .3s;flex-shrink:0;}
 .comp-group.expanded>.comp-group-header .comp-expand-icon{transform:rotate(180deg);}
-.comp-variants{display:none;padding:14px 20px;border-top:1px solid rgba(138,77,255,.15);}
+.comp-variants{display:none;padding:14px 20px;border-top:1px solid rgba(var(--theme-violet-rgb, 138, 77, 255), .15);}
 .comp-group.expanded>.comp-variants{display:block;}
-.comp-variant-item{padding:12px;background:rgba(9,10,42,.5);border-radius:6px;margin-bottom:10px;border:1px solid rgba(138,77,255,.2);}
+.comp-variant-item{padding:12px;background:rgba(var(--theme-bg-rgb, 9, 10, 42), .5);border-radius:6px;margin-bottom:10px;border:1px solid rgba(var(--theme-violet-rgb, 138, 77, 255), .2);}
 .comp-variant-item:last-child{margin-bottom:0;}
 .comp-rep-cards{display:flex;flex-wrap:wrap;gap:6px;align-items:center;}
 .comp-stats{display:flex;align-items:center;gap:12px;flex-shrink:0;}
@@ -1572,15 +1577,24 @@ input[type="file"] {
 .comp-hero-badge{font-size:11px;padding:2px 7px;border-radius:10px;background:rgba(255,255,255,.08);color:var(--text-secondary);border:1px solid rgba(255,255,255,.12);flex-shrink:0;}
 </style>
 
-  <link rel="stylesheet" href="/static/query-progress.css">
-  <script src="/static/query-progress.js"></script>
+  <link rel="stylesheet" href="/static/query-progress.css?v=comp-perf-20261019-140923">
+  <script src="/static/query-progress.js?v=comp-perf-20261019-140923"></script>
+<link rel="stylesheet" href="/static/card-preview.css?v=2">
+<script src="/static/card-preview.js?v=2"></script>
+<link rel="stylesheet" href="/static/theme.css?v=1">
+<script src="/static/search-tracking.js?v=20261016-search"></script>
+<link rel="stylesheet" href="/static/runs-list.css?v=comp-analysis-20261019-124811">
+<script src="/static/runs-list.js?v=comp-share-timeout-20261020-103409"></script>
+<link rel="stylesheet" href="/static/comp-analysis.css?v=comp-examples-20261020-113542">
+<script src="/static/comp-analysis.js?v=comp-examples-20261020-113542"></script>
+<style>.content-intro{max-width:1200px;margin:20px auto 0;padding:0 24px}.content-intro h1{font-size:22px;line-height:1.5;margin:0 0 8px}.content-intro p{font-size:13px;color:var(--theme-muted,#b5b3d7);margin:0}.content-intro a{color:var(--theme-link,#26d9f2)}</style>
 </head>
 <body>
 <nav class="navbar">
   <a href="/runs" class="logo">巴扎丘Bot</a>
   <div class="nav-tabs">
     <a href="/runs" class="nav-tab active">阵容查询</a>
-    <a href="/routes" class="nav-tab">阵容路线</a>
+
     <a href="/winrate" class="nav-tab">胜率查询</a>
     <a href="/partner" class="nav-tab">最佳搭档</a>
     <a href="/topcard" class="nav-tab">职业榜单</a>
@@ -1589,6 +1603,10 @@ input[type="file"] {
     <a href="/support" class="nav-tab">支持</a>
   </div>
 </nav>
+<section class="content-intro" aria-labelledby="site-intro-title">
+  <h1 id="site-intro-title">大巴扎 The Bazaar 中文阵容与胜率查询</h1>
+  <p>基于天梯真实对局，查询 10 胜阵容、卡牌胜率和搭配。</p>
+</section>
 <div class="main page-runs">
 <div id="suggest-area" style="margin-bottom:24px;display:none">
   <div class="form-card" style="padding:18px 24px">
@@ -1622,14 +1640,14 @@ input[type="file"] {
         </select>
       </div>
       <div class="form-group runs-card-picker" id="runs-card-picker">
-        <label>卡牌（可添加多张）</label>
+        <label id="runs-card-label">卡牌（可添加多张）</label>
         <div class="runs-card-picker-box" id="runs-card-picker-box" onclick="document.getElementById('runs-card-search').focus()">
           <div class="runs-card-tags" id="runs-card-tags"></div>
           <input id="runs-card-search" type="text" autocomplete="off" placeholder="输入部分卡名后选择">
         </div>
         <input id="runs-cards" type="hidden" value="">
         <div class="runs-card-suggestions" id="runs-card-suggestions" role="listbox"></div>
-        <div class="runs-card-help">选择后可继续输入下一张；阵容分析一次只支持一张核心卡</div>
+        <div class="runs-card-help" id="runs-card-help">先从联想列表选择卡牌，再点“不限附魔”选择附魔；多张卡需同时满足</div>
       </div>
       <div class="form-group">
         <label>最近天数</label>
@@ -1661,6 +1679,7 @@ let lastQuery = 0;
 let activeRunsController = null;
 let activeRunsRequestId = 0;
 let selectedRunCards = [];
+const RUN_ENCHANTMENTS = {Deadly:'致命',Fiery:'炽焰',Golden:'黄金',Heavy:'沉重',Icy:'寒冰',Obsidian:'黑曜石',Radiant:'辉耀',Restorative:'回复',Shielded:'护盾',Shiny:'闪亮',Toxic:'毒素',Turbo:'疾速',Mossy:'长青'};
 let runCardSuggestions = [];
 let runCardActiveIndex = -1;
 let cardSearchTimer = null;
@@ -1670,17 +1689,39 @@ let cardSearchRequestId = 0;
 function escapeRunCardText(value) {
   return String(value || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
-function syncRunCards() {
-  document.getElementById('runs-cards').value = selectedRunCards.join('+');
-  document.getElementById('runs-card-tags').innerHTML = selectedRunCards.map((name, index) =>
-    `<span class="runs-card-tag">${escapeRunCardText(name)}<button type="button" aria-label="删除 ${escapeRunCardText(name)}" onclick="event.stopPropagation();removeRunCard(${index})">×</button></span>`
-  ).join('');
+function showRunFileNotice() {
+  if (location.protocol !== 'file:') return false;
+  showError('runs-error', '当前是直接打开的本地文件，无法访问卡牌搜索和阵容查询接口。请通过 <a href="http://127.0.0.1:1027/runs" style="color:var(--neon-cyan)">本地 HTTP 预览</a> 打开本页。');
+  return true;
 }
-function addRunCard(name) {
+function syncRunCards() {
+  document.getElementById('runs-cards').value = selectedRunCards.map(card => card.name).join('+');
+  document.getElementById('runs-card-tags').innerHTML = selectedRunCards.map((card, index) => {
+    const options = '<option value="">不限附魔</option>' + Object.entries(RUN_ENCHANTMENTS).map(([value, label]) =>
+      `<option value="${value}"${card.enchantment === value ? ' selected' : ''}>${label}</option>`).join('');
+    return `<span class="runs-card-tag">${escapeRunCardText(card.name)}<select class="runs-enchantment-select" aria-label="${escapeRunCardText(card.name)}的附魔" onclick="event.stopPropagation()" onchange="setRunCardEnchantment(${index},this.value)">${options}</select><button type="button" aria-label="删除 ${escapeRunCardText(card.name)}" onclick="event.stopPropagation();removeRunCard(${index})">×</button></span>`;
+  }).join('');
+}
+function addRunCard(name, enchantment = null, cardId = null, type = null) {
   name = String(name || '').trim();
-  if (!name || selectedRunCards.includes(name)) return;
-  selectedRunCards.push(name);
+  if (!name || selectedRunCards.some(card => card.name === name && card.enchantment === enchantment)) return;
+  if (selectedRunCards.length >= 20) { showError('runs-error', '最多支持 20 个卡牌筛选条件'); return; }
+  selectedRunCards.push({name, enchantment, ...(cardId ? {cardId} : {}), ...(type ? {type} : {})});
   syncRunCards();
+}
+function setRunCardEnchantment(index, value) {
+  const enchantment = value || null;
+  if (enchantment && !Object.hasOwn(RUN_ENCHANTMENTS, enchantment)) return;
+  const card = selectedRunCards[index];
+  if (!card) return;
+  if (selectedRunCards.some((other, i) => i !== index && other.name === card.name && other.enchantment === enchantment)) {
+    showError('runs-error', '已存在相同的卡牌和附魔条件');
+  } else {
+    card.enchantment = enchantment;
+    showError('runs-error', '');
+  }
+  syncRunCards();
+  document.querySelectorAll('.runs-enchantment-select')[index]?.focus();
 }
 function removeRunCard(index) {
   selectedRunCards.splice(index, 1);
@@ -1695,7 +1736,18 @@ function readLegacyCardsParam(search) {
 }
 function restoreRunCards(value) {
   selectedRunCards = [];
-  String(value || '').split('+').map(v => v.trim()).filter(Boolean).forEach(addRunCard);
+  String(value || '').split('+').map(v => v.trim()).filter(Boolean).forEach(name => addRunCard(name));
+  syncRunCards();
+}
+function restoreRunCardFilters(value) {
+  const filters = JSON.parse(value);
+  if (!Array.isArray(filters) || filters.length > 20 || filters.some(card =>
+    !card || typeof card.name !== 'string' || !card.name.trim() || card.name.length > 160 ||
+    (card.enchantment != null && (typeof card.enchantment !== 'string' || !Object.hasOwn(RUN_ENCHANTMENTS, card.enchantment))))) {
+    throw new Error('无效的卡牌附魔筛选链接');
+  }
+  selectedRunCards = [];
+  filters.forEach(card => addRunCard(card.name, card.enchantment ?? null));
   syncRunCards();
 }
 function closeRunCardSuggestions() {
@@ -1719,7 +1771,7 @@ function renderRunCardSuggestions() {
     menu.innerHTML = runCardSuggestions.map((card, index) => {
       const image = card.img ? `<img src="${escapeRunCardText(card.img)}" alt="" loading="lazy">` : '';
       const english = card.en && card.en !== card.zh ? `<small>${escapeRunCardText(card.en)}</small>` : '';
-      return `<button type="button" class="runs-card-option${index === runCardActiveIndex ? ' active' : ''}" role="option" onmousedown="event.preventDefault()" onclick="selectRunCardSuggestion(${index})">${image}<span class="runs-card-option-text"><strong>${escapeRunCardText(card.zh)}</strong>${english}</span></button>`;
+      return `<button type="button" class="runs-card-option${index === runCardActiveIndex ? ' active' : ''}" ${window.BazaarCardPreview?.attrs(card,true)||''} role="option" onmousedown="event.preventDefault()" onclick="selectRunCardSuggestion(${index})">${image}<span class="runs-card-option-text"><strong>${escapeRunCardText(card.zh)}</strong>${english}</span></button>`;
     }).join('');
   }
   menu.classList.add('open');
@@ -1728,21 +1780,23 @@ function renderRunCardSuggestions() {
 function selectRunCardSuggestion(index) {
   const card = runCardSuggestions[index];
   if (!card) return;
-  addRunCard(card.zh || card.en);
+  addRunCard(card.zh || card.en, null, card.cardId, card.type);
   document.getElementById('runs-card-search').value = '';
   closeRunCardSuggestions();
   document.getElementById('runs-card-search').focus();
 }
 async function searchRunCards(query) {
+  if (showRunFileNotice()) return;
   if (cardSearchController) cardSearchController.abort();
   const requestId = ++cardSearchRequestId;
   cardSearchController = new AbortController();
   const input = document.getElementById('runs-card-search');
   try {
-    const res = await fetch('/api/card_search?q=' + encodeURIComponent(query), {signal:cardSearchController.signal});
+    const typeFilter = _viewMode === 'comp' ? '&type=item' : '';
+    const res = await fetch('/api/card_search?q=' + encodeURIComponent(query) + typeFilter, {signal:cardSearchController.signal});
     const rows = await res.json();
     if (requestId !== cardSearchRequestId || input.value.trim() !== query) return;
-    runCardSuggestions = (Array.isArray(rows) ? rows : []).filter(card => !selectedRunCards.includes(card.zh || card.en));
+    runCardSuggestions = (Array.isArray(rows) ? rows : []).filter(card => !selectedRunCards.some(selected => selected.name === (card.zh || card.en) && selected.enchantment === null));
     runCardActiveIndex = runCardSuggestions.length ? 0 : -1;
     renderRunCardSuggestions();
   } catch (error) {
@@ -1780,19 +1834,34 @@ function initRunCardPicker() {
 // 初始化视图状态
 document.addEventListener('DOMContentLoaded', () => {
   initRunCardPicker();
+  if (showRunFileNotice()) return;
   document.getElementById('comp-result').style.display = 'none';
   document.getElementById('comp-result').innerHTML = '<div class="result-card"><div class="empty">输入卡牌名称后点击查询，即可查看阵容分析</div></div>';
   const params = new URLSearchParams(location.search);
+  const legacyList = !params.has('mode') && ['cards','card','card_filters','hero','rank','days','page','auto'].some(key => params.has(key));
+  setViewMode(params.has('run') || params.get('mode') === 'list' || legacyList ? 'list' : 'comp');
+  if (params.has('run')) {
+    window.BazaarRuns.loadRun(params.get('run'));
+    return;
+  }
   const hero = params.get('hero');
   const cards = readLegacyCardsParam(location.search);
   const rank = params.get('rank');
   if (hero) document.getElementById('runs-hero').value = hero;
-  if (cards) restoreRunCards(cards);
+  try {
+    if (params.has('card_filters')) restoreRunCardFilters(params.get('card_filters'));
+    else if (cards) restoreRunCards(cards);
+  } catch (_) {
+    showError('runs-error', '无效的卡牌附魔筛选链接，请重新选择卡牌和附魔');
+    return;
+  }
+  if (params.get('days')) document.getElementById('runs-days').value = params.get('days');
   if (rank && document.querySelector(`#runs-rank option[value="${CSS.escape(rank)}"]`)) {
     document.getElementById('runs-rank').value = rank;
   }
-  if (params.get('auto') === '1' && (hero || cards)) {
-    setTimeout(() => queryRuns(1), 0);
+  if (params.get('auto') === '1') {
+    const page = Math.max(1, parseInt(params.get('page'), 10) || 1);
+    setTimeout(() => queryRuns(page, 'auto'), 0);
   }
 });
 
@@ -1822,12 +1891,14 @@ function showError(id, msg) {
 }
 
 function winrateColor(r) {
-  if (r >= 0.7) return '#10b981';
-  if (r >= 0.5) return '#f59e0b';
-  return '#ef4444';
+  if (r >= 0.7) return 'var(--theme-teal, #10b981)';
+  if (r >= 0.5) return 'var(--theme-gold, #f59e0b)';
+  return 'var(--theme-coral, #ef4444)';
 }
 
-async function queryRuns(page) {
+async function queryRuns(page, origin = 'user') {
+  if (showRunFileNotice()) return;
+  window.BazaarRuns.cancelDetail();
   if (activeRunsController) {
     activeRunsController.abort();
     activeRunsController = null;
@@ -1838,6 +1909,7 @@ async function queryRuns(page) {
   showError('runs-error', '');
   const hero = document.getElementById('runs-hero').value;
   const cards = document.getElementById('runs-cards').value.trim();
+  const cardFilters = selectedRunCards.map(card => ({name:card.name, enchantment:card.enchantment}));
   const wins = '10';
   const days = document.getElementById('runs-days').value;
   const rank = document.getElementById('runs-rank').value;
@@ -1850,7 +1922,7 @@ async function queryRuns(page) {
     }
     document.getElementById('runs-result').style.display = 'none';
     document.getElementById('comp-result').style.display = '';
-    await queryComp();
+    await queryComp(origin);
     return;
   }
   const requestId = ++activeRunsRequestId;
@@ -1880,11 +1952,11 @@ async function queryRuns(page) {
   }, 200);
   const params = new URLSearchParams({min_wins: wins, page, rank});
   if (hero) params.set('hero', hero);
-  if (cards) params.set('cards', cards);
+  if (cardFilters.length) params.set('card_filters', JSON.stringify(cardFilters));
   if (days) params.set('days', days);
-  const timeoutId = setTimeout(() => controller.abort(), 30000);
+  const timeoutId = setTimeout(() => controller.abort(new DOMException('查询超时', 'TimeoutError')), 30000);
   try {
-    const res = await fetch('/api/runs?' + params, {signal: controller.signal});
+    const res = await (window.BazaarSearch ? BazaarSearch.query('runs', '/api/runs?' + params, {signal:controller.signal}, origin === 'user' && Number(page) === 1) : fetch('/api/runs?' + params, {signal:controller.signal}));
     if (!res.ok) {
       let message = `HTTP ${res.status}`;
       try { const body = await res.json(); message = body.error || message; } catch (_) {}
@@ -1902,10 +1974,16 @@ async function queryRuns(page) {
     await new Promise(resolve => setTimeout(resolve, 300));
     if (requestId !== activeRunsRequestId) return;
     if (data.error) { showError('runs-error', data.error); _runsEl.innerHTML=''; return; }
-    renderRuns(data, page, {hero, cards, wins, days});
+    const resultPage = data.page || page;
+    const shareParams = new URLSearchParams(params);
+    shareParams.set('mode', 'list');
+    shareParams.set('page', resultPage);
+    shareParams.set('auto', '1');
+    history.replaceState(null, '', location.pathname + '?' + shareParams);
+    renderRuns(data, resultPage, {hero, cards, wins, days, rank});
   } catch(e) {
     if (requestId !== activeRunsRequestId) return;
-    const message = e.name === 'AbortError'
+    const message = ['AbortError', 'TimeoutError'].includes(e.name)
       ? '查询超时，请缩小筛选范围后重试'
       : '请求失败: ' + e.message;
     showError('runs-error', message);
@@ -1923,45 +2001,27 @@ function renderRuns(data, page, params) {
     document.getElementById('runs-result').innerHTML = '<div class="result-card"><div class="empty">未找到符合条件的阵容</div></div>';
     return;
   }
-  const heroZh = {Vanessa:'瓦内莎',Dooley:'杜利',Mak:'马克',Pygmalien:'皮格马利翁',Stelle:'斯黛尔',Jules:'朱尔斯',Karnok:'卡诺克','The Dragons':'双龙'};
-  let items = runs.map(r => {
-    const day = r.wins + r.losses;
-    const cardList = r.cards || [];
-    const cardsHtml = cardList.length ? cardList.slice(0,8).map(c => {
-      const img = c.img ? `<img class="size-${c.size || 'Small'}" src="${c.img}" alt="${c.name}" loading="lazy" onerror="this.style.display='none'">` : '';
-      return `<span class="run-card-chip">${img}${c.name}</span>`;
-    }).join('') + (cardList.length>8 ? `<span class="run-card-chip">+${cardList.length-8}</span>` : '') : escapeHtml((r.items || []).slice(0,5).join('、'));
-    const screenshot = r.screenshot ? `<div style="margin:8px 0 2px"><img src="${r.screenshot}" style="max-width:100%;border-radius:6px;border:1px solid #1f2937" loading="lazy" onerror="this.style.display='none'"></div>` : '';
-    const timeStr = r.created_at ? new Date(r.created_at).toLocaleString('zh-CN', {timeZone:'Asia/Shanghai',month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}) : '';
-    return `<div class="run-item" style="flex-direction:column;align-items:flex-start">
-      <div style="display:flex;gap:12px;align-items:center;width:100%">
-        <span class="run-hero">${heroZh[r.hero]||r.hero}</span>
-        <div class="run-meta">
-          <div class="run-title">Day${day} · ${r.username||'匿名'}${timeStr ? ' · <span style="color:var(--text-secondary);font-size:11px">' + timeStr + '</span>' : ''}</div>
-          <div class="run-items">${cardsHtml}</div>
-        </div>
-        <span class="win-badge">${r.wins}胜${r.losses}负</span>
-        <a class="run-link" href="${r.url}" target="_blank">查看 →</a>
-      </div>
-      ${screenshot}
-    </div>`;
-  }).join('');
+  const items = window.BazaarRuns.renderRows(runs);
 
   let pagination = '';
   if (pages > 1) {
     const btns = [];
-    for (let i = 1; i <= Math.min(pages, 10); i++) {
-      btns.push(`<button class="page-btn${i===page?' active':''}" onclick="queryRuns(${i})">${i}</button>`);
+    const startPage = Math.max(1, Math.min(page - 4, pages - 9));
+    if (startPage > 1) btns.push('<button class="page-btn" onclick="queryRuns(1, &quot;page&quot;)">首页</button>');
+    for (let i = startPage; i <= Math.min(pages, startPage + 9); i++) {
+      btns.push(`<button class="page-btn${i===page?' active':''}" onclick="queryRuns(${i}, &quot;page&quot;)">${i}</button>`);
     }
+    if (startPage + 9 < pages) btns.push(`<button class="page-btn" onclick="queryRuns(${pages}, &quot;page&quot;)">末页</button>`);
     pagination = `<div class="pagination">${btns.join('')}</div>`;
   }
 
   document.getElementById('runs-result').innerHTML = `
     <div class="result-card">
       <div class="result-header">
-        <span>阵容列表</span>
+        <span>${Number(data.min_wins ?? params.wins) === 10 ? '10 胜阵容列表' : '阵容列表'}</span>
         <span class="total">共 ${total} 条结果（第 ${page}/${pages} 页）${params.day ? ` · 打到 Day ${params.day}` : ''}</span>
       </div>
+      ${window.BazaarRuns.querySummary(data, params)}
       ${items}
       ${pagination}
     </div>`;
@@ -1996,7 +2056,7 @@ function renderWinrate(data) {
   const color = winrateColor(rate);
   const pct = (rate*100).toFixed(1);
   const title = card_names.join(' + ') || '查询卡牌';
-  let notFoundHtml = not_found && not_found.length ? `<div style="color:#f87171;font-size:12px;margin-top:12px">未识别: ${not_found.join(', ')}</div>` : '';
+  let notFoundHtml = not_found && not_found.length ? `<div style="color:var(--theme-coral, #f87171);font-size:12px;margin-top:12px">未识别: ${not_found.join(', ')}</div>` : '';
   document.getElementById('wr-result').innerHTML = `
     <div class="winrate-card">
       <div class="winrate-title">${title} 的10胜率</div>
@@ -2130,9 +2190,9 @@ const RANK_ICONS = ['🥇','🥈','🥉','4️⃣','5️⃣','6️⃣','7️⃣'
 window._topcardLoaded = false;
 
 function tcRateColor(r) {
-  if (r >= 0.6) return '#10b981';
-  if (r >= 0.45) return '#f59e0b';
-  return '#ef4444';
+  if (r >= 0.6) return 'var(--theme-teal, #10b981)';
+  if (r >= 0.45) return 'var(--theme-gold, #f59e0b)';
+  return 'var(--theme-coral, #ef4444)';
 }
 
 async function loadTopcard() {
@@ -2412,268 +2472,38 @@ window.addEventListener('DOMContentLoaded', () => {
 
 
 // ===== 阵容分析视图 =====
-let _viewMode = 'list'; // 'comp' | 'list'
-
-function toggleScreenshotComp(id) {
-  const el = document.getElementById(id);
-  const icon = document.getElementById(id + '-icon');
-  if (!el) return;
-  const visible = el.style.display !== 'none';
-  el.style.display = visible ? 'none' : 'block';
-  if (icon) icon.textContent = visible ? '▼' : '▲';
-}
-
+let _viewMode = 'list';
 function setViewMode(mode) {
+  if (!['list','comp'].includes(mode)) return;
+  window.BazaarComp?.cancel();
+  if (mode === 'comp' && _viewMode !== 'comp') window.BazaarComp?.track('view');
   _viewMode = mode;
+  closeRunCardSuggestions();
   document.querySelectorAll('.view-toggle-btn').forEach((btn, i) => {
     btn.classList.toggle('active', (i === 0 && mode === 'comp') || (i === 1 && mode === 'list'));
   });
   document.getElementById('runs-result').style.display = mode === 'list' ? '' : 'none';
-  const cardInput = document.getElementById('runs-cards');
-  if (cardInput) {
-    if (mode === 'comp') {
-      cardInput.placeholder = '阵容分析仅支持一张卡，如：火药桶';
-    } else {
-      cardInput.placeholder = '如：火炮阵列+赛博铁尺';
-    }
-  }
   document.getElementById('comp-result').style.display = mode === 'comp' ? '' : 'none';
+  document.getElementById('runs-card-search').placeholder = mode === 'comp' ? '选择 1–5 张物品，多张需同时包含' : '输入部分卡名后选择';
+  document.getElementById('runs-card-label').textContent = mode === 'comp' ? '物品（最多 5 张）' : '卡牌（可添加多张）';
+  document.getElementById('runs-card-help').textContent = mode === 'comp' ? '选择已有物品查搭配；技能作为结果展示，附魔筛选仅支持阵容列表' : '先从联想列表选择卡牌，再点“不限附魔”选择附魔；多张卡需同时满足';
 }
-
-function rateColorComp(r) {
-  if (r >= 0.7) return '#10b981';
-  if (r >= 0.5) return '#f59e0b';
-  return '#ef4444';
-}
-
-const HERO_ZH_COMP = {Vanessa:'瓦内莎',Dooley:'杜利',Mak:'马克',Pygmalien:'皮格马利翁',Stelle:'斯黛尔',Jules:'朱尔斯',Karnok:'卡诺克','The Dragons':'双龙'};
-
-async function queryComp() {
-  if (selectedRunCards.length !== 1) {
-    document.getElementById('comp-result').innerHTML = '<div class="result-card"><div class="empty">阵容分析一次只能选择一张核心卡，请保留一张卡牌后再查询</div></div>';
-    return;
-  }
-  const card = selectedRunCards[0];
-  const hero = document.getElementById('runs-hero').value;
-  const rank = document.getElementById('runs-rank').value;
-  if (!card) {
-    document.getElementById('comp-result').innerHTML = '<div class="result-card"><div class="empty">请输入卡牌名称后查询阵容分析</div></div>';
-    return;
-  }
-  const _compEl = document.getElementById('comp-result');
-  _compEl.innerHTML = `<div class="runs-progress-wrap">
-    <div class="runs-progress-label">正在分析阵容数据，请稍候...</div>
-    <div class="runs-progress-bar-bg"><div class="runs-progress-bar" id="comp-pbar"></div></div>
-    <div class="runs-progress-label" id="comp-pct">0%</div>
-  </div>`;
-  let _compPct = 0;
-  const _compTimer = setInterval(() => {
-    if (_compPct < 80) {
-      _compPct += _compPct < 30 ? 3 : _compPct < 60 ? 1.5 : 0.5;
-      const bar = document.getElementById('comp-pbar');
-      const lbl = document.getElementById('comp-pct');
-      if (bar) bar.style.width = _compPct.toFixed(0) + '%';
-      if (lbl) lbl.textContent = _compPct.toFixed(0) + '%';
-    }
-  }, 200);
-  const params = new URLSearchParams({card, rank});
-  if (hero) params.set('hero', hero);
-  try {
-    const res = await fetch('/api/comp/card?' + params);
-    const data = await res.json();
-    clearInterval(_compTimer);
-    const bar = document.getElementById('comp-pbar');
-    const lbl = document.getElementById('comp-pct');
-    if (bar) bar.style.width = '100%';
-    if (lbl) lbl.textContent = '100%';
-    await new Promise(res => setTimeout(res, 300));
-    if (data.error) { _compEl.innerHTML = `<div class="error-msg">${data.error}</div>`; return; }
-    renderCompCard(data);
-  } catch(e) {
-    clearInterval(_compTimer);
-    _compEl.innerHTML = `<div class="error-msg">请求失败: ${e.message}</div>`;
-  }
-}
-
-function renderCompCard(data) {
-  const layers = data.layers || [];
-  const medals = ['🥇','🥈','🥉','4️⃣','5️⃣','6️⃣','7️⃣','8️⃣','9️⃣','🔟'];
-
-  function screenshotBtnComp(id, url) {
-    if (!url) return '';
-    const fullUrl = url.startsWith('http') ? url : 'https://usercontent.bzdb.network' + url;
-    return `<div style="margin-top:8px">
-      <button onclick="toggleScreenshotComp('${id}')" style="background:none;border:1px solid rgba(38,217,242,0.3);border-radius:4px;color:var(--text-secondary);font-size:11px;padding:3px 10px;cursor:pointer;font-family:inherit;transition:all 0.2s;" onmouseover="this.style.borderColor='var(--neon-cyan)';this.style.color='var(--neon-cyan)'" onmouseout="this.style.borderColor='rgba(38,217,242,0.3)';this.style.color='var(--text-secondary)'">
-        📷 查看截图 <span id="${id}-icon">▼</span>
-      </button>
-      <div id="${id}" style="display:none;margin-top:8px">
-        <img src="${fullUrl}" style="max-width:100%;border-radius:6px;border:1px solid rgba(138,77,255,0.3)" loading="lazy" onerror="this.parentElement.style.display='none'">
-      </div>
-    </div>`;
-  }
-
-  function chips(cards) {
-    return (cards||[]).map(c => {
-      const sizeCls = 'size-' + (c.size || 'Small');
-      if (c.img) {
-        const cls = c.is_new ? 'comp-card-chip has-img is-new' : 'comp-card-chip has-img';
-        return `<span class="${cls}"><img class="comp-card-img ${sizeCls}" src="${c.img}" alt="${c.name_zh}" loading="lazy" onerror="this.style.display='none'">${c.name_zh}</span>`;
-      }
-      return `<span class="${c.is_new ? 'comp-card-chip is-new' : 'comp-card-chip'}">${c.name_zh}</span>`;
-    }).join('');
-  }
-
-  function renderConfigs(configs, prefix) {
-    if (!configs || !configs.length) return '<div style="font-size:12px;color:var(--text-secondary);padding:8px 0">暂无具体配置数据</div>';
-    return configs.map((cfg, k) => {
-      const id = `${prefix}-cfg-${k}`;
-      const cardHtml = chips(cfg.cards);
-      return `<div class="comp-variant-item">
-        <div class="variant-header">
-          <span class="variant-label">配置 ${k+1}</span>
-          <div class="variant-stats">
-            <span class="variant-rate" style="color:${rateColorComp(cfg.rate)}">${(cfg.rate*100).toFixed(1)}% 胜率</span>
-            <span class="variant-count">${cfg.count}次出场</span>
-          </div>
-        </div>
-        <div class="comp-rep-cards" style="margin-top:6px;flex-wrap:wrap">${cardHtml}</div>
-        ${screenshotBtnComp(id, cfg.screenshot)}
-      </div>`;
-    }).join('');
-  }
-
-  function renderL3(l3list, prefix) {
-    if (!l3list || !l3list.length) return '';
-    return l3list.map((l3, k) => {
-      const id = `${prefix}-l3-${k}`;
-      const cfgHtml = renderConfigs(l3.configs, id);
-      return `<div class="comp-group" id="${id}" style="margin:8px 0;border-color:rgba(38,217,242,0.25)">
-        <div class="comp-group-header" onclick="document.getElementById('${id}').classList.toggle('expanded')" style="background:rgba(9,10,42,0.5);padding:10px 16px">
-          <span style="font-size:12px;color:var(--text-secondary);flex-shrink:0">L3</span>
-          <div class="comp-rep-cards" style="flex:1">${chips(l3.core_cards)}</div>
-          <div class="comp-stats">
-            <div>
-              <div class="comp-rate" style="color:${rateColorComp(l3.rate)};font-size:14px">${(l3.rate*100).toFixed(1)}%</div>
-              <div class="comp-count">${l3.count}次</div>
-            </div>
-            <span class="comp-expand-icon">▼</span>
-          </div>
-        </div>
-        <div class="comp-variants" style="padding:12px 16px;background:rgba(0,0,0,0.2)">${cfgHtml}</div>
-      </div>`;
-    }).join('');
-  }
-
-  function renderL2(l2list, prefix) {
-    if (!l2list || !l2list.length) return '<div style="font-size:12px;color:var(--text-secondary);padding:8px">暂无变种数据</div>';
-    return l2list.map((l2, j) => {
-      const id = `${prefix}-l2-${j}`;
-      const l3Html = renderL3(l2.l3_variants, id);
-      const l2InnerHtml = l3Html || renderConfigs(l2.configs, id);
-      return `<div class="comp-group" id="${id}" style="margin:8px 0;border-color:rgba(244,56,184,0.25)">
-        <div class="comp-group-header" onclick="document.getElementById('${id}').classList.toggle('expanded')" style="background:rgba(9,10,42,0.45);padding:10px 16px">
-          <span style="font-size:12px;color:var(--text-secondary);flex-shrink:0">L2</span>
-          <div class="comp-rep-cards" style="flex:1">${chips(l2.core_cards)}</div>
-          <div class="comp-stats">
-            <div>
-              <div class="comp-rate" style="color:${rateColorComp(l2.rate)};font-size:14px">${(l2.rate*100).toFixed(1)}%</div>
-              <div class="comp-count">${l2.count}次</div>
-            </div>
-            <span class="comp-expand-icon">▼</span>
-          </div>
-        </div>
-        <div class="comp-variants" style="padding:12px 16px">${l2InnerHtml || '<div style="font-size:12px;color:var(--text-secondary)">暂无数据</div>'}</div>
-      </div>`;
-    }).join('');
-  }
-
-  if (!layers.length) {
-    document.getElementById('comp-result').innerHTML = '<div class="result-card"><div class="empty">数据不足，无法生成阵容分析（至少需要10局含该卡的记录）</div></div>';
-    return;
-  }
-
-  const html = layers.map((l1, i) => {
-    const id = `card-comp-l1-${i}`;
-    const l2Html = renderL2(l1.l2_variants, id);
-    const heroName = l1.hero ? `<span class="comp-hero-badge">${HERO_ZH_COMP[l1.hero] || l1.hero}</span>` : '';
-    return `<div class="comp-group" id="${id}">
-      <div class="comp-group-header" onclick="document.getElementById('${id}').classList.toggle('expanded')">
-        <span class="comp-rank">${medals[i] || i+1}</span>
-        <div style="flex:1;min-width:0">
-          <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
-            <span style="font-size:11px;color:var(--text-secondary)">L1 体系</span>
-            ${heroName}
-          </div>
-          <div class="comp-rep-cards">${chips(l1.core_cards)}</div>
-        </div>
-        <div class="comp-stats">
-          <div>
-            <div class="comp-rate" style="color:${rateColorComp(l1.rate)}">${(l1.rate*100).toFixed(1)}%</div>
-            <div class="comp-count">评分${(l1.score*100).toFixed(0)} · ${l1.count}次</div>
-          </div>
-          <span class="comp-expand-icon">▼</span>
-        </div>
-      </div>
-      <div class="comp-variants">${l2Html}</div>
-    </div>`;
-  }).join('');
-
-  document.getElementById('comp-result').innerHTML = `
-    <div class="comp-summary">
-      <div class="comp-summary-card"><div class="comp-summary-label">当前范围</div><div class="comp-summary-value">${data.phase || '当前 phase'}</div></div>
-      <div class="comp-summary-card"><div class="comp-summary-label">命中对局</div><div class="comp-summary-value">${data.total_runs || 0}</div></div>
-      <div class="comp-summary-card"><div class="comp-summary-label">分析卡牌</div><div class="comp-summary-value">${data.card || '—'}</div></div>
-    </div>
-    <div class="comp-toolbar">
-      <div class="comp-note">以下为包含「${data.card}」的相似核心阵容思路，完整配置可展开参考。</div>
-      <div class="comp-sort-tabs">
-        <button class="comp-sort-btn active" data-comp-sort="score">综合推荐</button>
-        <button class="comp-sort-btn" data-comp-sort="appearance">出场率</button>
-        <button class="comp-sort-btn" data-comp-sort="rate">胜率</button>
-      </div>
-    </div>
-    <div id="comp-recommendations"></div>
-    <div class="comp-system-toggle"><button class="comp-link-btn" onclick="document.getElementById('comp-system-layers').style.display=document.getElementById('comp-system-layers').style.display==='none'?'block':'none'">展开/收起体系层级分析</button></div>
-    <div id="comp-system-layers" style="display:none;margin-top:12px">${html}</div>`;
-  renderCompRecommendations(data);
-}
-
-function renderCompRecommendations(data) {
-  const el = document.getElementById('comp-recommendations');
-  if (!el) return;
-  const items = (data.recommendations || []).slice();
-  let mode = 'score';
-  const render = () => {
-    const sorted = items.sort((a,b) => mode === 'rate' ? (b.rate-a.rate || b.count-a.count) : mode === 'appearance' ? (b.global_appearance_rate-a.global_appearance_rate || b.count-a.count) : (b.score-a.score || b.count-a.count));
-    el.innerHTML = sorted.length ? sorted.map((cfg, i) => {
-      const anchor = (cfg.cards || []).map(c => c.cardId).includes(data.card_id);
-      const cards = (cfg.cards || []).map(c => {
-        const cls = c.cardId === data.card_id ? 'comp-card-chip has-img comp-anchor' : 'comp-card-chip has-img';
-        const img = c.img ? '<img class="comp-card-img size-' + (c.size || 'Small') + '" src="' + c.img + '" alt="' + c.name_zh + '" loading="lazy" onerror="this.style.display=\'none\'">' : '';
-        return '<span class="' + cls + '">' + img + c.name_zh + '</span>';
-      }).join('');
-      const coreCards = (cfg.core_cards || []).map(c => c.name_zh).join('、');
-      const variantCards = (cfg.variant_cards || []).map(c => c.name_zh).join('、');
-      const runUrl = cfg.run_url || (cfg.run_id ? `https://bazaardb.gg/run/tracker/${cfg.run_id}` : '');
-      return `<div class="comp-idea-card"><div class="comp-idea-head"><div><div class="comp-idea-title">${i+1}. ${cfg.hero_zh || cfg.hero || ''} · 参考阵容</div><div class="comp-rep-cards">${cards}</div></div><div class="comp-metrics"><div class="comp-metric"><strong>${(cfg.global_appearance_rate*100).toFixed(1)}%</strong><span>出场率</span></div><div class="comp-metric"><strong style="color:${rateColorComp(cfg.rate)}">${(cfg.rate*100).toFixed(1)}%</strong><span>胜率</span></div></div></div><div class="comp-details"><div class="comp-note"><b>体系核心：</b>${coreCards || '暂无'}</div>${variantCards ? `<div class="comp-note"><b>该代表构筑的变体：</b>${variantCards}</div>` : ''}<div class="comp-note">${cfg.count} 次样本${cfg.sample_warning ? ' · 样本较少，仅供参考' : ''}</div><div class="comp-detail-actions">${cfg.screenshot ? `<button class="comp-link-btn" onclick="toggleScreenshotComp('recommend-${i}')">📷 查看截图</button><span id="recommend-${i}" style="display:none"><img src="${cfg.screenshot.startsWith('http')?cfg.screenshot:'https://usercontent.bzdb.network'+cfg.screenshot}" style="max-width:100%;margin-top:8px;border-radius:5px" loading="lazy"></span>` : ''}${runUrl ? `<a class="comp-link-btn" href="${runUrl}" target="_blank">查看原始 run →</a>` : ''}</div></div></div>`;
-    }).join('') : '<div class="result-card"><div class="empty">当前 phase 暂无足够样本形成可参考阵容</div></div>';
-  };
-  document.querySelectorAll('[data-comp-sort]').forEach(btn => btn.onclick = () => { mode=btn.dataset.compSort; document.querySelectorAll('[data-comp-sort]').forEach(b=>b.classList.toggle('active',b===btn)); render(); });
-  render();
+function queryComp(origin = 'user') {
+  return window.BazaarComp.query(origin);
 }
 
 </script>
 
-<footer style="padding:30px 20px;border-top:1px solid #1f2937;text-align:center;color:#6b7280;font-size:13px">
+<footer style="padding:30px 20px;border-top:1px solid var(--theme-border, #1f2937);text-align:center;color:var(--theme-dim, #6b7280);font-size:13px">
   <div style="margin-bottom:12px">
-    <a href="/static/privacy.html" style="color:#60a5fa;text-decoration:none;margin:0 15px" target="_blank">隐私政策</a>
+    <a href="/static/privacy.html" style="color:var(--theme-link, #60a5fa);text-decoration:none;margin:0 15px" target="_blank">隐私政策</a>
     <span style="margin:0 5px">|</span>
-    <a href="https://github.com/CodeHuba/QiuBot" style="color:#60a5fa;text-decoration:none;margin:0 15px" target="_blank">GitHub</a>
+    <a href="https://github.com/CodeHuba/QiuBot" style="color:var(--theme-link, #60a5fa);text-decoration:none;margin:0 15px" target="_blank">GitHub</a>
     <span style="margin:0 5px">|</span>
-    <span style="color:#9ca3af;margin:0 15px">反馈QQ群：<a href="https://qm.qq.com/q/1102189995" target="_blank" style="color:var(--neon-coral);text-shadow:0 0 8px rgba(255,83,106,0.5)">1102189995</a></span>
+    <span style="color:var(--theme-muted, #9ca3af);margin:0 15px">反馈QQ群：<a href="https://qm.qq.com/q/1102189995" target="_blank" style="color:var(--neon-coral);text-shadow:0 0 8px rgba(var(--theme-coral-rgb, 255, 83, 106), 0.5)">1102189995</a></span>
   </div>
-  <div style="color:#4b5563">
-    <a href="https://beian.miit.gov.cn/" target="_blank" style="color:#4b5563;text-decoration:none">浙ICP备2026066685号</a>
+  <div style="color:var(--theme-dim, #4b5563)">
+    <a href="https://beian.miit.gov.cn/" target="_blank" style="color:var(--theme-dim, #4b5563);text-decoration:none">浙ICP备2026066685号</a>
   </div>
   <div style="margin-top:8px;font-size:12px">© 2026 BazaarQiuBot - The Bazaar 中文社区数据服务</div>
 </footer>

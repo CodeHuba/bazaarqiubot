@@ -5,12 +5,16 @@ BazaarDB Runs 查询模块
 
 import json
 import math
+import os
 import sqlite3
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional
 from pathlib import Path
 from . import translations as _trans
 from .data_client import CURRENT_SEASON_ID, CURRENT_PHASE, RUNS_SEASON_ID
+from .run_card_filters import ENCHANTMENTS, normalize_run_card_filters
+from .run_instances import json_value, terminal_instances
+from .query_budget import BoundedTTLCache, attach_connection, budgeted_rows, checkpoint, singleflight
 
 
 ALIAS_FILE = "/opt/qiubot/data/bz_aliases.json"
@@ -61,7 +65,18 @@ class RunsQuery:
 
     def load(self):
         """加载数据库、映射表和翻译"""
-        self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
+        if self.conn is None:
+            self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
+            self.conn.execute('PRAGMA cache_size=-2048')
+        attach_connection(self.conn)
+        from .runs_metadata import apply_cached
+        apply_cached(self, self._load_metadata, Path(__file__).parent/'cache', ALIAS_FILE)
+
+    def metadata_version(self):
+        from .runs_metadata import source_version
+        return source_version(self, Path(__file__).parent/'cache', ALIAS_FILE)
+
+    def _load_metadata(self):
         try:
             with open(self.mapping_path, 'r', encoding='utf-8') as f:
                 self.card_mapping = json.load(f) or {}
@@ -115,7 +130,11 @@ class RunsQuery:
             self.zh_to_en = {v: k for k, v in data.items()}
 
         # 加载卡牌尺寸映射（从 GameData.db）
-        gamedata_path = Path(__file__).parent / 'cache' / 'GameData.db'
+        candidates = [Path(__file__).parent / 'cache' / 'GameData.db',
+                      Path(__file__).resolve().parents[2] / 'cache' / 'GameData.db']
+        configured = os.getenv('GAMEDATA_DB', '').strip()
+        gamedata_path = Path(configured).expanduser() if configured else next(
+            (path for path in candidates if path.is_file()), candidates[0])
         if gamedata_path.exists():
             try:
                 import sqlite3 as _sl2, json as _j2
@@ -127,6 +146,8 @@ class RunsQuery:
                         _sz = _j.get('Size', '')
                         if _cid and _sz:
                             self.size_map[_cid] = _sz
+                        if _cid and isinstance(_j.get('Heroes'), list):
+                            self.card_heroes[_cid] = _j['Heroes']
                     except Exception:
                         pass
                 _gc.close()
@@ -141,7 +162,7 @@ class RunsQuery:
         # 加载卡牌职业映射
         heroes_path = Path('/opt/qiubot/data/card_heroes_map.json')
         if heroes_path.exists():
-            self.card_heroes = json.loads(heroes_path.read_text(encoding="utf-8"))
+            self.card_heroes = {**json.loads(heroes_path.read_text(encoding="utf-8")), **self.card_heroes}
 
         # 加载自定义别名
         alias_path = Path(ALIAS_FILE)
@@ -245,14 +266,17 @@ class RunsQuery:
               page: int = 1,
               page_size: int = 5,
               rank_filter: str = "all",
-              day: Optional[int] = None) -> Dict:
+              day: Optional[int] = None,
+              card_filters: Optional[List[Dict]] = None) -> Dict:
         """查询 runs；先完成筛选和分页，只为当前页构建展示数据。"""
+        card_filters = normalize_run_card_filters(card_filters)
         if not self.conn:
             self.load()
 
+        columns = {row[1] for row in self.conn.execute('PRAGMA table_info(runs)')}
         select_columns = (
             "id, hero, username, created_at, items_json, skills_json, combats_json, "
-            "stat_wins, stat_losses, screenshot_url"
+            "stat_wins, stat_losses, screenshot_url, season, phase, NULL AS raw_json"
         )
         where = ["season=?", "phase=?"]
         params = [RUNS_SEASON_ID, CURRENT_PHASE]
@@ -269,6 +293,39 @@ class RunsQuery:
             params.append(min_wins)
         if rank_filter == 'legendary':
             where.append("player_rank='Legendary'")
+
+        # Each EXISTS binds card ID and enchantment to the same item instance.
+        # Unconstrained cards retain the legacy ability to match skills as well.
+        resolved_card_filters = []
+        for card_filter in card_filters:
+            ids = self.find_card_ids(card_filter['name'])
+            if not ids:
+                return {'runs': [], 'total': 0, 'page': 1, 'pages': 0}
+            placeholders = ','.join('?' for _ in ids)
+            enchantment = card_filter['enchantment']
+            resolved_card_filters.append((set(ids), enchantment))
+
+            def card_exists(column, with_enchantment=False):
+                # Guard both malformed JSON and non-object entries in old records.
+                item = "CASE WHEN entry.type='object' THEN entry.value ELSE '{}' END"
+                identity = f"json_extract({item}, '$.cardId')"
+                if column == 'skills_json':
+                    identity = f"COALESCE({identity}, json_extract({item}, '$.skillId'))"
+                condition = f"{identity} IN ({placeholders})"
+                if with_enchantment:
+                    condition += f" AND json_extract({item}, '$.enchantment')=?"
+                return (
+                    f"EXISTS (SELECT 1 FROM json_each(CASE WHEN json_valid({column}) "
+                    f"THEN {column} ELSE '[]' END) AS entry WHERE {condition})"
+                )
+
+            if enchantment is not None:
+                where.append(card_exists('items_json', with_enchantment=True))
+                params.extend([*ids, enchantment])
+            else:
+                where.append('(' + card_exists('items_json') + ' OR ' +
+                             card_exists('skills_json') + ')')
+                params.extend([*ids, *ids])
 
         base_sql = " FROM runs WHERE " + " AND ".join(where)
         card_ids_sets = []
@@ -295,9 +352,9 @@ class RunsQuery:
             candidate_rows = self.conn.execute(
                 f"SELECT {select_columns}" + base_sql + " ORDER BY created_at DESC",
                 params,
-            ).fetchall()
-            matched_rows = []
-            for row in candidate_rows:
+            )
+            matched_ids = []
+            for row in budgeted_rows(candidate_rows):
                 if card_ids_sets:
                     try:
                         items = json.loads(row[4] or '[]')
@@ -310,8 +367,8 @@ class RunsQuery:
                         if isinstance(it, dict) and it.get('cardId')
                     }
                     run_card_ids.update(
-                        sk.get('cardId') for sk in skills
-                        if isinstance(sk, dict) and sk.get('cardId')
+                        sk.get('cardId') or sk.get('skillId') for sk in skills
+                        if isinstance(sk, dict) and (sk.get('cardId') or sk.get('skillId'))
                     )
                     if not all(run_card_ids & card_set for card_set in card_ids_sets):
                         continue
@@ -326,71 +383,100 @@ class RunsQuery:
                     ]
                     if day not in reached_days:
                         continue
-                matched_rows.append(row)
-            total = len(matched_rows)
+                matched_ids.append(row[0])
+            total = len(matched_ids)
             pages = (total + page_size - 1) // page_size if total else 0
             page = max(1, min(page, pages)) if pages else 1
             offset = (page - 1) * page_size
-            page_rows = matched_rows[offset:offset + page_size]
-
-        runs = []
-        for row in page_rows:
-            run_id, hero_name, username, created_at, items_json, _, combats_json, wins, losses, screenshot = row
-            try:
-                items = json.loads(items_json or '[]')
-            except (TypeError, ValueError, json.JSONDecodeError):
-                # 展示数据损坏时保留该 run，其卡牌列表降级为空。
-                items = []
-            item_names = []
-            card_imgs = []
-            card_details = []
-            for it in items:
-                if not isinstance(it, dict):
-                    continue
-                cid = it.get('cardId')
-                if not cid:
-                    continue
-                info = self._safe_mapping_info(cid)
-                image_info = self._card_image_info(cid)
-                en = info.get('name') or image_info.get('internalName') or cid
-                zh = image_info.get('name') or self.get_zh_name(en)
-                display_name = zh if zh != en else en
-                item_names.append(display_name)
-                card_imgs.append(self.tex_map.get(en, ''))
-                # 阵容列表不能在请求线程串行探测 CDN；浏览器加载失败时自行降级。
-                image_url = image_info.get('artLarge') or image_info.get('art') or ''
-                card_details.append({
-                    'cardId': cid,
-                    'name': display_name,
-                    'name_en': en,
-                    'img': image_url,
-                    'size': self.size_map.get(cid) or image_info.get('size') or 'Small',
-                })
-
-            screenshot_full = ('https://usercontent.bzdb.network' + screenshot) if screenshot else ''
-            if day is not None:
-                reached_days = [
-                    combat.get('d') for combat in json.loads(combats_json or '[]')
-                    if isinstance(combat, dict) and isinstance(combat.get('d'), int)
-                ]
+            selected_ids = matched_ids[offset:offset + page_size]
+            if selected_ids:
+                placeholders = ','.join('?' for _ in selected_ids)
+                selected = {row[0]: row for row in self.conn.execute(
+                    f'SELECT {select_columns} FROM runs WHERE id IN ({placeholders})', selected_ids)}
+                page_rows = [selected[rid] for rid in selected_ids if rid in selected]
             else:
-                reached_days = None
-            runs.append({
-                'id': run_id,
-                'hero': hero_name,
-                'username': username,
-                'created_at': created_at,
-                'wins': wins or 0,
-                'losses': losses or 0,
-                'reached_days': reached_days,
-                'items': item_names,
-                'cards': card_details,
-                'card_imgs': card_imgs,
-                'screenshot': screenshot_full,
-                'url': f"https://bazaardb.gg/run/tracker/{run_id}"
-            })
+                page_rows = []
 
-        return {'runs': runs, 'total': total, 'page': page, 'pages': pages}
+        # Large raw records are read only after pagination, in one indexed query.
+        if page_rows and 'raw_json' in columns:
+            placeholders = ','.join('?' for _ in page_rows)
+            raw = dict(self.conn.execute(
+                f'SELECT id, raw_json FROM runs WHERE id IN ({placeholders})',
+                [row[0] for row in page_rows]))
+            page_rows = [(*row[:-1], raw.get(row[0])) for row in page_rows]
+        runs = [self._display_run(row, resolved_card_filters, day) for row in page_rows]
+        return {'runs': runs, 'total': total, 'page': page, 'pages': pages,
+                'scope': {'season': RUNS_SEASON_ID, 'phase': CURRENT_PHASE},
+                'min_wins': min_wins}
+
+    def get_run(self, run_id: str) -> Optional[Dict]:
+        """Read one public terminal record in its original season, independent of filters."""
+        if not self.conn:
+            self.load()
+        columns = {row[1] for row in self.conn.execute('PRAGMA table_info(runs)')}
+        row = self.conn.execute(
+            'SELECT id, hero, username, created_at, items_json, skills_json, combats_json, '
+            'stat_wins, stat_losses, screenshot_url, season, phase, ' +
+            ('raw_json' if 'raw_json' in columns else 'NULL AS raw_json') +
+            ' FROM runs WHERE id=?', (run_id,)
+        ).fetchone()
+        return self._display_run(row) if row else None
+
+    def _display_run(self, row, resolved_card_filters=(), day=None):
+        (run_id, hero, username, created_at, items_json, skills_json, combats_json,
+         wins, losses, screenshot, season, phase, raw_json) = row
+        raw = json_value(raw_json, {})
+
+        def display(instance, skill=False):
+            cid = instance['cardId']
+            info = self._safe_mapping_info(cid)
+            image = self._card_image_info(cid)
+            en = info.get('name') or image.get('internalName') or cid
+            tier = instance.get('tier')
+            if isinstance(tier, str):
+                tier = {t.lower(): t for t in ('Bronze', 'Silver', 'Gold', 'Diamond', 'Legendary')}.get(tier.lower())
+            else:
+                tier = None
+            if instance.get('isLegendary') is True:
+                tier = 'Legendary'
+            enchantment = instance.get('enchantment')
+            enchantment = enchantment if isinstance(enchantment, str) else None
+            return {
+                'cardId': cid, 'name': image.get('name') or self.get_zh_name(en), 'name_en': en,
+                'img': image.get('artLarge') or image.get('art') or '',
+                'size': 'Skill' if skill else self.size_map.get(cid) or image.get('size') or 'Small',
+                'type': 'Skill' if skill else 'Item', 'tier': tier,
+                'isLegendary': instance.get('isLegendary') is True,
+                'slotPosition': instance.get('slotPosition'),
+                'enchantment': enchantment, 'enchantment_zh': ENCHANTMENTS.get(enchantment, ''),
+                'matched': any(cid in ids and (wanted is None or enchantment == wanted)
+                               for ids, wanted in resolved_card_filters),
+            }
+
+        items = terminal_instances(items_json, raw, 'items')
+        # Sort only when every instance has a trustworthy position.
+        if items and all(type(it.get('slotPosition')) is int and it['slotPosition'] >= 0 for it in items):
+            items.sort(key=lambda it: it['slotPosition'])
+        cards = [display(it) for it in items]
+        skills = [display(sk, True) for sk in terminal_instances(skills_json, raw, 'skills')]
+        combats = json_value(combats_json, [])
+        reached_days = [c['d'] for c in combats if isinstance(c, dict) and
+                        type(c.get('d')) is int and c['d'] > 0] if isinstance(combats, list) else []
+        screenshot_full = ''
+        if isinstance(screenshot, str):
+            if screenshot.startswith('/') and not screenshot.startswith('//'):
+                screenshot_full = 'https://usercontent.bzdb.network' + screenshot
+            elif screenshot.startswith('https://usercontent.bzdb.network/'):
+                screenshot_full = screenshot
+        return {
+            'id': run_id, 'hero': hero, 'username': username, 'created_at': created_at,
+            'wins': wins or 0, 'losses': losses or 0, 'season': season, 'phase': phase,
+            'day': max(reached_days, default=None),
+            'reached_days': reached_days if day is not None else None,
+            'items': [c['name'] for c in cards], 'cards': cards, 'skills': skills,
+            'card_imgs': [self.tex_map.get(c['name_en'], '') for c in cards],
+            'screenshot': screenshot_full, 'url': f'https://bazaardb.gg/run/tracker/{run_id}',
+        }
 
     def format_result(self, result: Dict, query_desc: str = "", raw_cmd: str = "") -> str:
         """格式化查询结果"""
@@ -528,14 +614,14 @@ class RunsQuery:
             params.append(cutoff)
         if rank_filter == 'legendary':
             sql += " AND player_rank='Legendary'"
-        rows = self.conn.execute(sql, params).fetchall()
+        rows = self.conn.execute(sql, params)
 
         # 每组 cardId set 取代表 id 列表，用 str.find 在 card_ids_text 快速判断
         rep_ids = [next(iter(s)) for s in card_ids_sets]
 
         total = 0
         ten_win = 0
-        for card_ids_text, wins in rows:
+        for card_ids_text, wins in budgeted_rows(rows):
             if not card_ids_text:
                 continue
             # 先用代表 id 快速过滤（UUID 唯一，误判率极低）
@@ -603,14 +689,14 @@ class RunsQuery:
             params.append(cutoff)
         if rank_filter == 'legendary':
             sql += " AND player_rank='Legendary'"
-        rows = self.conn.execute(sql, params).fetchall()
+        rows = self.conn.execute(sql, params)
 
         # 统计每张搭档卡的出现次数和10胜次数
         total_map = defaultdict(int)
         win_map = defaultdict(int)
         target_total = 0
 
-        for items_json, wins in rows:
+        for items_json, wins in budgeted_rows(rows):
             try:
                 items = _json.loads(items_json or '[]')
                 run_ids = {
@@ -662,6 +748,7 @@ class RunsQuery:
 
 
 
+    @singleflight
     def topcard(self,
                 hero: str,
                 top_n: int = 5,
@@ -682,8 +769,9 @@ class RunsQuery:
         # 读取缓存
         global _topcard_cache, _topcard_cache_ttl
         _tc_key = (hero, top_n, days, all_phases, sort_by, rank_filter)
-        if _tc_key in _topcard_cache:
-            _cached, _exp = _topcard_cache[_tc_key]
+        cached_topcard = _topcard_cache.get(_tc_key)
+        if cached_topcard is not None:
+            _cached, _exp = cached_topcard
             if _time.time() < _exp:
                 return _cached
 
@@ -702,7 +790,8 @@ class RunsQuery:
             params.append(cutoff)
         if rank_filter == 'legendary':
             sql += " AND player_rank='Legendary'"
-        rows = self.conn.execute(sql, params).fetchall()
+        rows = self.conn.execute(sql, params)
+        row_count = 0
 
         # 统计每张卡的出现次数和胜场数（只统计该职业专属卡）
         card_total: dict = {}   # cardId -> total count
@@ -711,7 +800,8 @@ class RunsQuery:
         # GameData.db 中双龙的职业名为 Hero8
         _hero_gamedata = {'The Dragons': 'Hero8'}.get(hero, hero)
 
-        for items_json, wins in rows:
+        for items_json, wins in budgeted_rows(rows):
+            row_count += 1
             try:
                 items = _json.loads(items_json)
                 run_ids = {item['cardId'] for item in items if 'cardId' in item}
@@ -766,12 +856,13 @@ class RunsQuery:
             'hero': hero,
             'hero_zh': hero_zh,
             'top': top,
-            'total_runs': len(rows),
+            'total_runs': row_count,
             'days': days,
         }
         _topcard_cache[_tc_key] = (_tc_result, _time.time() + _topcard_cache_ttl)
         return _tc_result
 
+    @singleflight
     def card_tier_table(self, hero: str, days: int = None, rank_filter: str = "all") -> dict:
         """按当前赛段、职业专属基础卡计算出场为主的相对 T 表。"""
         cache_key = (RUNS_SEASON_ID, CURRENT_PHASE, hero, days, rank_filter)
@@ -787,7 +878,8 @@ class RunsQuery:
             params.append((datetime.utcnow() - timedelta(days=days)).isoformat())
         if rank_filter == "legendary":
             sql += " AND player_rank='Legendary'"
-        rows = self.conn.execute(sql, params).fetchall()
+        rows = self.conn.execute(sql, params)
+        row_count = 0
         gamedata_hero = {"The Dragons": "Hero8"}.get(hero, hero)
         exclusive_ids = {
             cid for cid, heroes in self.card_heroes.items()
@@ -797,7 +889,8 @@ class RunsQuery:
         }
         appearances = {cid: 0 for cid in exclusive_ids}
         ten_wins = {cid: 0 for cid in exclusive_ids}
-        for items_json, wins in rows:
+        for items_json, wins in budgeted_rows(rows):
+            row_count += 1
             try:
                 run_ids = {
                     item['cardId'] for item in json.loads(items_json)
@@ -818,7 +911,7 @@ class RunsQuery:
             if count <= 0:
                 continue
             cards.append({**self.card_display_info_cached(cid), 'appearance_count': count,
-                          'appearance_rate': count / len(rows) if rows else 0.0,
+                          'appearance_rate': count / row_count if row_count else 0.0,
                           'ten_win': ten_wins[cid], 'win_rate': ten_wins[cid] / count})
         rated = [card for card in cards if card['appearance_count'] >= threshold]
         # 未出现过的物品没有可供用户判断的数据，不在“数据不足”区展示。
@@ -835,7 +928,7 @@ class RunsQuery:
                 group += 1
             groups[group].append(card)
         result = {'hero': hero, 'season': RUNS_SEASON_ID, 'phase': CURRENT_PHASE, 'days': days,
-                  'rank_filter': rank_filter, 'total_runs': len(rows), 'sample_threshold': threshold,
+                  'rank_filter': rank_filter, 'total_runs': row_count, 'sample_threshold': threshold,
                   'formula': {'appearance_weight': .7, 'winrate_weight': .3}, 'tie_policy': 'higher_tier',
                   'tiers': [{'name': name, 'target_ratio': ratio, 'cards': group_cards}
                             for (name, ratio), group_cards in zip(specs, groups)],
@@ -854,6 +947,7 @@ class RunsQuery:
         for card in cards:
             card['score'] = round(card['appearance_percentile'] * .7 + card['winrate_percentile'] * .3, 6)
 
+    @singleflight
     def comp(self,
              hero: str,
              n: int = 3,
@@ -879,8 +973,9 @@ class RunsQuery:
 
         global _comp_cache, _comp_cache_ttl
         cache_key = (hero, 'v4-current-phase', CURRENT_PHASE, rank_filter, required_card)
-        if cache_key in _comp_cache:
-            cached, exp = _comp_cache[cache_key]
+        cached_comp = _comp_cache.get(cache_key)
+        if cached_comp is not None:
+            cached, exp = cached_comp
             if time.time() < exp:
                 return cached
 
@@ -892,13 +987,13 @@ class RunsQuery:
         params = [RUNS_SEASON_ID, hero, CURRENT_PHASE]
         if rank_filter == 'legendary':
             sql += " AND player_rank='Legendary'"
-        rows = self.conn.execute(sql, params).fetchall()
+        rows = self.conn.execute(sql, params)
 
         # 第一步：完全相同卡组去重，累加出场/胜场
         deck_stats = defaultdict(lambda: {
             'count': 0, 'wins': 0, 'items': None, 'screenshot': '', 'run_id': '', 'created_at': ''
         })
-        for run_id, items_json, stat_wins, screenshot_url, created_at in rows:
+        for run_id, items_json, stat_wins, screenshot_url, created_at in budgeted_rows(rows):
             try:
                 items = _json.loads(items_json) if items_json else []
                 if not items:
@@ -947,10 +1042,15 @@ class RunsQuery:
             import pandas as pd
             transactions = [list(ds) for ds in all_decks]
             te = TransactionEncoder()
-            te_arr = te.fit(transactions).transform(transactions)
-            df = pd.DataFrame(te_arr, columns=te.columns_)
+            te_arr = te.fit(transactions).transform(transactions, sparse=True)
+            df = pd.DataFrame.sparse.from_spmatrix(te_arr, columns=te.columns_)
             for fallback_sup in FALLBACK_SUPPORTS:
-                freq_df = fpgrowth(df, min_support=fallback_sup / total_runs, use_colnames=True)
+                # 小样本阶段跳过无法达到的阈值，避免支持度比例 > 1 中断降级。
+                if fallback_sup > total_runs:
+                    continue
+                checkpoint()
+                freq_df = fpgrowth(df, min_support=fallback_sup / total_runs, use_colnames=True, max_len=2)
+                checkpoint()
                 freq_df['length'] = freq_df['itemsets'].apply(len)
                 cands = [frozenset(r['itemsets']) for _, r in freq_df[freq_df['length'] == 2].iterrows()]
                 if cands:
@@ -995,6 +1095,7 @@ class RunsQuery:
             return sum(deck_stats[ds]['count'] for ds in all_decks if skel <= ds)
 
         def compute_stats(skeleton, pool):
+            checkpoint()
             matched = [ds for ds in pool if skeleton <= ds]
             if not matched:
                 return None
@@ -1061,11 +1162,13 @@ class RunsQuery:
             if len(sub_trans) < 10:
                 return []
             te2 = TransactionEncoder()
-            te2_arr = te2.fit(sub_trans).transform(sub_trans)
-            df2 = pd.DataFrame(te2_arr, columns=te2.columns_)
+            te2_arr = te2.fit(sub_trans).transform(sub_trans, sparse=True)
+            df2 = pd.DataFrame.sparse.from_spmatrix(te2_arr, columns=te2.columns_)
             # 用最低降级阈值挖掘，后续按实际阈值过滤
             min_sup = min(FALLBACK_SUPPORTS) / len(sub_trans)
-            freq2 = fpgrowth(df2, min_support=min_sup, use_colnames=True)
+            checkpoint()
+            freq2 = fpgrowth(df2, min_support=min_sup, use_colnames=True, max_len=target_size)
+            checkpoint()
             freq2['length'] = freq2['itemsets'].apply(len)
             cands = [frozenset(r['itemsets']) for _, r in freq2[freq2['length'] == target_size].iterrows()
                      if parent_skel <= frozenset(r['itemsets'])]
@@ -1264,6 +1367,7 @@ class RunsQuery:
 
 # comp 方法内存缓存 {(hero, n): (result, expire_time)}
 
+    @singleflight
     def hero_overview(self,
                      days: int = None,
                      sort_by: str = 'total',
@@ -1275,8 +1379,9 @@ class RunsQuery:
 
         global _hero_overview_cache, _hero_overview_cache_ttl
         _ho_key = (days, sort_by, rank_filter)
-        if _ho_key in _hero_overview_cache:
-            _cached, _exp = _hero_overview_cache[_ho_key]
+        cached_overview = _hero_overview_cache.get(_ho_key)
+        if cached_overview is not None:
+            _cached, _exp = cached_overview
             if _time.time() < _exp:
                 return _cached
 
@@ -1291,11 +1396,13 @@ class RunsQuery:
             cutoff = (_dt.utcnow() - _td(days=days)).isoformat()
             sql += " AND created_at >= ?"
             params.append(cutoff)
-        rows = self.conn.execute(sql, params).fetchall()
+        rows = self.conn.execute(sql, params)
+        row_count = 0
 
         from collections import defaultdict
         hero_stats = defaultdict(lambda: {'total': 0, 'wins': 0})
-        for hero, stat_wins in rows:
+        for hero, stat_wins in budgeted_rows(rows):
+            row_count += 1
             if not hero:
                 continue
             hero_stats[hero]['total'] += 1
@@ -1325,7 +1432,7 @@ class RunsQuery:
 
         _ho_result = {
             'heroes': results,
-            'total_runs': len(rows),
+            'total_runs': row_count,
             'days': days,
             'sort_by': sort_by,
             'rank_filter': rank_filter
@@ -1334,18 +1441,18 @@ class RunsQuery:
         _hero_overview_cache[_ho_key] = (_ho_result, _time.time() + _hero_overview_cache_ttl)
         return _ho_result
 
-_comp_cache: dict = {}
+_comp_cache: dict = BoundedTTLCache()
 _comp_cache_ttl = 3600  # 1小时
 
 # topcard 方法内存缓存 {(hero, top_n, days, all_phases): (result, expire_time)}
-_topcard_cache: dict = {}
+_topcard_cache: dict = BoundedTTLCache()
 _topcard_cache_ttl = 3600  # 1小时
 
 # T 表缓存：ingest 成功时清空当前 phase 的全部组合，首个访问按条件重算。
-_card_tier_cache: dict = {}
+_card_tier_cache: dict = BoundedTTLCache()
 _card_tier_cache_ttl = 3600  # 1小时
 
-_hero_overview_cache: dict = {}
+_hero_overview_cache: dict = BoundedTTLCache()
 _hero_overview_cache_ttl = 3600  # 1小时
 
 _client = None

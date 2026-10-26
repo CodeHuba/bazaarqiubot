@@ -11,6 +11,7 @@
 """
 import asyncio
 import base64
+import difflib
 import os
 import re
 import time
@@ -48,6 +49,79 @@ COOLDOWN_DEFAULT = 3   # 其他指令同 user
 
 # 单条回复最大字符数（兜底）
 MAX_REPLY_LEN = 3500
+DB_CANDIDATE_LIMIT = 10
+
+
+def _db_type(card):
+    value = card.get('Type') or card.get('$type') or card.get('type') or ''
+    value = str(value).lower()
+    if value in ('eventencounter', 'tcardencounterevent'):
+        return '商店' if 'Merchant' in (card.get('Tags') or []) else '遭遇事件'
+    return {'item': '物品', 'tcarditem': '物品', 'skill': '技能', 'tcardskill': '技能',
+            'monster': '野怪', 'combatencounter': '野怪', 'tcardencountercombat': '野怪',
+            'merchant': '商店', 'event': '遭遇事件', 'pedestalencounter': '遭遇事件'}.get(value, '未知类型')
+
+
+def _db_title(card):
+    from . import translations as trans
+    title = (card.get('Localization') or {}).get('Title') or card.get('Title') or {}
+    if isinstance(title, str):
+        title = {'Text': title}
+    text = title.get('Text') or card.get('title') or card.get('InternalName') or ''
+    return trans.get_zh_by_hash(title.get('Key', '')) or trans.get_zh(text) or text
+
+
+def _db_candidates(query, cards=(), monsters=(), kind=''):
+    """Rank one deduplicated, typed candidate list across all supported sources."""
+    from .gamedata_client import normalize_card_name
+    labels = {'item': '物品', 'skill': '技能', 'monster': '野怪', 'merchant': '商店', 'event': '遭遇事件'}
+    entries = []
+    for card in cards:
+        label, name = _db_type(card), _db_title(card)
+        entries.append({'name': name, 'type': label, 'id': card.get('Id') or card.get('id') or card.get('urlId'),
+                        'aliases': [name, card.get('InternalName', ''), card.get('title', ''),
+                                    ((card.get('Localization') or {}).get('Title') or {}).get('Text', '')]})
+    for monster in monsters:
+        entries.append({'name': monster['name'], 'type': '野怪', 'id': monster.get('id'),
+                        'aliases': [monster['name'], monster.get('name_en', '')]+list(monster.get('aliases') or []),
+                        'day': monster.get('day'), 'level': monster.get('level'), 'tier': monster.get('tier')})
+    normalized = normalize_card_name(query)
+    ranked, seen = [], set()
+    for entry in entries:
+        if not entry['name'] or (kind and entry['type'] != labels.get(kind)):
+            continue
+        identities = [(entry['type'], 'id', entry['id'])] if entry['id'] else []
+        if entry['type'] == '野怪':
+            # Identical visible variants share one fuzzy suggestion. Querying their
+            # full name still opens the complete, ID-selectable form list.
+            identities.append(('野怪', 'variant', normalize_card_name(entry['name']),
+                               str(entry.get('day')), entry.get('level'), entry.get('tier')))
+        if entry['type'] != '野怪' or not entry['id']:
+            identities.append((entry['type'], 'name', normalize_card_name(entry['name'])))
+        if any(identity in seen for identity in identities):
+            continue
+        seen.update(identities)
+        aliases = [normalize_card_name(a) for a in entry['aliases'] if a]
+        entry['score'] = max((difflib.SequenceMatcher(None, normalized, a).ratio()
+                              + (0.4 if normalized in a or a in normalized else 0) for a in aliases), default=0)
+        ranked.append(entry)
+    ranked.sort(key=lambda e: -e['score'])
+    return ranked[:DB_CANDIDATE_LIMIT]
+
+
+def _format_db_candidates(query, candidates):
+    from .monster_data import day_label
+    lines = [f"🔍 未精确匹配『{query}』，找到以下候选（最多 {DB_CANDIDATE_LIMIT} 个）："]
+    for index, entry in enumerate(candidates[:DB_CANDIDATE_LIMIT], 1):
+        detail = entry['type']
+        if entry['type'] == '野怪' and entry.get('level') is not None:
+            detail += f"｜{day_label(entry.get('day'))}｜等级 {entry['level']}"
+        lines.append(f"{index}. {entry['name']}（{detail}）")
+    example = candidates[0]
+    prefix = ('事件 ' if example['type']=='遭遇事件' else example['type']+' ') if example['type'] in ('物品', '技能', '野怪', '商店', '遭遇事件') else ''
+    lines.append(f"请使用完整名称和类型重试，例如：#bz db {prefix}{example['name']}")
+    return '\n'.join(lines)
+
 
 
 def _image_upload_value(img_path: str | None) -> str | None:
@@ -208,8 +282,9 @@ class BazaarPlugin(NcatBotPlugin):
 
         if sub in {"db", "数据库", "card", "卡牌"}:
             if not arg:
-                return "用法: #bz db <卡牌名>  (支持中英文，查 bazaardb.gg 数据)"
-            return await self._cmd_db(arg)
+                return "用法: #bz db <物品、技能、野怪、商店或事件名>（支持官方中文、英文）\n示例: #bz db 米透 / #bz db 事件 药房"
+            return await self._cmd_db(arg, event)
+
 
         if sub == "watch":
             if not arg:
@@ -366,8 +441,109 @@ class BazaarPlugin(NcatBotPlugin):
 
         return fmt.format_winrate(result, hero=hero, days=days, rank_filter=rank_filter)
 
-    async def _cmd_db(self, arg: str) -> str:
-        """查询卡牌数据（优先本地 GameData.db，fallback bazaardb.gg）"""
+    async def _cmd_monster_db(self, matches, repository, event=None):
+        from .monster_data import day_label, format_monster_text
+        if len(matches) != 1:
+            lines = ["找到多个野怪形态，请使用以下名称查询："]
+            for entry in matches[:DB_CANDIDATE_LIMIT]:
+                lines.append(f"• {entry['name']}（野怪｜{day_label(entry.get('day'))}，等级 {entry.get('level')}）\n#bz db 野怪 {entry['name']} --形态 {entry['id']}")
+            return '\n'.join(lines)
+        detail = await asyncio.to_thread(repository.detail, matches[0])
+        fallback = format_monster_text(detail)
+        if event is None:
+            return fallback
+        try:
+            from .monster_image import render_monster
+            # Bound expensive renders/downloads while keeping the event loop responsive.
+            if not hasattr(self, '_monster_render_slots'):
+                self._monster_render_slots = asyncio.Semaphore(2)
+            async with self._monster_render_slots:
+                path = await asyncio.to_thread(render_monster, detail)
+            upload = _image_upload_value(path)
+            if not upload:
+                return fallback
+            if getattr(event, 'message_type', None) == 'private':
+                await self.api.post_private_msg(user_id=event.user_id, image=upload)
+            else:
+                await self.api.post_group_msg(group_id=event.group_id, image=upload)
+            return None
+        except Exception as error:
+            print(f"[bz db] 野怪图片发送失败，降级文字: {error}")
+            return fallback
+
+
+    async def _cmd_card_db(self, raw, db_path, name, show_enchants=False, event=None, quality='', enchantment=''):
+        from . import gamedata_client as gdc, translations as trans, card_image_helper as cih
+        fallback = gdc.format_card_from_raw(raw, zh_name=trans.get_zh(name) or '',
+                                            db_path=str(db_path), show_enchants=show_enchants)
+        if event is None:
+            art = cih.get_art_url(card_id=raw.get('Id', ''), internal_name=name, size='artLarge')
+            return (f'[CQ:image,file={art}]\n' if art else '')+fallback
+        try:
+            from .card_preview import CardPreviewRepository
+            from .card_sheet import build_document, render_document, format_document_text
+            repository = getattr(self, '_card_sheet_repository', None)
+            if repository is None or repository.database != Path(db_path):
+                repository = self._card_sheet_repository = CardPreviewRepository(db_path)
+            try:
+                document = await asyncio.to_thread(build_document, raw, db_path, quality, enchantment,
+                                                  show_enchants, repository)
+            except ValueError as error:
+                return str(error)
+            fallback = format_document_text(document)
+            if not hasattr(self, '_card_render_slots'):
+                self._card_render_slots = asyncio.Semaphore(2)
+            async with self._card_render_slots:
+                paths = await asyncio.to_thread(render_document, document)
+            for path in paths:
+                upload = _image_upload_value(path)
+                if not upload:
+                    raise OSError('图片文件暂不可用')
+                if getattr(event, 'message_type', None) == 'private':
+                    await self.api.post_private_msg(user_id=event.user_id, image=upload)
+                else:
+                    await self.api.post_group_msg(group_id=event.group_id, image=upload)
+            return None
+        except Exception as error:
+            print(f'[bz db] 卡牌图片发送失败，降级文字: {str(error)[:400]}')
+            return fallback
+
+
+    async def _cmd_encounter_db(self, matches, repository, event=None):
+        from .encounter_data import format_document_text
+        regular=[entry for entry in matches if entry.get('raw',{}).get('SpawningEligibility')=='Always']
+        if len(matches)>1 and regular:matches=regular
+        if len(matches)!=1:
+            lines=['找到多个遭遇版本，请指定版本查询（最多 10 个）：']
+            for entry in matches[:DB_CANDIDATE_LIMIT]:
+                label='商店' if entry['kind']=='merchant' else '遭遇事件'
+                prefix='商店' if entry['kind']=='merchant' else '事件'
+                lines.append(f"• {entry['name']}（{label}｜{entry['heroes']}）\n#bz db {prefix} {entry['name']} --形态 {entry['id']}")
+            return '\n'.join(lines)
+        document=await asyncio.to_thread(repository.detail,matches[0])
+        fallback=format_document_text(document)
+        if event is None:return fallback
+        try:
+            from .encounter_image import render_document
+            if not hasattr(self,'_encounter_render_slots'):
+                self._encounter_render_slots=asyncio.Semaphore(2)
+            async with self._encounter_render_slots:
+                paths=await asyncio.to_thread(render_document,document)
+            for path in paths:
+                upload=_image_upload_value(path)
+                if not upload:raise OSError('图片文件暂不可用')
+                if getattr(event,'message_type',None)=='private':
+                    await self.api.post_private_msg(user_id=event.user_id,image=upload)
+                else:
+                    await self.api.post_group_msg(group_id=event.group_id,image=upload)
+            return None
+        except Exception as error:
+            print(f'[bz db] 商店/事件图片发送失败，降级文字: {str(error)[:400]}')
+            return fallback
+
+
+    async def _cmd_db(self, arg: str, event=None) -> str | None:
+        """查询卡牌和野怪数据，野怪使用官中、实际阵容与原比例卡图。"""
         from . import gamedata_client as gdc
         from . import translations as trans
         from . import card_image_helper as cih
@@ -375,8 +551,34 @@ class BazaarPlugin(NcatBotPlugin):
         loop = asyncio.get_event_loop()
 
         # 解析参数
-        show_enchants = '--enchants' in arg or '-e' in arg
-        query_arg = re.sub(r'--enchants|-e', '', arg).strip()
+        flag_re = r'(?<!\S)(?:--enchants|-e)(?!\S)'
+        show_enchants = bool(re.search(flag_re, arg))
+        query_arg = re.sub(flag_re, '', arg).strip()
+        card_options = {'quality': '', 'enchantment': ''}
+        for option, flags in (('quality', '品质|quality'), ('enchantment', '附魔|enchant')):
+            pattern = r'(?<!\S)--(?:'+flags+r')\s+(\S+)'
+            values = re.findall(pattern, query_arg)
+            if len(values) > 1:
+                return '品质、附魔参数各只能指定一次。'
+            if values:
+                card_options[option] = values[0]
+                query_arg = re.sub(pattern, '', query_arg).strip()
+        if re.search(r'(?<!\S)--(?:品质|quality|附魔|enchant)(?!\S)', query_arg):
+            return '用法: #bz db <名字> [--品质 黄金] [--附魔 寒冰]，或使用 -e 查看全部附魔。'
+        kind_match = re.match(r'^(野怪|monster|物品|item|技能|skill|商店|商人|merchant|事件|遭遇|遭遇事件|event)\s+(.+)$', query_arg, re.I)
+        kind = ''
+        if kind_match:
+            kind = {'野怪': 'monster', 'monster': 'monster', '物品': 'item', 'item': 'item', '技能': 'skill', 'skill': 'skill',
+                    '商店':'merchant','商人':'merchant','merchant':'merchant','事件':'event','遭遇':'event','遭遇事件':'event','event':'event'}[kind_match[1].lower()]
+            query_arg = kind_match[2].strip()
+        form = re.search(r'\s+--形态\s+([\w-]+)$', query_arg)
+        form_id = form[1] if form else ''
+        if form:
+            query_arg = query_arg[:form.start()].strip()
+        if not query_arg:
+            return '用法: #bz db <卡牌名或野怪名>'
+        if show_enchants and card_options['enchantment']:
+            return '请用 -e 查看全部附魔，或用 --附魔 指定一种附魔。'
 
         # 官方中文全名只做精确转换；非完整中文名留给候选搜索。
         en_name = query_arg.strip()
@@ -390,15 +592,96 @@ class BazaarPlugin(NcatBotPlugin):
             require_exists=True,
         )
         raw = None
-        if db_path:
+        repository, monsters, monster_candidates = None, [], []
+        encounter_repository,encounters,encounter_candidates=None,[],[]
+        if db_path and kind not in ('item','skill','monster'):
             try:
-                raw = await loop.run_in_executor(None, gdc.query_raw_by_name, en_name, db_path)
+                from .encounter_data import EncounterRepository
+                encounter_repository=getattr(self,'_encounter_repository',None)
+                if encounter_repository is None or encounter_repository.database!=Path(db_path):
+                    encounter_repository=self._encounter_repository=EncounterRepository(db_path)
+                encounter_kind=kind if kind in ('merchant','event') else ''
+                encounters=await asyncio.to_thread(encounter_repository.search,query_arg,True,encounter_kind)
+                if form_id and encounters:
+                    encounters=[e for e in encounters if e['id']==form_id]
+                    if not encounters:return '未找到该商店或事件版本，请重新查询完整名称。'
+                if not encounters:
+                    encounter_candidates=await asyncio.to_thread(encounter_repository.search,query_arg,False,encounter_kind)
+            except Exception as error:
+                print(f'[bz db] 商店/事件查询失败: {error}')
+                encounter_repository=None
+        if kind in ('merchant','event'):
+            if show_enchants or any(card_options.values()):
+                return '商店和事件按实际规则展示，请直接查询名称；品质和附魔参数用于物品、技能。'
+            if encounters:return await self._cmd_encounter_db(encounters,encounter_repository,event)
+            candidates=_db_candidates(query_arg,[encounter_repository.candidate(e) for e in encounter_candidates],kind=kind) if encounter_repository else []
+            if len(candidates)==1:
+                matches=[e for e in encounter_candidates if e['name']==candidates[0]['name']]
+                return await self._cmd_encounter_db(matches,encounter_repository,event)
+            if candidates:return _format_db_candidates(query_arg,candidates)
+            return '未找到该商店或遭遇事件，请检查名称或换一个关键词。'
+        if db_path:
+            if kind not in ('item', 'skill'):
+                try:
+                    from .monster_data import MonsterRepository
+                    repository = getattr(self, '_monster_repository', None)
+                    if repository is None or repository.database != Path(db_path):
+                        repository = self._monster_repository = MonsterRepository(db_path)
+                    monsters = await asyncio.to_thread(repository.search, query_arg)
+                    if form_id:
+                        monsters = [m for m in monsters if m['id'] == form_id]
+                        if not monsters:
+                            return '未找到该野怪形态，请重新查询完整野怪名。'
+                    if not monsters:
+                        monster_candidates = await asyncio.to_thread(repository.search, query_arg, False)
+                except Exception as error:
+                    print(f"[bz db] 本地野怪查询失败: {error}")
+                    repository = None
+            if kind == 'monster':
+                if any(card_options.values()):
+                    return '野怪详情按实际携带品质和附魔展示，请直接查询野怪名。'
+                if monsters:
+                    return await self._cmd_monster_db(monsters, repository, event)
+                if monster_candidates:
+                    candidates = _db_candidates(query_arg, monsters=monster_candidates, kind=kind)
+                    if len(candidates) == 1:
+                        selected = [m for m in monster_candidates if m['name'] == candidates[0]['name']]
+                        return await self._cmd_monster_db(selected, repository, event)
+                    return _format_db_candidates(query_arg, candidates)
+                return '未找到该野怪，请检查名称或等待野怪数据更新。'
+            try:
+                raw_args = (en_name, db_path, kind) if kind else (en_name, db_path)
+                raw = await loop.run_in_executor(None, gdc.query_raw_by_name, *raw_args)
                 if raw is None and en_name != query_arg.strip():
-                    raw = await loop.run_in_executor(None, gdc.query_raw_by_name, query_arg.strip(), db_path)
+                    raw_args = (query_arg.strip(), db_path, kind) if kind else (query_arg.strip(), db_path)
+                    raw = await loop.run_in_executor(None, gdc.query_raw_by_name, *raw_args)
             except Exception as e:
                 print(f"[bz db] GameData.db 查询失败: {e}")
 
+        if encounters:
+            if (raw or {}).get('Type') in ('Item','Skill') or monsters:
+                options=[]
+                if raw and raw.get('Type') in ('Item','Skill'):options.append('#bz db '+_db_type(raw)+' '+query_arg)
+                if monsters:options.append('#bz db 野怪 '+query_arg)
+                options.extend('#bz db '+('商店' if e['kind']=='merchant' else '事件')+' '+query_arg for e in encounters)
+                return f'『{query_arg}』匹配多个类型，请指定类型：\n'+'\n'.join(dict.fromkeys(options))
+            if show_enchants or any(card_options.values()):
+                return '商店和事件按实际规则展示，请直接查询名称。'
+            return await self._cmd_encounter_db(encounters,encounter_repository,event)
+        if monsters:
+            card_type = (raw or {}).get('Type')
+            if card_type in ('Item', 'Skill'):
+                label = '物品' if card_type == 'Item' else '技能'
+                return f"『{query_arg}』同时匹配卡牌和野怪，请指定类型：\n#bz db {label} {query_arg}\n#bz db 野怪 {query_arg}"
+            if any(card_options.values()):
+                return '野怪详情按实际携带品质和附魔展示，请直接查询野怪名。'
+            return await self._cmd_monster_db(monsters, repository, event)
+        if kind == 'monster':
+            return '野怪数据暂不可用，请稍后重试。'
+
         if raw is not None:
+            if raw.get('Type') in ('Item', 'Skill') or raw.get('$type') in ('TCardItem', 'TCardSkill'):
+                return await self._cmd_card_db(raw, db_path, en_name, show_enchants, event, **card_options)
             zh = trans.get_zh(en_name) or ""
             text = gdc.format_card_from_raw(raw, zh_name=zh, db_path=str(db_path), show_enchants=show_enchants)
             card_id = raw.get("Id", "")
@@ -411,62 +694,37 @@ class BazaarPlugin(NcatBotPlugin):
         if raw is None and db_path:
             try:
                 if trans.has_chinese(query_arg):
-                    zh_names = trans.search_zh(query_arg, limit=5)
+                    zh_names = trans.search_zh(query_arg, limit=DB_CANDIDATE_LIMIT)
                     local_candidates = []
                     for candidate_name in zh_names:
                         candidate = await loop.run_in_executor(
-                            None, gdc.query_raw_by_name, candidate_name, db_path
+                            None, gdc.query_raw_by_name, candidate_name, db_path, kind
                         )
                         if candidate is not None:
                             local_candidates.append(candidate)
                 else:
                     local_candidates = await loop.run_in_executor(
-                        None, gdc.suggest_cards, query_arg, db_path, 5
+                        None, gdc.suggest_cards, query_arg, db_path, DB_CANDIDATE_LIMIT, kind
                     )
             except Exception as e:
                 print(f"[bz db] 本地候选搜索失败: {e}")
                 local_candidates = []
-            if local_candidates:
-                # 同一张卡可能因别名或索引重复出现；按稳定身份去重后，唯一候选可直接展开。
-                unique_candidates = []
-                seen_candidate_keys = set()
-                for card in local_candidates:
-                    candidate_key = (
-                        str(card.get("Id"))
-                        if card.get("Id")
-                        else f"{card.get('InternalName', '')}|{card.get('Type') or card.get('$type', '')}"
-                    )
-                    if candidate_key not in seen_candidate_keys:
-                        seen_candidate_keys.add(candidate_key)
-                        unique_candidates.append(card)
-                if len(unique_candidates) == 1:
-                    card = unique_candidates[0]
-                    title = ((card.get("Localization") or {}).get("Title") or {}).get("Text", "")
-                    card_name = title or card.get("InternalName", "")
-                    zh_name = trans.get_zh(card_name) or ""
-                    text = gdc.format_card_from_raw(
-                        card,
-                        zh_name=zh_name,
-                        db_path=str(db_path),
-                        show_enchants=show_enchants,
-                    )
-                    card_id = card.get("Id", "")
-                    art_url = cih.get_art_url(
-                        card_id=card_id,
-                        internal_name=card_name,
-                        size="artLarge",
-                    )
-                    if art_url:
-                        return f"[CQ:image,file={art_url}]\n" + text
-                    return text
-                lines = [f"🔍 未精确匹配『{query_arg}』，你是否要查询:"]
-                for card in unique_candidates:
-                    title = ((card.get("Localization") or {}).get("Title") or {}).get("Text", "")
-                    title_zh = trans.get_zh(title) or title or card.get("InternalName", "")
-                    card_type = "技能" if card.get("Type") == "Skill" or card.get("$type") == "TCardSkill" else "物品"
-                    lines.append(f"  • {title_zh}（{card_type}）")
-                lines.append("请使用完整名称重试，例如: #bz db 物品名")
-                return "\n".join(lines)
+            encounter_cards=[encounter_repository.candidate(e) for e in encounter_candidates] if encounter_repository else []
+            candidates = _db_candidates(query_arg, local_candidates+encounter_cards, monster_candidates, kind)
+            if len(candidates) == 1:
+                selected = candidates[0]
+                if selected['type'] == '野怪':
+                    matches = [m for m in monster_candidates if m['name'] == selected['name']]
+                    return await self._cmd_monster_db(matches, repository, event)
+                if selected['type'] in ('商店','遭遇事件'):
+                    matches=[e for e in encounter_candidates if e['name']==selected['name']]
+                    return await self._cmd_encounter_db(matches,encounter_repository,event)
+                if selected['type'] in ('物品', '技能'):
+                    card = next(c for c in local_candidates
+                                if _db_type(c) == selected['type'] and _db_title(c) == selected['name'])
+                    return await self._cmd_card_db(card, db_path, selected['name'], show_enchants, event, **card_options)
+            if candidates:
+                return _format_db_candidates(query_arg, candidates)
 
         # fallback: bazaardb.gg
         try:
@@ -474,22 +732,29 @@ class BazaarPlugin(NcatBotPlugin):
         except Exception as e:
             return f"[巴扎DB] 查询失败: {e}"
 
-        if card is None:
+        if card is not None:
+            # The remote helper can return its first fuzzy hit. Only an actual full-name
+            # match may bypass the typed suggestions; never silently pick that first hit.
+            names = [_db_title(card), card.get('InternalName', ''),
+                     (card.get('Title') or {}).get('Text', '')]
+            exact = any(gdc.normalize_card_name(n) == gdc.normalize_card_name(q)
+                        for n in names if n for q in (query_arg, en_name))
+            if exact and (not kind or _db_type(card) == {'item': '物品', 'skill': '技能'}.get(kind)):
+                return bdb.format_card(card)
+        remote_candidates = [card] if card else []
+        for search_kind in ([kind] if kind in ('item', 'skill') else ['item', 'skill']):
             try:
-                results_item = await loop.run_in_executor(None, bdb.search_cards, query_arg, "item")
-                results_skill = await loop.run_in_executor(None, bdb.search_cards, query_arg, "skill")
-            except Exception:
-                results_item, results_skill = [], []
-            candidates = results_item + results_skill
-            if candidates:
-                lines = [f"🔍 未精确匹配『{arg}』，找到以下候选:"]
-                for c in candidates[:8]:
-                    lines.append(f"  • {c['title']}")
-                lines.append("请用更精确的名字重试，如: #bz db 万剑之王")
-                return "\n".join(lines)
-            return f"未找到「{arg}」，请检查卡牌名称"
+                results = await loop.run_in_executor(None, bdb.search_cards, query_arg, search_kind)
+                # Each endpoint is authoritative for the category, even if search hits
+                # contain only title/urlId and omit their Type field.
+                remote_candidates.extend({**c, 'Type': search_kind.title()} for c in results)
+            except Exception as error:
+                print(f"[bz db] 远程候选搜索失败 ({search_kind}): {error}")
+        candidates = _db_candidates(query_arg, remote_candidates, kind=kind)
+        if candidates:
+            return _format_db_candidates(query_arg, candidates)
+        return f"未找到「{query_arg}」，请检查名称或换一个关键词。"
 
-        return bdb.format_card(card)
 
     # ===== 订阅相关 =====
     def _ensure_group(self, event: BaseMessageEvent) -> tuple[int | None, str | None]:

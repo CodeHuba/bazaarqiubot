@@ -2,30 +2,31 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
+<script src="/static/theme.js?v=1"></script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>冷知识 - 巴扎丘Bot</title>
 <meta name="description" content="The Bazaar 游戏冷知识问答，由社区驱动的数据洞察。">
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐉</text></svg>">
-<!-- marked.js for Markdown rendering -->
-<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<!-- Serve the pinned Markdown renderer locally so CDN failures cannot expose raw Markdown. -->
+<script src="/static/vendor/marked-15.0.12.min.js"></script>
 <!-- html2canvas for share image generation -->
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 <style>
 :root {
-  --bg-deep: #090A2A;
-  --bg-surface: #171047;
-  --bg-panel: #15133B;
-  --neon-magenta: #F438B8;
-  --neon-cyan: #26D9F2;
-  --neon-violet: #8A4DFF;
-  --neon-teal: #36E3C1;
-  --neon-coral: #FF536A;
-  --neon-gold: #F5C76A;
-  --text-primary: #F5F4FF;
-  --text-secondary: #B5B3D7;
-  --glow-magenta: 0 0 20px rgba(244,56,184,0.5);
-  --glow-cyan: 0 0 20px rgba(38,217,242,0.5);
-  --glow-violet: 0 0 16px rgba(138,77,255,0.4);
+  --bg-deep: var(--theme-bg, #090A2A);
+  --bg-surface: var(--theme-surface, #171047);
+  --bg-panel: var(--theme-panel, #15133B);
+  --neon-magenta: var(--theme-magenta, #F438B8);
+  --neon-cyan: var(--theme-cyan, #26D9F2);
+  --neon-violet: var(--theme-violet, #8A4DFF);
+  --neon-teal: var(--theme-teal, #36E3C1);
+  --neon-coral: var(--theme-coral, #FF536A);
+  --neon-gold: var(--theme-gold, #F5C76A);
+  --text-primary: var(--theme-text, #F5F4FF);
+  --text-secondary: var(--theme-muted, #B5B3D7);
+  --glow-magenta: 0 0 20px rgba(var(--theme-magenta-rgb, 244, 56, 184), 0.5);
+  --glow-cyan: 0 0 20px rgba(var(--theme-cyan-rgb, 38, 217, 242), 0.5);
+  --glow-violet: 0 0 16px rgba(var(--theme-violet-rgb, 138, 77, 255), 0.4);
 }
 
 *{box-sizing:border-box;margin:0;padding:0}
@@ -34,8 +35,8 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif;
   background: var(--bg-deep);
   background-image:
-    linear-gradient(rgba(138,77,255,0.03) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(138,77,255,0.03) 1px, transparent 1px);
+    linear-gradient(rgba(var(--theme-violet-rgb, 138, 77, 255), 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(var(--theme-violet-rgb, 138, 77, 255), 0.03) 1px, transparent 1px);
   background-size: 24px 24px;
   color: var(--text-primary);
   min-height: 100vh;
@@ -44,7 +45,7 @@ body {
 
 body::before {
   content:'';position:fixed;inset:0;
-  background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(38,217,242,0.02) 2px,rgba(38,217,242,0.02) 4px);
+  background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(var(--theme-cyan-rgb, 38, 217, 242), 0.02) 2px,rgba(var(--theme-cyan-rgb, 38, 217, 242), 0.02) 4px);
   pointer-events:none;z-index:1;
 }
 
@@ -61,7 +62,7 @@ body::before {
   align-items: center;
   height: 64px;
   gap: 32px;
-  box-shadow: 0 4px 24px rgba(244,56,184,0.15);
+  box-shadow: 0 4px 24px rgba(var(--theme-magenta-rgb, 244, 56, 184), 0.15);
 }
 
 .logo {
@@ -104,22 +105,22 @@ body::before {
 
 .nav-tab:hover {
   color: var(--text-primary);
-  border-color: rgba(38,217,242,0.4);
-  background: rgba(38,217,242,0.08);
+  border-color: rgba(var(--theme-cyan-rgb, 38, 217, 242), 0.4);
+  background: rgba(var(--theme-cyan-rgb, 38, 217, 242), 0.08);
 }
 
 .nav-tab.active {
   color: var(--text-primary);
-  background: linear-gradient(135deg, rgba(245,199,106,0.15), rgba(138,77,255,0.15));
+  background: linear-gradient(135deg, rgba(var(--theme-gold-rgb, 245, 199, 106), 0.15), rgba(var(--theme-violet-rgb, 138, 77, 255), 0.15));
   border-color: var(--neon-gold);
-  box-shadow: 0 0 20px rgba(245,199,106,0.3);
+  box-shadow: 0 0 20px rgba(var(--theme-gold-rgb, 245, 199, 106), 0.3);
   position: relative;
 }
 
 .sort-btn {
   padding: 6px 14px;
   border-radius: 5px;
-  border: 1px solid rgba(138,77,255,0.25);
+  border: 1px solid rgba(var(--theme-violet-rgb, 138, 77, 255), 0.25);
   background: transparent;
   color: var(--text-secondary);
   font-size: 13px;
@@ -130,16 +131,16 @@ body::before {
 }
 
 .sort-btn:hover {
-  border-color: rgba(245,199,106,0.4);
+  border-color: rgba(var(--theme-gold-rgb, 245, 199, 106), 0.4);
   color: var(--text-primary);
-  background: rgba(245,199,106,0.06);
+  background: rgba(var(--theme-gold-rgb, 245, 199, 106), 0.06);
 }
 
 .sort-btn.active {
   border-color: var(--neon-gold);
   color: var(--neon-gold);
-  background: rgba(245,199,106,0.12);
-  box-shadow: 0 0 12px rgba(245,199,106,0.15);
+  background: rgba(var(--theme-gold-rgb, 245, 199, 106), 0.12);
+  box-shadow: 0 0 12px rgba(var(--theme-gold-rgb, 245, 199, 106), 0.15);
 }
 
 .nav-tab.active::after {
@@ -182,7 +183,7 @@ body::before {
 
 .page-title span {
   color: var(--neon-gold);
-  text-shadow: 0 0 20px rgba(245,199,106,0.5);
+  text-shadow: 0 0 20px rgba(var(--theme-gold-rgb, 245, 199, 106), 0.5);
 }
 
 .page-desc {
@@ -210,7 +211,7 @@ body::before {
 /* 金色主边框 + 紫色角标 */
 .trivia-card {
   background: var(--bg-panel);
-  border: 1px solid rgba(245,199,106,0.3);
+  border: 1px solid rgba(var(--theme-gold-rgb, 245, 199, 106), 0.3);
   border-radius: 8px;
   overflow: hidden;
   position: relative;
@@ -231,13 +232,13 @@ body::before {
 }
 
 .trivia-card:hover {
-  border-color: rgba(245,199,106,0.6);
-  box-shadow: 0 0 20px rgba(245,199,106,0.1);
+  border-color: rgba(var(--theme-gold-rgb, 245, 199, 106), 0.6);
+  box-shadow: 0 0 20px rgba(var(--theme-gold-rgb, 245, 199, 106), 0.1);
 }
 
 .trivia-card.pinned {
-  border-color: rgba(245,199,106,0.6);
-  box-shadow: 0 0 24px rgba(245,199,106,0.12);
+  border-color: rgba(var(--theme-gold-rgb, 245, 199, 106), 0.6);
+  box-shadow: 0 0 24px rgba(var(--theme-gold-rgb, 245, 199, 106), 0.12);
 }
 
 /* 置顶标签 */
@@ -247,8 +248,8 @@ body::before {
   gap: 4px;
   padding: 2px 8px;
   border-radius: 4px;
-  background: rgba(245,199,106,0.15);
-  border: 1px solid rgba(245,199,106,0.4);
+  background: rgba(var(--theme-gold-rgb, 245, 199, 106), 0.15);
+  border: 1px solid rgba(var(--theme-gold-rgb, 245, 199, 106), 0.4);
   color: var(--neon-gold);
   font-size: 11px;
   font-weight: 700;
@@ -269,7 +270,7 @@ body::before {
 }
 
 .trivia-header:hover {
-  background: rgba(245,199,106,0.04);
+  background: rgba(var(--theme-gold-rgb, 245, 199, 106), 0.04);
 }
 
 .trivia-num {
@@ -309,7 +310,7 @@ body::before {
 
 .trivia-date {
   font-size: 11px;
-  color: rgba(181,179,215,0.45);
+  color: rgba(var(--theme-muted-rgb, 181, 179, 215), 0.45);
 }
 
 .answer-indicator {
@@ -324,14 +325,14 @@ body::before {
 
 .has-answer {
   color: var(--neon-teal);
-  background: rgba(54,227,193,0.08);
-  border: 1px solid rgba(54,227,193,0.2);
+  background: rgba(var(--theme-teal-rgb, 54, 227, 193), 0.08);
+  border: 1px solid rgba(var(--theme-teal-rgb, 54, 227, 193), 0.2);
 }
 
 .no-answer {
-  color: rgba(181,179,215,0.4);
-  background: rgba(138,77,255,0.05);
-  border: 1px solid rgba(138,77,255,0.12);
+  color: rgba(var(--theme-muted-rgb, 181, 179, 215), 0.4);
+  background: rgba(var(--theme-violet-rgb, 138, 77, 255), 0.05);
+  border: 1px solid rgba(var(--theme-violet-rgb, 138, 77, 255), 0.12);
 }
 
 /* 展开箭头 */
@@ -362,7 +363,7 @@ body::before {
   gap: 4px;
   padding: 3px 10px;
   border-radius: 4px;
-  border: 1px solid rgba(138,77,255,0.2);
+  border: 1px solid rgba(var(--theme-violet-rgb, 138, 77, 255), 0.2);
   background: transparent;
   color: var(--text-secondary);
   cursor: pointer;
@@ -373,21 +374,21 @@ body::before {
 }
 
 .vote-btn:hover {
-  border-color: rgba(54,227,193,0.5);
+  border-color: rgba(var(--theme-teal-rgb, 54, 227, 193), 0.5);
   color: var(--neon-teal);
-  background: rgba(54,227,193,0.08);
+  background: rgba(var(--theme-teal-rgb, 54, 227, 193), 0.08);
 }
 
 .vote-btn.active-up {
   border-color: var(--neon-teal);
   color: var(--neon-teal);
-  background: rgba(54,227,193,0.12);
+  background: rgba(var(--theme-teal-rgb, 54, 227, 193), 0.12);
 }
 
 .vote-btn.active-down {
   border-color: var(--neon-coral);
   color: var(--neon-coral);
-  background: rgba(255,83,106,0.1);
+  background: rgba(var(--theme-coral-rgb, 255, 83, 106), 0.1);
 }
 
 /* 答案内容（手风琴） */
@@ -409,7 +410,7 @@ body::before {
 
 .trivia-answer-inner {
   padding: 0 20px 20px 56px;
-  border-top: 1px solid rgba(245,199,106,0.12);
+  border-top: 1px solid rgba(var(--theme-gold-rgb, 245, 199, 106), 0.12);
   padding-top: 20px;
   margin-top: 0;
 }
@@ -427,7 +428,7 @@ body::before {
   color: var(--neon-gold);
   margin: 16px 0 8px;
   padding-bottom: 6px;
-  border-bottom: 1px solid rgba(245,199,106,0.15);
+  border-bottom: 1px solid rgba(var(--theme-gold-rgb, 245, 199, 106), 0.15);
 }
 
 .md-content h3 {
@@ -455,12 +456,12 @@ body::before {
 }
 
 .md-content th {
-  background: rgba(138,77,255,0.15);
+  background: rgba(var(--theme-violet-rgb, 138, 77, 255), 0.15);
   color: var(--neon-violet);
   padding: 8px 12px;
   text-align: left;
   font-weight: 700;
-  border: 1px solid rgba(138,77,255,0.2);
+  border: 1px solid rgba(var(--theme-violet-rgb, 138, 77, 255), 0.2);
   font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -468,18 +469,18 @@ body::before {
 
 .md-content td {
   padding: 8px 12px;
-  border: 1px solid rgba(138,77,255,0.12);
+  border: 1px solid rgba(var(--theme-violet-rgb, 138, 77, 255), 0.12);
   color: var(--text-secondary);
 }
 
 .md-content tr:hover td {
-  background: rgba(138,77,255,0.06);
+  background: rgba(var(--theme-violet-rgb, 138, 77, 255), 0.06);
   color: var(--text-primary);
 }
 
 .md-content code {
-  background: rgba(38,217,242,0.08);
-  border: 1px solid rgba(38,217,242,0.15);
+  background: rgba(var(--theme-cyan-rgb, 38, 217, 242), 0.08);
+  border: 1px solid rgba(var(--theme-cyan-rgb, 38, 217, 242), 0.15);
   border-radius: 4px;
   padding: 1px 6px;
   font-size: 12px;
@@ -491,7 +492,7 @@ body::before {
   border-left: 3px solid var(--neon-gold);
   padding: 8px 16px;
   margin: 10px 0;
-  background: rgba(245,199,106,0.05);
+  background: rgba(var(--theme-gold-rgb, 245, 199, 106), 0.05);
   border-radius: 0 4px 4px 0;
 }
 
@@ -513,16 +514,16 @@ body::before {
 
 .md-content hr {
   border: none;
-  border-top: 1px solid rgba(138,77,255,0.15);
+  border-top: 1px solid rgba(var(--theme-violet-rgb, 138, 77, 255), 0.15);
   margin: 16px 0;
 }
 
 .answer-source {
   font-size: 11px;
-  color: rgba(181,179,215,0.35);
+  color: rgba(var(--theme-muted-rgb, 181, 179, 215), 0.35);
   margin-top: 16px;
   padding-top: 12px;
-  border-top: 1px solid rgba(138,77,255,0.1);
+  border-top: 1px solid rgba(var(--theme-violet-rgb, 138, 77, 255), 0.1);
 }
 
 /* ===== 分享按钮 ===== */
@@ -532,7 +533,7 @@ body::before {
   gap: 4px;
   padding: 3px 10px;
   border-radius: 4px;
-  border: 1px solid rgba(38,217,242,0.2);
+  border: 1px solid rgba(var(--theme-cyan-rgb, 38, 217, 242), 0.2);
   background: transparent;
   color: var(--text-secondary);
   font-size: 12px;
@@ -542,9 +543,9 @@ body::before {
   transition: all 0.2s;
 }
 .share-btn:hover {
-  border-color: rgba(38,217,242,0.5);
+  border-color: rgba(var(--theme-cyan-rgb, 38, 217, 242), 0.5);
   color: var(--neon-cyan);
-  background: rgba(38,217,242,0.08);
+  background: rgba(var(--theme-cyan-rgb, 38, 217, 242), 0.08);
 }
 .share-btn:disabled {
   opacity: 0.5;
@@ -564,14 +565,14 @@ body::before {
 }
 .share-modal {
   background: var(--bg-surface);
-  border: 1px solid rgba(38,217,242,0.2);
+  border: 1px solid rgba(var(--theme-cyan-rgb, 38, 217, 242), 0.2);
   border-radius: 12px;
   padding: 20px;
   max-width: 500px;
   width: 100%;
   max-height: 90vh;
   overflow-y: auto;
-  box-shadow: 0 0 40px rgba(38,217,242,0.1);
+  box-shadow: 0 0 40px rgba(var(--theme-cyan-rgb, 38, 217, 242), 0.1);
 }
 .share-modal-title {
   font-size: 15px;
@@ -598,7 +599,7 @@ body::before {
   flex: 1;
   padding: 9px;
   border-radius: 6px;
-  border: 1px solid rgba(181,179,215,0.2);
+  border: 1px solid rgba(var(--theme-muted-rgb, 181, 179, 215), 0.2);
   background: transparent;
   color: var(--text-secondary);
   font-size: 13px;
@@ -614,8 +615,8 @@ body::before {
   flex: 1;
   padding: 9px;
   border-radius: 6px;
-  border: 1px solid rgba(38,217,242,0.3);
-  background: rgba(38,217,242,0.08);
+  border: 1px solid rgba(var(--theme-cyan-rgb, 38, 217, 242), 0.3);
+  background: rgba(var(--theme-cyan-rgb, 38, 217, 242), 0.08);
   color: var(--neon-cyan);
   font-size: 13px;
   font-weight: 600;
@@ -627,8 +628,8 @@ body::before {
   display: block;
 }
 .share-modal-download:hover {
-  background: rgba(38,217,242,0.15);
-  box-shadow: 0 0 12px rgba(38,217,242,0.2);
+  background: rgba(var(--theme-cyan-rgb, 38, 217, 242), 0.15);
+  box-shadow: 0 0 12px rgba(var(--theme-cyan-rgb, 38, 217, 242), 0.2);
 }
 
 /* ===== 分享卡片（截图用，隐藏在页面外） ===== */
@@ -641,7 +642,7 @@ body::before {
 }
 .share-card {
   width: 600px;
-  background: #090A2A;
+  background: var(--theme-bg, #090A2A);
   padding: 32px 28px 24px;
   font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif;
 }
@@ -651,14 +652,14 @@ body::before {
   gap: 10px;
   margin-bottom: 20px;
   padding-bottom: 14px;
-  border-bottom: 1px solid rgba(38,217,242,0.15);
+  border-bottom: 1px solid rgba(var(--theme-cyan-rgb, 38, 217, 242), 0.15);
 }
 .share-card-tag {
   font-size: 11px;
   font-weight: 700;
-  color: #26D9F2;
-  background: rgba(38,217,242,0.1);
-  border: 1px solid rgba(38,217,242,0.25);
+  color: var(--theme-cyan, #26D9F2);
+  background: rgba(var(--theme-cyan-rgb, 38, 217, 242), 0.1);
+  border: 1px solid rgba(var(--theme-cyan-rgb, 38, 217, 242), 0.25);
   border-radius: 4px;
   padding: 3px 8px;
   letter-spacing: 0.05em;
@@ -666,42 +667,42 @@ body::before {
 }
 .share-card-site {
   font-size: 12px;
-  color: rgba(181,179,215,0.5);
+  color: rgba(var(--theme-muted-rgb, 181, 179, 215), 0.5);
   margin-left: auto;
   letter-spacing: 0.03em;
 }
 .share-card-question {
   font-size: 18px;
   font-weight: 700;
-  color: #F5F4FF;
+  color: var(--theme-text, #F5F4FF);
   line-height: 1.5;
   margin-bottom: 20px;
 }
 .share-card-answer {
   font-size: 13px;
-  color: #B5B3D7;
+  color: var(--theme-muted, #B5B3D7);
   line-height: 1.8;
 }
 .share-card-answer h2 {
   font-size: 14px;
   font-weight: 700;
-  color: #F5C76A;
+  color: var(--theme-gold, #F5C76A);
   margin: 16px 0 8px;
   padding-bottom: 5px;
-  border-bottom: 1px solid rgba(245,199,106,0.15);
+  border-bottom: 1px solid rgba(var(--theme-gold-rgb, 245, 199, 106), 0.15);
 }
 .share-card-answer h3 {
   font-size: 13px;
   font-weight: 700;
-  color: #26D9F2;
+  color: var(--theme-cyan, #26D9F2);
   margin: 12px 0 6px;
 }
 .share-card-answer p {
   margin-bottom: 8px;
-  color: #B5B3D7;
+  color: var(--theme-muted, #B5B3D7);
 }
 .share-card-answer strong {
-  color: #F5F4FF;
+  color: var(--theme-text, #F5F4FF);
   font-weight: 700;
 }
 .share-card-answer table {
@@ -711,34 +712,34 @@ body::before {
   font-size: 12px;
 }
 .share-card-answer th {
-  background: rgba(138,77,255,0.15);
-  color: #8A4DFF;
+  background: rgba(var(--theme-violet-rgb, 138, 77, 255), 0.15);
+  color: var(--theme-violet, #8A4DFF);
   padding: 7px 10px;
   text-align: left;
   font-weight: 700;
-  border: 1px solid rgba(138,77,255,0.2);
+  border: 1px solid rgba(var(--theme-violet-rgb, 138, 77, 255), 0.2);
   font-size: 11px;
   text-transform: uppercase;
 }
 .share-card-answer td {
   padding: 7px 10px;
-  border: 1px solid rgba(138,77,255,0.12);
-  color: #B5B3D7;
+  border: 1px solid rgba(var(--theme-violet-rgb, 138, 77, 255), 0.12);
+  color: var(--theme-muted, #B5B3D7);
 }
 .share-card-answer code {
-  background: rgba(38,217,242,0.08);
-  border: 1px solid rgba(38,217,242,0.15);
+  background: rgba(var(--theme-cyan-rgb, 38, 217, 242), 0.08);
+  border: 1px solid rgba(var(--theme-cyan-rgb, 38, 217, 242), 0.15);
   border-radius: 3px;
   padding: 1px 5px;
   font-size: 11px;
-  color: #26D9F2;
+  color: var(--theme-cyan, #26D9F2);
   font-family: 'Courier New', monospace;
 }
 .share-card-answer blockquote {
-  border-left: 3px solid #F5C76A;
+  border-left: 3px solid var(--theme-gold, #F5C76A);
   padding: 6px 14px;
   margin: 8px 0;
-  background: rgba(245,199,106,0.05);
+  background: rgba(var(--theme-gold-rgb, 245, 199, 106), 0.05);
   border-radius: 0 4px 4px 0;
 }
 .share-card-answer ul, .share-card-answer ol {
@@ -755,13 +756,13 @@ body::before {
 }
 .share-card-answer hr {
   border: none;
-  border-top: 1px solid rgba(138,77,255,0.15);
+  border-top: 1px solid rgba(var(--theme-violet-rgb, 138, 77, 255), 0.15);
   margin: 12px 0;
 }
 .share-card-footer {
   margin-top: 20px;
   padding-top: 14px;
-  border-top: 1px solid rgba(138,77,255,0.12);
+  border-top: 1px solid rgba(var(--theme-violet-rgb, 138, 77, 255), 0.12);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -769,12 +770,12 @@ body::before {
 .share-card-footer-logo {
   font-size: 13px;
   font-weight: 700;
-  color: #F438B8;
+  color: var(--theme-magenta, #F438B8);
   letter-spacing: 0.03em;
 }
 .share-card-footer-desc {
   font-size: 11px;
-  color: rgba(181,179,215,0.4);
+  color: rgba(var(--theme-muted-rgb, 181, 179, 215), 0.4);
 }
 
 /* ===== 空状态 / 加载 ===== */
@@ -814,7 +815,7 @@ body::before {
 /* ===== 提问卡片（右侧） ===== */
 .ask-card {
   background: var(--bg-panel);
-  border: 1px solid rgba(138,77,255,0.35);
+  border: 1px solid rgba(var(--theme-violet-rgb, 138, 77, 255), 0.35);
   border-radius: 8px;
   padding: 24px;
   position: sticky;
@@ -873,8 +874,8 @@ body::before {
 .form-field input,
 .form-field textarea {
   width: 100%;
-  background: rgba(9,10,42,0.8);
-  border: 1px solid rgba(138,77,255,0.25);
+  background: rgba(var(--theme-bg-rgb, 9, 10, 42), 0.8);
+  border: 1px solid rgba(var(--theme-violet-rgb, 138, 77, 255), 0.25);
   border-radius: 6px;
   padding: 9px 12px;
   color: var(--text-primary);
@@ -888,12 +889,12 @@ body::before {
 .form-field input:focus,
 .form-field textarea:focus {
   border-color: var(--neon-violet);
-  box-shadow: 0 0 0 2px rgba(138,77,255,0.12);
+  box-shadow: 0 0 0 2px rgba(var(--theme-violet-rgb, 138, 77, 255), 0.12);
 }
 
 .form-field input::placeholder,
 .form-field textarea::placeholder {
-  color: rgba(181,179,215,0.35);
+  color: rgba(var(--theme-muted-rgb, 181, 179, 215), 0.35);
 }
 
 .btn-ask {
@@ -908,18 +909,18 @@ body::before {
   cursor: pointer;
   transition: all 0.2s;
   font-family: inherit;
-  box-shadow: 0 4px 16px rgba(138,77,255,0.35);
+  box-shadow: 0 4px 16px rgba(var(--theme-violet-rgb, 138, 77, 255), 0.35);
   margin-top: 4px;
 }
 
 .btn-ask:hover {
   transform: translateY(-1px);
-  box-shadow: 0 6px 24px rgba(138,77,255,0.5);
+  box-shadow: 0 6px 24px rgba(var(--theme-violet-rgb, 138, 77, 255), 0.5);
   filter: brightness(1.08);
 }
 
 .btn-ask:disabled {
-  background: rgba(138,77,255,0.2);
+  background: rgba(var(--theme-violet-rgb, 138, 77, 255), 0.2);
   color: var(--text-secondary);
   cursor: not-allowed;
   transform: none;
@@ -929,7 +930,7 @@ body::before {
 
 .ask-hint {
   font-size: 11px;
-  color: rgba(181,179,215,0.4);
+  color: rgba(var(--theme-muted-rgb, 181, 179, 215), 0.4);
   margin-top: 10px;
   text-align: center;
   line-height: 1.6;
@@ -937,8 +938,8 @@ body::before {
 
 .ask-success {
   display: none;
-  background: rgba(54,227,193,0.1);
-  border: 1px solid rgba(54,227,193,0.3);
+  background: rgba(var(--theme-teal-rgb, 54, 227, 193), 0.1);
+  border: 1px solid rgba(var(--theme-teal-rgb, 54, 227, 193), 0.3);
   border-radius: 6px;
   padding: 10px;
   color: var(--neon-teal);
@@ -951,7 +952,7 @@ body::before {
 footer {
   margin-top: 60px;
   padding: 30px 20px;
-  border-top: 1px solid rgba(138,77,255,0.2);
+  border-top: 1px solid rgba(var(--theme-violet-rgb, 138, 77, 255), 0.2);
   text-align: center;
   color: var(--text-secondary);
   font-size: 12px;
@@ -1015,13 +1016,13 @@ footer a:hover {
 </style>
   <link rel="stylesheet" href="/static/query-progress.css">
   <script src="/static/query-progress.js"></script>
+<link rel="stylesheet" href="/static/theme.css?v=1">
 </head>
 <body>
 <nav class="navbar">
   <a href="/runs" class="logo">巴扎丘Bot</a>
   <div class="nav-tabs">
     <a href="/runs" class="nav-tab">阵容查询</a>
-    <a href="/routes" class="nav-tab">阵容路线</a>
     <a href="/winrate" class="nav-tab">胜率查询</a>
     <a href="/partner" class="nav-tab">最佳搭档</a>
     <a href="/topcard" class="nav-tab">职业榜单</a>
@@ -1083,15 +1084,15 @@ footer a:hover {
 <footer>
   <div style="margin-bottom:12px">
     <a href="/static/privacy.html" target="_blank">隐私政策</a>
-    <span style="color:#4b5563;margin:0 5px">|</span>
+    <span style="color:var(--theme-dim, #4b5563);margin:0 5px">|</span>
     <a href="https://github.com/CodeHuba/QiuBot" target="_blank">GitHub</a>
-    <span style="color:#4b5563;margin:0 5px">|</span>
-    <span style="color:#6b7280;margin:0 15px">反馈QQ群：<a href="https://qm.qq.com/q/1102189995" target="_blank" style="color:var(--neon-coral)">1102189995</a></span>
+    <span style="color:var(--theme-dim, #4b5563);margin:0 5px">|</span>
+    <span style="color:var(--theme-dim, #6b7280);margin:0 15px">反馈QQ群：<a href="https://qm.qq.com/q/1102189995" target="_blank" style="color:var(--neon-coral)">1102189995</a></span>
   </div>
-  <div style="color:#4b5563">
-    <a href="https://beian.miit.gov.cn/" target="_blank" style="color:#4b5563;text-decoration:none">浙ICP备2026066685号</a>
+  <div style="color:var(--theme-dim, #4b5563)">
+    <a href="https://beian.miit.gov.cn/" target="_blank" style="color:var(--theme-dim, #4b5563);text-decoration:none">浙ICP备2026066685号</a>
   </div>
-  <div style="margin-top:8px;font-size:12px;color:#4b5563">© 2026 BazaarQiuBot - The Bazaar 中文社区数据服务</div>
+  <div style="margin-top:8px;font-size:12px;color:var(--theme-dim, #4b5563)">© 2026 BazaarQiuBot - The Bazaar 中文社区数据服务</div>
 </footer>
 
 <script>

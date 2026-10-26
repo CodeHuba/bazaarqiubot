@@ -1,0 +1,26 @@
+{
+  "0526054f-98da-4e95-be68-d25b26bb0fe3": {
+    "artLarge": "https://s.bazaardb.gg/v1/z19.0/d4b044e45a8a5a5ab3cc14e3eed9e2ebe967f292%40400.webp",
+    "source_page": "https://bazaardb.gg/card/t6xxfztpwl843cb9qwl90bk91/Trained",
+    "verified_title": "Trained",
+    "verified_art_key": "Icon_Skill_MON_Trained.png"
+  },
+  "1798b189-818a-456d-b7c5-efddf8da15c2": {
+    "artLarge": "https://s.bazaardb.gg/v1/z19.0/f286483f160ac2f5bc40dc468344622fcd347121%40400.webp",
+    "source_page": "https://bazaardb.gg/card/3p1m1sfkdk2fdb0mnm5f9576db/Repair-Mechanic",
+    "verified_title": "Repair Mechanic",
+    "verified_art_key": "Icon_Skill_STE_MasterMechanic"
+  },
+  "c2de4832-2ac1-4496-8d30-683096dcd7c3": {
+    "artLarge": "https://s.bazaardb.gg/v1/z19.0/35db87425c163068792f4b7aaa9802f6c672ed02%40400.webp",
+    "source_page": "https://bazaardb.gg/card/10k3w9d75dg4sgtbtcmzhd2vp2x/Spiked-Jacket",
+    "verified_title": "Spiked Jacket",
+    "verified_art_key": "73ee53441ceaa454993d64a8638c3e3d"
+  },
+  "77c8ef2d-62c8-4214-993d-648915c93e83": {
+    "artLarge": "https://s.bazaardb.gg/v1/z19.0/ea56d8a6ad285921bf04006d565f5a3b337f9d60%40400S.webp",
+    "source_page": "https://bazaardb.gg/card/lsqnp5wd48wb1vk6gvwgmqty2s/Temple-Expedition-Ticket",
+    "verified_title": "Temple Expedition Ticket",
+    "verified_art_key": "a728775e26bbd434e866f1db7ccc9c8d"
+  }
+}

@@ -93,7 +93,7 @@ def test_runs_query_never_probes_remote_card_urls(tmp_path, monkeypatch):
 
 def test_runs_page_has_timeout_and_cancels_previous_request():
     html = (ROOT / "web_runs" / "static" / "runs.html").read_text(encoding="utf-8")
-    start = html.index("async function queryRuns(page)")
+    start = html.index("async function queryRuns(page,")
     end = html.index("\nfunction renderRuns", start)
     function = html[start:end]
 

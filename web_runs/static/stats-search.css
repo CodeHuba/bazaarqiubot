@@ -1,0 +1,22 @@
+.search-rankings { min-width:0; }
+.search-controls { display:flex; flex-wrap:wrap; gap:12px; margin:14px 0; align-items:end; }
+.search-controls label { display:flex; flex-direction:column; gap:6px; font-size:13px; color:var(--theme-muted,#9ca3af); max-width:100%; }
+.search-controls select,.search-controls input[type=number] { font:inherit; color:var(--theme-text,#eee); background:var(--theme-surface,#171a23); border:1px solid var(--theme-border,#343847); padding:9px 10px; border-radius:7px; max-width:100%; }
+.search-controls input[type=number] { width:110px; }
+.search-controls .search-checkbox { flex-direction:row; align-items:center; padding:9px 0; }
+.search-paging { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:10px; margin:12px 0; font-size:13px; }
+.search-rankings button:disabled { opacity:.4; cursor:default; }
+.search-table th:first-child { width:40px; }
+.search-table td:nth-child(2) { min-width:180px; max-width:520px; white-space:normal; overflow-wrap:anywhere; }
+.search-item-button { font:inherit; border:0; padding:4px 0; text-align:left; color:var(--theme-link,#d4ad71); background:transparent; cursor:pointer; text-decoration:underline; text-underline-offset:4px; }
+#search-detail { border:1px solid var(--theme-border,#343847); border-radius:10px; padding:16px; margin-top:20px; overflow-wrap:anywhere; }
+#search-detail h3 { margin:0; font-size:16px; }
+.search-detail-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:18px; margin-top:16px; }
+.search-detail-grid h4 { margin:0 0 10px; font-size:14px; }
+.search-detail-grid ul { padding:0; margin:0; list-style:none; font-size:13px; }
+.search-detail-grid li { display:flex; justify-content:space-between; gap:14px; padding:7px 0; border-bottom:1px solid var(--theme-border,#343847); }
+.search-detail-grid li span { min-width:0; overflow-wrap:anywhere; }
+.search-detail-grid li strong { flex-shrink:0; }
+[data-theme=light] .search-controls select,[data-theme=light] .search-controls input[type=number] { color:#252a34; background:#fff; border-color:#d3d8e0; }
+[data-theme=light] .search-item-button { color:#805522; }
+@media(max-width:640px) { .search-detail-grid { grid-template-columns:1fr; } .search-controls>label { flex:1 1 140px; } .search-table { min-width:600px; } #search-detail { padding:12px; } }
