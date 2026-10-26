@@ -151,6 +151,23 @@ class BazaarPlugin(NcatBotPlugin):
                             print(f"[{self.name}] 纯文字降级回复也失败: {fallback_error}")
 
     # ===== 子命令分发 =====
+    @staticmethod
+    def _parse_player_season_arg(arg: str) -> tuple[str, int | None, str | None]:
+        """解析用户名和可选实际赛季；接口 seasonId 始终比实际赛季大 1。"""
+        username = arg.strip()
+        if not username:
+            return "", None, "[巴扎] 请提供用户名"
+        parts = username.rsplit(maxsplit=1)
+        if len(parts) == 2 and re.fullmatch(r"[+-]?[0-9]+", parts[1]):
+            try:
+                season = int(parts[1])
+            except ValueError:
+                return "", None, "[巴扎] 赛季号必须为正整数"
+            if season <= 0:
+                return "", None, "[巴扎] 赛季号必须为正整数"
+            return parts[0].strip(), season + 1, None
+        return username, None, None
+
     async def _dispatch(self, sub: str, arg: str, event: BaseMessageEvent) -> str:
         if sub in {"help", "帮助", "?"}:
             return fmt.format_help()
@@ -172,18 +189,22 @@ class BazaarPlugin(NcatBotPlugin):
 
         if sub == "stat":
             if not arg:
-                return "用法: #bz stat <用户名>"
-            return await self._cmd_player_stat(arg, event)
+                return "用法: #bz stat <用户名> [赛季号]"
+            username, season_id, error = self._parse_player_season_arg(arg)
+            if error:
+                return error
+            return await self._cmd_player_stat(username, event, season_id)
 
         if sub in {"history", "hist", "历史"}:
             if not arg:
-                return "用法: #bz history <用户名> [--cb]"
+                return "用法: #bz history <用户名> [赛季号] [--cb]"
             # 解析 --cb 色盲模式标志
             colorblind = "--cb" in arg
-            username_h = arg.replace("--cb", "").strip()
-            if not username_h:
-                return "用法: #bz history <用户名> [--cb]"
-            return await self._cmd_player_history(username_h, event, colorblind=colorblind)
+            season_arg = arg.replace("--cb", "").strip()
+            username_h, season_id, error = self._parse_player_season_arg(season_arg)
+            if error:
+                return error
+            return await self._cmd_player_history(username_h, event, season_id, colorblind=colorblind)
 
         if sub in {"db", "数据库", "card", "卡牌"}:
             if not arg:
@@ -225,11 +246,11 @@ class BazaarPlugin(NcatBotPlugin):
             return f"[巴扎] 查询失败: {e}"
         return fmt.format_player(username, data)
 
-    async def _cmd_player_stat(self, username: str, event: BaseMessageEvent) -> str | None:
+    async def _cmd_player_stat(self, username: str, event: BaseMessageEvent, season_id: int | None = None) -> str | None:
         if len(username) > 30 or any(c in username for c in "<>\"'\\"):
             return "[巴扎] 用户名格式不合法"
         try:
-            data = await self.client.get_player_stat(username)
+            data = await self.client.get_player_stat(username, season_id=season_id) if season_id is not None else await self.client.get_player_stat(username)
         except Exception as e:
             return f"[巴扎] 查询失败: {e}"
 
@@ -264,11 +285,11 @@ class BazaarPlugin(NcatBotPlugin):
 
         return None  # 图已发，handle 不再 reply
 
-    async def _cmd_player_history(self, username: str, event: BaseMessageEvent, colorblind: bool = False) -> str | None:
+    async def _cmd_player_history(self, username: str, event: BaseMessageEvent, season_id: int | None = None, colorblind: bool = False) -> str | None:
         if len(username) > 30 or any(c in username for c in "<>\"'\\"):
             return "[巴扎] 用户名格式不合法"
         try:
-            data = await self.client.get_player_stat(username)
+            data = await self.client.get_player_stat(username, season_id=season_id) if season_id is not None else await self.client.get_player_stat(username)
         except Exception as e:
             return f"[巴扎] 查询失败: {e}"
 
