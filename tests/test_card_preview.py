@@ -1,4 +1,5 @@
 import copy
+from contextlib import closing
 import importlib.util
 import json
 import sqlite3
@@ -50,6 +51,83 @@ def render(card, quality="", enchantment="", language="zh-CN"):
     localized = {"title": "示例卡牌", "damage": "造成 {ability.0} 伤害"}
     return preview.build_preview(card, quality, enchantment, language,
                                  lambda c, lang: localized.get(c.get("Key"), c.get("Text", "")) if lang == "zh-CN" else c.get("Text", ""), {}, "test")
+
+
+@pytest.mark.parametrize('kind', ['Item', 'Skill'])
+def test_hidden_tags_preserve_direct_and_reference_and_selected_enchant_only(card, kind):
+    card['Type'] = kind
+    card['Tags'] = ['Tool']
+    card['HiddenTags'] = ['Shield', 'ShieldReference', 'Shield', 'UnrecognizedNativeTag']
+    card['Enchantments']['Fiery']['HiddenTags'] = ['Burn', 'ShieldReference']
+    original = copy.deepcopy(card)
+    result = render(card)
+    assert result['hiddenTags'] == ['护盾', '护盾相关', 'UnrecognizedNativeTag']
+    assert result['tags'] == ['Tool']
+    assert render(card, enchantment='Fiery')['hiddenTags'] == ['护盾', '护盾相关', 'UnrecognizedNativeTag', '灼烧']
+    assert render(card, language='en-US')['hiddenTags'] == ['Shield', 'Shield Related', 'UnrecognizedNativeTag']
+    assert card == original
+
+
+def test_hidden_tag_translation_prefers_official_full_then_base_label():
+    official = {'Regen': '生命再生', 'ShieldReference': '官方关联词'}
+    assert preview.game.localize_card_tag('RegenReference', official.get) == '生命再生相关'
+    assert preview.game.localize_card_tag('ShieldReference', official.get) == '官方关联词'
+
+
+@pytest.mark.parametrize("separator", [r"\n\n", r"\r\n\r\n", "\n\n", "<br><br>", "<BR /><br/>"])
+def test_multiline_card_effects_normalize_game_line_breaks(card, separator):
+    card["Localization"]["Tooltips"] = [{"TooltipType": "Active", "Content": {
+        "Text": separator.join(["造成{ability.0}伤害", "获得10护盾", "获得10治疗", "造成2灼烧"])}}]
+    card["Tiers"]["Silver"]["TooltipIds"] = [0]
+    text = render(card)["effects"][0]["text"]
+    assert text == "造成10伤害\n\n获得10护盾\n\n获得10治疗\n\n造成2灼烧"
+    assert r"\n" not in text and "<br" not in text.lower()
+
+
+@pytest.mark.parametrize("source", ["ability", "aura"])
+@pytest.mark.parametrize("strict_static", [False, True])
+@pytest.mark.parametrize("template, expected", [
+    ("此物品+{value}%暴击率", "此物品+25%暴击率"),
+    ("获得{value}% 暴击率", "获得25% 暴击率"),
+    ("获得{value}％暴击率", "获得25％暴击率"),
+    ("This has +{value}% Crit Chance", "This has +25% Crit Chance"),
+    ("获得{value}暴击率", "获得25暴击率"),
+    ("获得{value}", "获得25暴击率"),
+    ('获得{value}<color=#fff>%暴击率</color>', '获得25<color=#fff>%暴击率</color>'),
+    ('获得{value}<color=#fff>暴击率</color>', '获得25<color=#fff>暴击率</color>'),
+])
+def test_explicit_percentage_and_unit_do_not_duplicate_crit(source, strict_static, template, expected):
+    definitions = {"0": {"Action": {"$type": "TActionCardModifyAttribute", "AttributeType": "CritChance",
+                                      "Value": {"$type": "TFixedValue", "Value": 25}}}}
+    text = preview.game.render_tooltip(template.replace("{value}", "{" + source + ".0}"),
+                                       definitions if source == "ability" else {},
+                                       definitions if source == "aura" else {}, {}, strict_static=strict_static)
+    assert text == expected
+
+
+@pytest.mark.parametrize('source', ['ability', 'aura'])
+@pytest.mark.parametrize('strict_static', [False, True])
+@pytest.mark.parametrize('unit', ['多重释放', '多重施放', '多重施法'])
+def test_official_multicast_wording_is_not_given_a_duplicate_unit(source, strict_static, unit):
+    definitions = {'0': {'Action': {'$type': 'TAuraActionCardModifyAttribute', 'AttributeType': 'Multicast',
+                                    'Value': {'$type': 'TFixedValue', 'Value': 1}}}}
+    text = preview.game.render_tooltip('此物品+{'+source+'.0}'+unit,
+                                      definitions if source == 'ability' else {},
+                                      definitions if source == 'aura' else {}, {}, strict_static=strict_static)
+    assert text == '此物品+1'+unit
+
+
+def test_percentage_damage_and_enchantment_crit_are_not_given_extra_units(card):
+    card["Abilities"]["0"]["Action"] = {"$type": "TActionCardModifyAttribute", "AttributeType": "DamageAmount",
+                                          "Value": {"$type": "TFixedValue", "Value": 50}}
+    card["Localization"]["Tooltips"] = [{"Content": {"Text": "己方高温物品+{ability.0}%伤害"}}]
+    card["Tiers"]["Silver"]["TooltipIds"] = [0]
+    card["Enchantments"]["Deadly"] = {"Auras": {"crit": {"Action": {
+        "$type": "TAuraActionCardModifyAttribute", "AttributeType": "CritChance",
+        "Value": {"$type": "TFixedValue", "Value": 50}}}},
+        "Localization": {"Tooltips": [{"Content": {"Text": "此物品+{aura.crit}%暴击率"}}]}}
+    effects = render(card, enchantment="Deadly")["effects"]
+    assert [effect["text"] for effect in effects] == ["己方高温物品+50%伤害", "此物品+50%暴击率"]
 
 
 def test_only_real_qualities_and_localized_templates_are_used(card):
@@ -141,9 +219,10 @@ def test_quest_goals_and_quality_specific_rewards_are_included(card):
 @pytest.fixture
 def repository(tmp_path, card):
     db = tmp_path / "GameData.db"
-    with sqlite3.connect(db) as conn:
+    with closing(sqlite3.connect(db)) as conn:
         conn.execute("CREATE TABLE cards (Id TEXT PRIMARY KEY, Data TEXT)")
         conn.execute("INSERT INTO cards VALUES (?, ?)", (CARD_ID, json.dumps(card)))
+        conn.commit()
     translations = tmp_path / "zh-CN.json"
     translations.write_text(json.dumps({"title": "中文名", "damage": "造成 {ability.0} 伤害"}), encoding="utf-8")
     return preview.CardPreviewRepository(db, translations, tmp_path / "missing-images.json")
@@ -162,8 +241,9 @@ def test_read_only_lookup_and_translation_change_invalidate_cache(repository):
 def test_database_change_invalidates_cache(repository, card):
     first = repository.get(CARD_ID)
     card["Tiers"]["Silver"]["Attributes"]["DamageAmount"] = 123
-    with sqlite3.connect(repository.database) as conn:
+    with closing(sqlite3.connect(repository.database)) as conn:
         conn.execute("UPDATE cards SET Data=?", (json.dumps(card),))
+        conn.commit()
     assert repository.get(CARD_ID)["effects"][0]["text"] == "造成 123 伤害"
     assert repository.get(CARD_ID)["version"] != first["version"]
 

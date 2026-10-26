@@ -16,7 +16,7 @@ from . import gamedata_client as game
 QUALITIES = ("Bronze", "Silver", "Gold", "Diamond", "Legendary")
 QUALITY_LABELS = dict(zip(QUALITIES, ("青铜", "白银", "黄金", "钻石", "传奇")))
 ROOT = Path(__file__).resolve().parents[2]
-PARSER_VERSION = "card-preview-1"
+PARSER_VERSION = "card-preview-3"
 
 
 def _fingerprint(path: Path | None) -> str:
@@ -55,7 +55,9 @@ def _default_translation(database: Path) -> Path:
 
 def _plain(text: str) -> str:
     # Game markup is text, never browser HTML. Keep readable line breaks and strip TMP tags.
-    return re.sub(r"</?[A-Za-z][^>]*>", "", str(text).replace("<br>", "\n")).strip()
+    text = str(text).replace(r"\r\n", "\n").replace(r"\n", "\n").replace(r"\r", "\n")
+    text = re.sub(r"<br\s*/?>", "\n", text, flags=re.IGNORECASE)
+    return re.sub(r"</?[A-Za-z][^>]*>", "", text).strip()
 
 
 def _apply_self_auras(attrs: dict, auras: dict) -> tuple[dict, list[str]]:
@@ -209,6 +211,7 @@ def build_preview(raw: dict, quality: str, enchantment: str, language: str, tran
         translated = translate({"Text": value}, language)
         return QUALITY_LABELS[value] if translated == value and language == "zh-CN" else translated
     tags = list(dict.fromkeys([*(raw.get("Tags") or []), *(enchant.get("Tags") or [])]))
+    hidden_tags = list(dict.fromkeys([*(raw.get('HiddenTags') or []), *(enchant.get('HiddenTags') or [])]))
     attributes = []
     labels = {"CooldownMax": "冷却", "AmmoMax": "弹药", "Multicast": "多重施放", "DamageAmount": "伤害",
               "ShieldApplyAmount": "护盾", "HealAmount": "治疗", "BurnApplyAmount": "灼烧", "PoisonApplyAmount": "剧毒",
@@ -224,6 +227,8 @@ def build_preview(raw: dict, quality: str, enchantment: str, language: str, tran
             "availableQualities": [{"value": q, "label": quality_label(q)} for q in available],
             "availableEnchantments": [{"value": e, "label": translate({"Text": e}, language)} for e in enchants],
             "tags": [translate({"Key": tag, "Text": tag}, language) for tag in tags],
+            "hiddenTags": [game.localize_card_tag(tag, lambda text: translate({'Key': text, 'Text': text}, language), language)
+                           for tag in hidden_tags],
             "attributes": attributes, "effects": effects, "version": version, "cardVersion": str(raw.get("Version") or ""),
             "mode": "catalog", "hasDynamicValues": bool(unknown_attrs) or any(e["dynamic"] for e in effects)}
 

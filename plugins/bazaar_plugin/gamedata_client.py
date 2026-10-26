@@ -320,6 +320,7 @@ def render_tooltip(
         "Tempo", "Health", "Ammo", "Multicast", "Crit", "Gold", "XP",
         "造成", "伤害", "护盾", "治疗", "剧毒", "中毒", "灼烧", "燃烧",
         "回复", "狂怒", "节奏", "生命值", "弹药", "暴击", "黄金", "经验",
+        "多重释放", "多重施放",
     )
     base_placeholders = re.findall(r"\{(ability|aura)\.[^}.]+\}", text)
     should_add_implicit_units = True
@@ -338,8 +339,12 @@ def render_tooltip(
         return ATTRIBUTE_UNIT_ZH.get(attr, "")
 
     def has_explicit_unit(start: int, end: int) -> bool:
-        before = text[max(0, start - 12):start].rstrip()
-        after = text[end:end + 12].lstrip()
+        # TMP tags are presentation, and a percentage already supplies its own unit.
+        # Otherwise "{aura.X}%暴击率" would become "50暴击率%暴击率".
+        before = re.sub(r"</?[A-Za-z][^>]*>", "", text[:start]).rstrip()[-12:]
+        after = re.sub(r"</?[A-Za-z][^>]*>", "", text[end:]).lstrip()[:12]
+        if after.startswith(("%", "％")):
+            return True
         return any(before.endswith(unit) or after.startswith(unit) for unit in explicit_units)
 
     def resolve_single(ph: str):
@@ -471,6 +476,7 @@ def render_tooltip(
         return r + unit if should_add_implicit_units and unit and not has_explicit_unit(m.start(), m.end()) else r
 
     return re.sub(r"\{([^}]+)\}", replace_ph, text)
+
 
 
 def _preview_requires_context(value: Any) -> bool:
@@ -832,6 +838,22 @@ ENC_ZH    = {
 }
 
 
+def localize_card_tag(tag, translate, language='zh-CN'):
+    """Keep native direct/reference tags distinct, using the official base label."""
+    translated = translate(tag)
+    if translated and translated != tag:
+        return translated
+    if tag.endswith('Reference'):
+        base = tag[:-len('Reference')]
+        label = localize_card_tag(base, translate, language)
+        return label + ('相关' if language == 'zh-CN' else ' Related')
+    if language == 'zh-CN':
+        return TAG_ZH.get(tag, {'Lifesteal': '吸血', 'Rage': '怒火', 'Tempo': '节奏',
+                               'Heated': '高温', 'Chilled': '低温'}.get(tag, tag))
+    return tag
+
+
+
 def format_card_from_raw(raw: dict, zh_name: str = "", db_path: str = "", show_enchants: bool = False) -> str:
     """将 GameData.db 原始 dict 格式化为可读文本（用于 #bz db 输出）。"""
     from . import translations as trans
@@ -866,6 +888,8 @@ def format_card_from_raw(raw: dict, zh_name: str = "", db_path: str = "", show_e
     out.append(meta)
     if tags:
         out.append("标签: " + " ".join(tags))
+    hidden_tags = list(dict.fromkeys(raw.get('HiddenTags') or []))
+    out.append('隐藏标签: ' + ('、'.join(localize_card_tag(t, trans.get_zh_by_text_key) for t in hidden_tags) or '无'))
 
     # 按 tier 展示 tooltips
     tier_order = [t for t in ("Bronze", "Silver", "Gold", "Diamond", "Legendary")
@@ -949,8 +973,12 @@ def format_card_from_raw(raw: dict, zh_name: str = "", db_path: str = "", show_e
                 out.append(f"  [{enc_name}] " + "  ".join(zh_tips))
             else:
                 out.append(f"  [{enc_name}]")
+            added_tags = list(dict.fromkeys(t for t in enc_data.get('HiddenTags') or [] if t not in hidden_tags))
+            if added_tags:
+                out.append('    新增隐藏标签: ' + '、'.join(localize_card_tag(t, trans.get_zh_by_text_key) for t in added_tags))
 
     return "\n".join(out)
+
 
 
 _CARD_NAME_INDEX_CACHE: dict[str, tuple[tuple[int, int], dict[str, list[dict]]]] = {}
@@ -991,7 +1019,7 @@ def build_card_name_index(db_path: str | Path) -> dict[str, list[dict]]:
     return index
 
 
-def suggest_cards(name: str, db_path: "str | Path", limit: int = 5) -> list[dict]:
+def suggest_cards(name: str, db_path: "str | Path", limit: int = 10, kind: str = '') -> list[dict]:
     """从本地名称索引返回相近的物品/技能候选，不进行远程查询。"""
     query = normalize_card_name(name)
     if not query or limit <= 0:
@@ -1008,6 +1036,8 @@ def suggest_cards(name: str, db_path: "str | Path", limit: int = 5) -> list[dict
         for card in cards:
             if card.get("Type") not in ("Item", "Skill"):
                 continue
+            if kind and card.get('Type', '').lower() != kind:
+                continue
             card_id = str(card.get("Id", ""))
             if card_id in seen_ids:
                 continue
@@ -1022,17 +1052,28 @@ def suggest_cards(name: str, db_path: "str | Path", limit: int = 5) -> list[dict
     return [card for _, _, card in close_matches[:limit]]
 
 
-def query_raw_by_name(name: str, db_path: "str | Path") -> dict | None:
+
+def query_raw_by_name(name: str, db_path: "str | Path", kind: str = '') -> dict | None:
     """从 GameData.db 按名称查卡牌原始数据，优先返回 Item/Skill。"""
     index = build_card_name_index(db_path)
     matches = index.get(normalize_card_name(name), [])
     fallback = None
+    fallback_is_internal = True
     for card in matches:
+        if kind and card.get('Type', '').lower() != kind:
+            continue
         if card.get("Type") in ("Item", "Skill"):
             return card
-        if fallback is None:
+        # Encounter titles are shared by live and tutorial/debug records. Prefer the
+        # normal record when both have the same public name; explicit internal-name
+        # lookups remain available when no normal record matches that name.
+        internal_name = card.get('InternalName', '').casefold()
+        is_internal = any(marker in internal_name for marker in ('tutorial', '[debug]', 'start run'))
+        if fallback is None or (fallback_is_internal and not is_internal):
             fallback = card
+            fallback_is_internal = is_internal
     return fallback
+
 
 
 class GameDataClient:
