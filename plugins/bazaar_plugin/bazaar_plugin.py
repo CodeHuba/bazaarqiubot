@@ -24,7 +24,7 @@ from ncatbot.plugin_system import NcatBotPlugin, on_message
 from ncatbot.core.event import BaseMessageEvent
 
 from .data_client import BazaarDataClient
-from . import formatter as fmt, subscriptions as subs, tooltip_translations as tt_trans
+from . import formatter as fmt, tooltip_translations as tt_trans
 from . import chart as chart_mod
 from . import history_chart as hist_chart_mod
 from . import bazaardb_client as bdb
@@ -141,15 +141,41 @@ class BazaarPlugin(NcatBotPlugin):
     async def on_load(self):
         self.client = BazaarDataClient()
         self._cooldown: dict[tuple, float] = defaultdict(float)
-        # 启动时异步加载（不阻塞插件 on_load 完成）
-        asyncio.create_task(self._init_data())
-        # 注册每日 10:00 推送任务
+        # NcatBot closes the worker loop used for on_load. Bind only from an
+        # official event delivered on the long-lived client loop.
+        from ncatbot.utils import OFFICIAL_STARTUP_EVENT, OFFICIAL_HEARTBEAT_EVENT
+        self._watch_event_loop = None
+        self._watch_runtime_tasks = []
+        self.register_handler(OFFICIAL_STARTUP_EVENT, self._start_watch_runtime)
+        self.register_handler(OFFICIAL_HEARTBEAT_EVENT, self._start_watch_runtime)
+        # 每分钟按北京时间检查 10:00 日报，支持重启补发与失败重试。
         self.add_scheduled_task(
-            job_func=self._daily_watch_task,
+            job_func=self._schedule_daily_watch,
             name="bazaar_daily_watch",
-            interval="10:00",  # 每天 10:00
+            interval=60,  # 秒；实际推送窗口在服务中固定为北京时间 10:00
         )
-        print(f"[{self.name}] 已加载 v{self.version}, 每日 10:00 推送已启用")
+        print(f"[{self.name}] 已加载 v{self.version}, 图片推送等待客户端事件循环就绪", flush=True)
+
+    async def _start_watch_runtime(self, event=None):
+        loop = asyncio.get_running_loop()
+        if getattr(self, '_watch_event_loop', None) is loop:
+            return
+        self._watch_event_loop = loop
+        self._watch_schedule_warning = False
+        self._watch_runtime_tasks = [
+            loop.create_task(self._init_data()),
+            loop.create_task(self._daily_watch_task()),
+        ]
+        print(f"[{self.name}] 图片推送已绑定客户端事件循环，北京时间每日 10:00 自动播报", flush=True)
+
+    async def on_close(self):
+        loop = getattr(self, '_watch_event_loop', None)
+        if loop and not loop.is_closed():
+            for task in getattr(self, '_watch_runtime_tasks', []):
+                loop.call_soon_threadsafe(task.cancel)
+        pending = getattr(self, '_watch_scheduled_future', None)
+        if pending:
+            pending.cancel()
 
     async def _init_data(self):
         try:
@@ -193,6 +219,11 @@ class BazaarPlugin(NcatBotPlugin):
         now = time.time()
         if (now - self._cooldown[cd_key]) < cd_window:
             remain = int(cd_window - (now - self._cooldown[cd_key]))
+            if sub in {'watch', 'unwatch', 'watchlist', 'testpush'}:
+                fallback = await self._watch_service().status(event, '指令冷却中', f'{remain}s 后再试')
+                if fallback:
+                    await event.reply(fallback)
+                return
             await event.reply(f"指令冷却中，{remain}s 后再试")
             return
 
@@ -288,16 +319,16 @@ class BazaarPlugin(NcatBotPlugin):
 
         if sub == "watch":
             if not arg:
-                return "用法: #bz watch <用户名>"
+                return await self._watch_service().status(event, "订阅玩家", "用法: #bz watch <用户名>")
             return await self._cmd_watch(event, arg)
 
         if sub == "unwatch":
             if not arg:
-                return "用法: #bz unwatch <用户名>"
+                return await self._watch_service().status(event, "取消订阅", "用法: #bz unwatch <用户名>")
             return await self._cmd_unwatch(event, arg)
 
         if sub == "watchlist":
-            return self._cmd_watchlist(event)
+            return await self._cmd_watchlist(event)
 
         if sub in {"winrate", "胜率"}:
             return await self._cmd_winrate(arg, event)
@@ -305,7 +336,7 @@ class BazaarPlugin(NcatBotPlugin):
         if sub == "testpush":
             user_id = getattr(event, "user_id", 0)
             if not ADMIN_QQ or str(user_id) != str(ADMIN_QQ):
-                return "[巴扎] 只有管理员能触发测试推送"
+                return await self._watch_service().status(event, "无法测试推送", "只有管理员能触发测试推送")
             return await self._cmd_testpush(event)
 
         return f"未知子命令: {sub}\n\n" + fmt.format_help()
@@ -785,111 +816,57 @@ class BazaarPlugin(NcatBotPlugin):
             return None, "[巴扎] 拿不到群号,请在群里使用"
         return int(gid), None
 
-    async def _cmd_watch(self, event: BaseMessageEvent, username: str) -> str:
-        gid, err = self._ensure_group(event)
-        if err:
-            return err
-        if len(username) > 30 or any(c in username for c in "<>\"'\\"):
-            return "[巴扎] 用户名格式不合法"
-        # 验证用户存在(直接查一次,失败就不让订阅)
-        try:
-            await self.client.get_player(username)
-        except Exception as e:
-            return f"[巴扎] 玩家『{username}』查询失败,无法订阅: {e}"
+    def _watch_service(self):
+        from .watch_service import WatchService
+        if not hasattr(self, '_watch_images'):
+            self._watch_images = WatchService(self.client, self.api)
+        return self._watch_images
 
-        added = subs.add_subscription(f"group:{gid}", username)
-        if not added:
-            return f"📌 本群已订阅『{username}』,不用重复订阅"
-        cur = subs.get_subscriptions(f"group:{gid}")
-        return f"✅ 本群已订阅『{username}』,每天 10:00 推送昨日变化\n当前订阅 {len(cur)} 人"
+    async def _cmd_watch(self, event: BaseMessageEvent, username: str) -> str | None:
+        _, error = self._ensure_group(event)
+        service = self._watch_service()
+        if error:
+            return await service.status(event, "仅支持群订阅", error)
+        return await service.watch(event, username)
 
-    async def _cmd_unwatch(self, event: BaseMessageEvent, username: str) -> str:
-        gid, err = self._ensure_group(event)
-        if err:
-            return err
-        removed = subs.remove_subscription(f"group:{gid}", username)
-        if not removed:
-            return f"❎ 本群没有订阅『{username}』"
-        cur = subs.get_subscriptions(f"group:{gid}")
-        return f"🗑️ 已取消订阅『{username}』,本群剩余 {len(cur)} 人"
+    async def _cmd_unwatch(self, event: BaseMessageEvent, username: str) -> str | None:
+        _, error = self._ensure_group(event)
+        service = self._watch_service()
+        if error:
+            return await service.status(event, "仅支持群订阅", error)
+        return await service.unwatch(event, username)
 
-    def _cmd_watchlist(self, event: BaseMessageEvent) -> str:
-        gid, err = self._ensure_group(event)
-        if err:
-            return err
-        cur = subs.get_subscriptions(f"group:{gid}")
-        if not cur:
-            return "📭 本群还没订阅任何玩家\n用 #bz watch <用户名> 添加"
-        lines = [f"📋 本群订阅 ({len(cur)} 人):"]
-        for u in cur:
-            lines.append(f"  · {u}")
-        lines.append("")
-        lines.append("每天 10:00 推送 24h 分数变化")
-        return "\n".join(lines)
+    async def _cmd_watchlist(self, event: BaseMessageEvent) -> str | None:
+        _, error = self._ensure_group(event)
+        service = self._watch_service()
+        if error:
+            return await service.status(event, "仅支持群订阅", error)
+        return await service.watchlist(event)
 
-    async def _cmd_testpush(self, event: BaseMessageEvent) -> str:
-        """管理员立即触发一次推送(只推当前群)。"""
-        gid, err = self._ensure_group(event)
-        if err:
-            return err
-        cur = subs.get_subscriptions(f"group:{gid}")
-        if not cur:
-            return "📭 本群没有订阅,无法推送"
-        
-        # 直接构造报告并发送
-        text = await self._build_daily_report(cur)
-        if not text:
-            return "❌ 构造播报失败"
-        
-        try:
-            await self.api.post_group_msg(group_id=gid, text=text)
-            return f"✅ 已推送播报到本群 ({len(cur)} 人)"
-        except Exception as e:
-            return f"❌ 推送失败: {e}"
+    async def _cmd_testpush(self, event: BaseMessageEvent) -> str | None:
+        _, error = self._ensure_group(event)
+        service = self._watch_service()
+        if error:
+            return await service.status(event, "仅支持群订阅", error)
+        return await service.testpush(event)
 
-    # ===== 每日推送任务 =====
-    async def _daily_watch_task(self):
-        """每天 10:00 触发,遍历所有群订阅,推送 24h 变化。"""
-        all_subs = subs.get_all_subscriptions()
-        if not all_subs:
-            print(f"[{self.name}] 每日推送: 无订阅,跳过")
+    def _schedule_daily_watch(self):
+        """NcatBot schedules from a worker thread; keep service/API work on the bot loop."""
+        loop = getattr(self, '_watch_event_loop', None)
+        if loop is None or loop.is_closed() or not loop.is_running():
+            if not getattr(self, '_watch_schedule_warning', False):
+                print(f"[{self.name}] 图片推送等待客户端启动或心跳事件，尚未派发定时任务", flush=True)
+                self._watch_schedule_warning = True
             return
-        print(f"[{self.name}] 每日推送启动,共 {len(all_subs)} 个聊天")
+        pending = getattr(self, '_watch_scheduled_future', None)
+        if pending is None or pending.done():
+            self._watch_scheduled_future = asyncio.run_coroutine_threadsafe(self._daily_watch_task(), loop)
+            if not getattr(self, '_watch_first_dispatch_logged', False):
+                print(f"[{self.name}] 图片推送定时回调已派发到运行中的客户端事件循环", flush=True)
+                self._watch_first_dispatch_logged = True
 
-        # 按群推送
-        for chat_key, usernames in all_subs.items():
-            if not chat_key.startswith("group:"):
-                continue  # 只推群,私聊不支持
-            try:
-                gid = int(chat_key.split(":", 1)[1])
-            except Exception:
-                continue
-            text = await self._build_daily_report(usernames)
-            if not text:
-                continue
-            try:
-                await self.api.post_group_msg(group_id=gid, text=text)
-                print(f"[{self.name}] 已推送到群 {gid} ({len(usernames)} 人)")
-            except Exception as e:
-                print(f"[{self.name}] 推送群 {gid} 失败: {e}")
-            # 避免短时间内连发
-            await asyncio.sleep(1)
-
-    async def _build_daily_report(self, usernames: list[str]) -> str:
-        """构造一份每日播报。"""
-        from datetime import datetime
-        now_str = datetime.now().strftime("%Y-%m-%d %H:%M")
-        lines = [f"📊 大巴扎每日播报 · {now_str}"]
-        lines.append("━━━━━━━━━━━━━━")
-
-        for u in usernames:
-            try:
-                data = await self.client.get_player_stat(u)
-            except Exception as e:
-                lines.append(f"\n{u}: ❌ {e}")
-                continue
-            block = fmt.format_daily_diff(u, data)
-            lines.append("")
-            lines.append(block)
-
-        return "\n".join(lines)
+    async def _daily_watch_task(self):
+        try:
+            await self._watch_service().daily()
+        except Exception as exc:
+            print(f"[{self.name}] 每日图片推送失败: {exc}", flush=True)

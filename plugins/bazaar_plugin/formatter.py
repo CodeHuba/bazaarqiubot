@@ -156,9 +156,9 @@ def format_help() -> str:
         "#bz db <名字>        查卡牌（支持中英文）\n"
         "#bz winrate <卡牌>   查卡牌/组合10胜率\n"
         "─ 群订阅(仅群聊)\n"
-        "#bz watch <用户名>   订阅每日 10:00 播报\n"
+        "#bz watch <用户名>   订阅每日北京时间 10:00 图片战报\n"
         "#bz unwatch <用户名> 取消订阅\n"
-        "#bz watchlist        本群订阅列表\n"
+        "#bz watchlist        本群订阅名单图\n"
         "━━━━━━━━━━━━━━\n"
         "示例: #bz watch qifeiovo    #bz db 万剑之王"
     )
