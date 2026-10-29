@@ -2064,7 +2064,7 @@ function renderWinrateCompare(results, hero, days, rank) {
 
   const filterDesc = [
     hero ? ('英雄: ' + hero) : '',
-    days ? ('近' + days + '天') : '全部时间',
+    days ? ('近' + days + '天') : '本版本全部',
     rank === 'legendary' ? '传奇段位' : '全段位',
   ].filter(Boolean).join(' · ');
 
@@ -2183,7 +2183,7 @@ async function shareWinrate() {
     const phase = window._wrPhase || '';
     const rankEmojis = ['🥇','🥈','🥉','4','5','6','7','8'];
 
-    document.getElementById('wr-sc-season').textContent = phase ? ('赛季 ' + phase) : '';
+    document.getElementById('wr-sc-season').textContent = phase ? ('S' + phase) : '';
     document.getElementById('wr-sc-filter').textContent = '查询条件：' + filterDesc;
 
     const shareArts = (d, row = false) => (d.card_details || []).map(c => {

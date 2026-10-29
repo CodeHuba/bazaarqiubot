@@ -2616,7 +2616,7 @@ def api_card_tier():
     days = request.args.get('days', type=int)
     rank_filter = request.args.get('rank', 'all')
     if days not in (None, 1, 3, 7):
-        return jsonify({'error': '时间范围仅支持全赛段、1天、3天或7天'}), 400
+        return jsonify({'error': '时间范围仅支持本版本全部、近1天、近3天或近7天'}), 400
     if rank_filter not in ('all', 'legendary'):
         return jsonify({'error': '段位仅支持全部或传奇'}), 400
     ip = _mask_ip(request.headers.get('X-Forwarded-For', request.remote_addr))
@@ -2653,7 +2653,7 @@ def api_topcard():
         query = RunsQuery()
         result = query.topcard(hero=hero, top_n=top_n, days=days, all_phases=all_phases, sort_by=sort_by, rank_filter=rank_filter)
         _log_query('topcard', {'hero': hero, 'top': top_n, 'days': days, 'all_phases': all_phases, 'sort_by': sort_by, 'rank': rank_filter}, ip, len(result.get('top', [])), True)
-        return jsonify(result)
+        return jsonify({**result, 'season': RUNS_SEASON_ID, 'phase': None if all_phases else CURRENT_PHASE})
     except Exception as e:
         _log_query('topcard', {'hero': hero}, ip, 0, False)
         return jsonify({'error': str(e)}), 500
@@ -2789,7 +2789,7 @@ def api_hero_overview():
         query = RunsQuery()
         result = query.hero_overview(days=days, sort_by=sort_by, rank_filter=rank_filter)
         _log_query('hero_overview', {'days': days, 'sort_by': sort_by, 'rank': rank_filter}, ip, len(result.get('heroes', [])), True)
-        return jsonify(result)
+        return jsonify({**result, 'season': RUNS_SEASON_ID, 'phase': CURRENT_PHASE})
     except Exception as e:
         _log_query('hero_overview', {}, ip, 0, False)
         return jsonify({'error': str(e)}), 500

@@ -88,7 +88,7 @@
           const date=Number.isNaN(created.getTime())?'':created.toLocaleDateString('zh-CN',{timeZone:'Asia/Shanghai'});
           return `<article class="comp-share-example" data-example-id="${esc(example.id)}"><div class="comp-share-example-head"><b>案例 ${index+1} · ${esc(heroes[example.hero]||example.hero)} · 10 胜</b>${exampleFrequency(example)}<span>${esc(date)}</span></div><div class="comp-share-case-label">物品 · ${example.items?.length||0} 张</div><div class="comp-share-case-cards comp-share-case-items">${(example.items||[]).map(c=>caseCard(c,'Item')).join('')||'<span class="run-data-note">暂无物品数据</span>'}</div><div class="comp-share-case-label">技能 · ${example.skills?.length||0} 个</div><div class="comp-share-case-cards comp-share-case-skills">${(example.skills||[]).map(c=>caseCard(c,'Skill')).join('')||'<span class="run-data-note">暂无技能数据</span>'}</div></article>`;
         }).join('');
-        const scope = `${data.scope.phase} · ${data.scope.rank==='legendary'?'传奇':'全部段位'} · ${data.scope.days?'最近 '+data.scope.days+' 天':'当前阶段全部时间'}`;
+        const scope = `S${data.scope.phase} · ${data.scope.rank==='legendary'?'传奇':'全部段位'} · ${data.scope.days?'本版本内近 '+data.scope.days+' 天':'本版本全部'}`;
         return `<header class="run-share-header"><div class="run-share-info"><div class="comp-share-brand">巴扎丘Bot · 阵容分析${location.pathname.startsWith('/comp-preview')?' · 验收预览':''}</div><h2>${esc(row.hero_name)} · 核心组合</h2><p class="run-data-note">${esc(scope)} · ${row.sample_level==='explore'?'小样本探索':'主推荐'}</p></div><div class="run-share-qr"><img src="${esc(qr)}" alt="核心组合直达二维码"><div>扫码查看此组合</div></div></header>
           <section class="comp-share-core"><h3>核心物品</h3><div>${row.core.map(c=>shareCard(c)).join('')}</div></section>
           <div class="comp-share-metrics">${[[pct(row.rate),'样本 10 胜率'],[row.average_wins.toFixed(1),'平均胜场'],[num(row.count),'样本局数'],[num(row.ten_wins),'10 胜局数']].map(([value,label])=>`<div><strong>${value}</strong><span>${label}</span></div>`).join('')}</div>
@@ -127,7 +127,7 @@
     const base = data.baseline, scope = data.scope;
     const regular = data.groups.filter(g=>g.sample_level==='regular');
     const explore = data.groups.filter(g=>g.sample_level==='explore');
-    const state = `${scope.phase} · ${heroes[scope.hero]||'全部英雄'} · ${scope.rank==='legendary'?'传奇':'全部段位'} · ${scope.days?'最近 '+scope.days+' 天':'当前阶段全部时间'}`;
+    const state = `S${scope.phase} · ${heroes[scope.hero]||'全部英雄'} · ${scope.rank==='legendary'?'传奇':'全部段位'} · ${scope.days?'本版本内近 '+scope.days+' 天':'本版本全部'}`;
     const statistics = `<details class="comp-statistics"><summary>统计说明</summary><div class="comp-note">
       <p>10 胜率、平均胜场和样本局数基于全部匹配对局计算。原始采集不含 0 胜局，展示结果不能视为拿到物品后的获胜概率。</p>
       <p>搭配频率以各组合的 10 胜局数为分母；补充物品不含上方核心物品。实战样例中的物品、技能与截图来自同一局。</p>
