@@ -1796,6 +1796,10 @@ input[type="range"]::-moz-range-thumb{width:18px;height:18px;background:var(--ne
 </nav>
 
 <div class="main">
+  <div class="statistics-scope" style="display:flex;align-items:center;flex-wrap:wrap;gap:6px 14px;margin-bottom:20px;font-size:12px;color:var(--text-secondary)">
+    <strong id="statistics-version" style="color:var(--neon-cyan)">当前版本</strong>
+    <span>仅统计本版本对局，近 N 天也受此范围限制。</span>
+  </div>
   <!-- 一级职业 tab -->
 
   <!-- 职业概况 -->
@@ -1806,9 +1810,9 @@ input[type="range"]::-moz-range-thumb{width:18px;height:18px;background:var(--ne
     </div>
     <div class="overview-controls">
       <div class="form-group">
-        <label>时间范围</label>
+        <label>版本内时间</label>
         <select id="overview-days" onchange="loadOverview()">
-          <option value="">全赛段</option>
+          <option value="">本版本全部</option>
           <option value="7">近 7 天</option>
           <option value="3">近 3 天</option>
           <option value="1">近 1 天</option>
@@ -1856,9 +1860,9 @@ input[type="range"]::-moz-range-thumb{width:18px;height:18px;background:var(--ne
   <div id="panel-topcard">
     <div class="topcard-controls">
       <div class="form-group">
-        <label>时间范围</label>
+        <label>版本内时间</label>
         <select id="topcard-days" onchange="loadTopcard()">
-          <option value="">全赛段</option>
+          <option value="">本版本全部</option>
           <option value="7">近 7 天</option>
           <option value="3">近 3 天</option>
           <option value="1">近 1 天</option>
@@ -1886,7 +1890,7 @@ input[type="range"]::-moz-range-thumb{width:18px;height:18px;background:var(--ne
   <!-- 卡牌 T 表 -->
   <div id="panel-tier" style="display:none">
     <div class="topcard-controls">
-      <div class="form-group"><label>时间范围</label><select id="tier-days" onchange="loadTierTable()"><option value="">全赛段</option><option value="7">近 7 天</option><option value="3">近 3 天</option><option value="1">近 1 天</option></select></div>
+      <div class="form-group"><label>版本内时间</label><select id="tier-days" onchange="loadTierTable()"><option value="">本版本全部</option><option value="7">近 7 天</option><option value="3">近 3 天</option><option value="1">近 1 天</option></select></div>
       <div class="form-group"><label>段位</label><select id="tier-rank" onchange="loadTierTable()"><option value="all" selected>全部段位</option><option value="legendary">传奇</option></select></div>
     </div>
     <div id="tier-result"><div class="loading">加载中...</div></div>
@@ -1944,6 +1948,15 @@ window.fetch=function(url,opts){
 
 function trackPV(tab){
   fetch('/api/track/pv',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tab})}).catch(()=>{});
+}
+
+function updateStatisticsVersion(phase) {
+  if (!phase) return;
+  document.getElementById('statistics-version').textContent = '当前版本 S' + phase;
+  for (const id of ['overview-days', 'topcard-days', 'tier-days']) {
+    const option = document.getElementById(id)?.querySelector('option[value=""]');
+    if (option) option.textContent = 'S' + phase + ' 全部';
+  }
 }
 
 // 全局变量
@@ -2037,6 +2050,7 @@ async function loadOverview() {
 }
 
 function renderOverview(data, sortBy) {
+  updateStatisticsVersion(data.phase);
   window._overviewShareData = { data, sortBy };
   let heroes = [...(data.heroes || [])];
   if (!heroes.length) {
@@ -2119,7 +2133,7 @@ async function shareOverview() {
   const rank = document.getElementById('overview-rank')?.value || 'all';
   const node = document.createElement('div');
   node.className = 'overview-share-card';
-  node.innerHTML = `<h2>职业概况排行榜</h2><div class="overview-share-meta">${days ? `近 ${esc(days)} 天` : '全赛段'} · ${rank === 'legendary' ? '传奇' : '全部段位'} · 按${sortLabel}排序</div><div class="overview-share-podium">${podium}</div><div class="overview-share-list">${rows}</div><footer class="overview-share-watermark"><span>bazaarqiubot.com · ${new Date().toLocaleDateString('zh-CN')}</span><strong>BazaarQiuBot</strong></footer>`;
+  node.innerHTML = `<h2>职业概况排行榜</h2><div class="overview-share-meta">${data.phase ? `S${esc(data.phase)} · ` : ''}${days ? `近 ${esc(days)} 天` : '本版本全部'} · ${rank === 'legendary' ? '传奇' : '全部段位'} · 按${sortLabel}排序</div><div class="overview-share-podium">${podium}</div><div class="overview-share-list">${rows}</div><footer class="overview-share-watermark"><span>bazaarqiubot.com · ${new Date().toLocaleDateString('zh-CN')}</span><strong>BazaarQiuBot</strong></footer>`;
   document.body.appendChild(node);
   const oldLabel = button?.textContent;
   if (button) { button.disabled = true; button.textContent = '生成中…'; }
@@ -2205,6 +2219,7 @@ async function loadTopcard(){
 }
 
 function renderTopcard(data){
+  updateStatisticsVersion(data.phase);
   const top=data.top||[];
   if(!top.length){document.getElementById('topcard-result').innerHTML='<div class="empty">暂无数据</div>';return;}
   const medals=['🥇','🥈','🥉'];
@@ -2274,6 +2289,7 @@ function tierCardHtml(card, tierName, insufficient=false){
   return `<button class="tier-card bcp-trigger" ${window.BazaarCardPreview?.attrs(card,true)||''} style="--tier-color:${color}" onclick="openTierDetail(JSON.parse(decodeURIComponent('${payload}')),'${tierName||'数据不足'}')">${img}<span class="tier-card-name">${safeName}</span><span class="tier-card-stats">出场 ${(card.appearance_rate*100).toFixed(1)}% · 10胜 ${(card.win_rate*100).toFixed(1)}%</span><span class="tier-card-count">${card.appearance_count} 次</span></button>`;
 }
 function renderTierTable(data){
+  updateStatisticsVersion(data.phase);
   const groups=(data.tiers||[]).map(group=>`<section class="tier-section"><header style="--tier-color:${TIER_META[group.name]?.[0]||'var(--theme-muted, #B5B3D7)'}"><strong>${tierEscape(group.name)}</strong><span>${tierEscape(TIER_META[group.name]?.[1]||'')} · ${group.cards.length} 张</span></header><div class="tier-grid">${group.cards.map(card=>tierCardHtml(card,group.name)).join('')||'<span class="tier-empty">暂无卡牌</span>'}</div></section>`).join('');
   const insufficient=data.insufficient||[];
   document.getElementById('tier-result').innerHTML=`<div class="tier-summary">${tierEscape(data.hero)} · 共 ${data.total_runs} 局 · 基于终局阵容统计使用率与 10 胜率 · 动态样本门槛 ${data.sample_threshold} 次 · 出场率 70% + 10 胜率 30%</div>${groups}<details class="tier-insufficient"><summary>📊 数据不足（未参与评级）· ${insufficient.length} 张</summary><div class="tier-grid">${insufficient.map(card=>tierCardHtml(card,'',true)).join('')||'<span class="tier-empty">暂无</span>'}</div></details>`;
@@ -2377,7 +2393,7 @@ async function shareTierTable(){
     }).join('');
     return `<section class="tier-share-tier" style="--share-tier-color:${color}"><h3>${tierEscape(group.name)}</h3><div class="tier-share-grid">${cards}</div></section>`;
   }).join('');
-  node.innerHTML=`<h2>📋 ${tierEscape(data.hero)} 卡牌 T 表</h2><p>基于终局阵容统计使用率与 10 胜率 · 当前赛季 ${tierEscape(data.phase)} · ${data.rank_filter==='legendary'?'传奇':'全部段位'} · ${data.days?`近 ${data.days} 天`:'全赛段'}</p>${shareGroups}<footer class="tier-share-watermark"><span>bazaarqiubot.com · ${new Date().toLocaleDateString('zh-CN')}</span><strong>BazaarQiuBot</strong></footer>`;
+  node.innerHTML=`<h2>📋 ${tierEscape(data.hero)} 卡牌 T 表</h2><p>基于终局阵容统计使用率与 10 胜率 · 当前版本 S${tierEscape(data.phase)} · ${data.rank_filter==='legendary'?'传奇':'全部段位'} · ${data.days?`近 ${data.days} 天`:'本版本全部'}</p>${shareGroups}<footer class="tier-share-watermark"><span>bazaarqiubot.com · ${new Date().toLocaleDateString('zh-CN')}</span><strong>BazaarQiuBot</strong></footer>`;
   document.body.appendChild(node);
   try{
     await preloadShareImages(node,(complete,total,failed)=>{
@@ -2451,6 +2467,7 @@ async function loadComp(){
 }
 
 function renderComp(data){
+  updateStatisticsVersion(data.phase);
   const layers=data.layers||[];
   if(!layers.length){
     document.getElementById('comp-result').innerHTML='<div class="comp-empty">暂无满足条件的阵容数据<br><small>核心卡组合需出现≥50次</small></div>';

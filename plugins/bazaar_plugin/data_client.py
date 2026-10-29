@@ -34,7 +34,7 @@ MRMAO_API_BASE = "https://bazaarapi.mrmao.life"
 CURRENT_SEASON_ID = 19
 # 玩家 stat/history 接口的 seasonId 比实际赛季大 1（S19 → 20），随赛季自动更新。
 PLAYER_STAT_SEASON_ID = CURRENT_SEASON_ID + 1
-CURRENT_PHASE = "19.3"  # 当前赛季阶段，补丁后手动更新
+CURRENT_PHASE = "19.4"  # 当前赛季阶段，补丁后手动更新
 RUNS_SEASON_ID = 19
 
 # 4 个百科端点 → 本地缓存文件名
