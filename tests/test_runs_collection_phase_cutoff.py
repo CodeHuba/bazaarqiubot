@@ -26,14 +26,14 @@ def load_cutoff(name="collection_created_after"):
 
 def test_first_collection_query_starts_at_phase_boundary(monkeypatch):
     monkeypatch.delenv("BAZAAR_RUNS_CREATED_AFTER", raising=False)
-    now = datetime(2026, 10, 24, 1, 30, tzinfo=timezone.utc)
-    assert load_cutoff()(now) == "Sat, 24 Oct 2026 00:00:00 GMT"
+    now = datetime(2026, 10, 28, 17, 30, tzinfo=timezone.utc)
+    assert load_cutoff()(now) == "Wed, 28 Oct 2026 16:00:00 GMT"
 
 
 def test_collection_keeps_rolling_window_after_phase_boundary(monkeypatch):
     monkeypatch.delenv("BAZAAR_RUNS_CREATED_AFTER", raising=False)
-    now = datetime(2026, 10, 24, 6, 30, tzinfo=timezone.utc)
-    assert load_cutoff()(now) == "Sat, 24 Oct 2026 02:30:00 GMT"
+    now = datetime(2026, 10, 28, 22, 30, tzinfo=timezone.utc)
+    assert load_cutoff()(now) == "Wed, 28 Oct 2026 18:30:00 GMT"
 
 
 def test_explicit_collection_override_is_preserved(monkeypatch):
@@ -42,11 +42,11 @@ def test_explicit_collection_override_is_preserved(monkeypatch):
 
 
 @pytest.mark.parametrize("timestamp,accepted", [
-    ("2026-10-23T23:59:59.999Z", False),
-    ("2026-10-24T00:00:00Z", True),
-    ("2026-10-24T08:00:00+08:00", True),
-    ("2026-10-24T01:30:00+00:00", True),
-    ("2026-10-24T08:00:00", False),
+    ("2026-10-28T15:59:59.999Z", False),
+    ("2026-10-28T16:00:00Z", True),
+    ("2026-10-29T00:00:00+08:00", True),
+    ("2026-10-28T17:30:00+00:00", True),
+    ("2026-10-29T00:00:00", False),
     ("invalid", False),
     (None, False),
 ])
@@ -81,9 +81,9 @@ def test_previous_phase_is_neither_posted_nor_recorded_locally():
     session = Session()
     save.__globals__.update(API_SESSION=session, requests=session,
                             INGEST_API="test", INGEST_TOKEN="test")
-    old = {"id": "old", "createdAt": "2026-10-23T23:59:59Z", "statWins": 10}
-    new = {"id": "new", "createdAt": "2026-10-24T00:01:00Z", "statWins": 1}
-    low_wins = {"id": "zero", "createdAt": "2026-10-24T00:01:00Z", "statWins": 0}
+    old = {"id": "old", "createdAt": "2026-10-28T15:59:59Z", "statWins": 10}
+    new = {"id": "new", "createdAt": "2026-10-28T16:01:00Z", "statWins": 1}
+    low_wins = {"id": "zero", "createdAt": "2026-10-28T16:01:00Z", "statWins": 0}
     conn = Connection()
     assert save(conn, [old, new, low_wins]) == 1
     assert calls == [[new]]

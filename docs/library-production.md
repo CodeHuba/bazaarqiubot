@@ -42,7 +42,15 @@
 - 现有后台认证下实际检查新面板与统计 API，写入／相同事件重复上报均正确，合成测试事件随后精确清除；正式页面浏览产生的真实访问已在统计中确认。
 - 服务器本地原有阵容查询和职业概况仍返回 200，验收 staging 仍可访问。独立服务首次检查占用约 215MiB、峰值约 257MiB；这是本次抽查，不代表最大负载。
 
+## 2026-10-29：19.4 数据同步
+
+用户验收隔离预览后明确同意上线，独立图鉴与主站同步至 19.4。输入文件使用已校验的同源 GameData/官方中文，GameData fingerprint 为 `a55c3ceb36f0`；通过 `/etc/systemd/system/qiubot-library.service.d/season-data.conf` 显式设置 `LIBRARY_DATA_LABEL=19.4`。当前图鉴包含 1,857 张卡牌、38 位商人，skipped=0。
+
+版本目录与独立统计沿用既有部署，资产/标签同步后重启独立图鉴服务。八张新增或 ArtKey 变化的技能未取得可验证卡图，显示缺图占位；受影响的原图片缓存已单独备份并失效。输入、标签配置及图片回滚材料位于 `/opt/qiubot/backups/season_19.4_extra_20261029_170226`，数据更新与校验详情见[赛季更新 SOP](season-update-sop.md)。
+
 ## 回滚
+
+以下为初次功能发布的回滚说明；19.4 数据回滚还需按赛季 SOP 恢复配套资产和标签配置。
 
 服务器执行 `sudo /opt/qiubot/venv/bin/python /opt/qiubot-deploy-backups/library-20261026T162118Z/rollback.py --apply`。
 
