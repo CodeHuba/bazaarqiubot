@@ -333,6 +333,9 @@ class BazaarPlugin(NcatBotPlugin):
         if sub in {"winrate", "胜率"}:
             return await self._cmd_winrate(arg, event)
 
+        if sub in {'副角色', 'secondary'}:
+            return await self._secondary_hero_service().manual(arg, event)
+
         if sub == "testpush":
             user_id = getattr(event, "user_id", 0)
             if not ADMIN_QQ or str(user_id) != str(ADMIN_QQ):
@@ -870,3 +873,10 @@ class BazaarPlugin(NcatBotPlugin):
             await self._watch_service().daily()
         except Exception as exc:
             print(f"[{self.name}] 每日图片推送失败: {exc}", flush=True)
+
+
+    def _secondary_hero_service(self):
+        from .secondary_hero_service import SecondaryHeroService
+        if not hasattr(self, '_secondary_heroes'):
+            self._secondary_heroes = SecondaryHeroService(self.api)
+        return self._secondary_heroes
