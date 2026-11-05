@@ -56,6 +56,25 @@
 
 ## 回滚
 
+### 2026-11-06 卡片内部间距更新
+
+用户验收第三版（compact-grid-3）并明确授权上线。仅替换 `library.css` 和 `library.html`，文件 SHA256 与 staging 验收版一致，保留卡图比例、居中名称及连续浏览逻辑。收紧卡图上下、卡图到名称、名称到底框的留白；卡图区域随实际图高自适应。无服务重启。
+
+公网 HTML、CSS 和健康检查返回 200，正式 CSS 哈希一致，生产埋点标记保留；浏览器确认正式页面可用。后续浏览器测量与截图因超时未完成，不作为已验证项目。发布和检查记录 `.tmp/library-production/compact-deploy.stdout.log`、`compact-public-checks.json`。
+
+备份 `/opt/qiubot-deploy-backups/library-compact-20261105T174030Z`（UTC 命名）；回退本轮使用该目录的 `rollback.py --apply`，校验文件仍为本轮版本后恢复 CSS 和 HTML，保留业务数据和统计。回退此前的连续浏览或整个图鉴发布时，先回退本轮更新。
+
+### 2026-10-27 连续浏览更新
+
+用户验收 staging 后明确授权上线。仅替换图鉴 `library.js` 和 `library.html`，版本标记为 `continuous-grid-1`，与已验收 staging 文件 SHA256 一致；无需重启服务。
+
+移除手动分页，每帧最多生成 48 张并自动展示全部筛选结果；保留可视区域图片加载、最多 4 个并发及追加时的图片排队，切换筛选取消旧的分帧任务。生产埋点继续启用，自动生成列表不计为加载更多操作。
+
+发布前连续列表、图片队列、草稿去重和客户端埋点检查通过。公网 HTML、JS、健康检查及原有阵容查询页面均返回 200；正式浏览器确认默认英雄 124 张全部展示、无分页按钮、112 张卡图仍延迟加载，生产埋点标记启用。截图 `.tmp/library-production/continuous-live.png`。本轮备份 `/opt/qiubot-deploy-backups/library-continuous-20261027T033717Z`；回退本轮更新执行该目录下的 `rollback.py --apply`。脚本校验两个文件仍为本轮版本后恢复，保留数据、草稿和统计。
+
+若需要回退整个图鉴功能，应先回退本轮静态文件，再执行下方首次上线的回滚，避免原脚本校验拒绝覆盖。发布与公网检查记录位于 `.tmp/library-production/continuous-*`。
+
+
 以下为初次功能发布的回滚说明；后续赛季数据回滚还需按赛季 SOP 恢复配套资产和标签配置。
 
 服务器执行 `sudo /opt/qiubot/venv/bin/python /opt/qiubot-deploy-backups/library-20261026T162118Z/rollback.py --apply`。
