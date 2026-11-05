@@ -1,6 +1,7 @@
 import importlib.util
 import sqlite3
 from pathlib import Path
+import pytest
 
 
 SCRIPT = Path(__file__).parents[1] / "tools" / "season_archive_runs.py"
@@ -37,13 +38,14 @@ def make_source_db(path: Path) -> None:
     conn.close()
 
 
-def test_empty_online_database_preserves_schema_and_starts_new_phase(tmp_path: Path):
+@pytest.mark.parametrize("target_season,target_phase", [(18, "18.2"), (20, "20.1")])
+def test_empty_online_database_preserves_schema_and_starts_new_phase(tmp_path: Path, target_season, target_phase):
     source = tmp_path / "old.db"
     destination = tmp_path / "new.db"
     make_source_db(source)
 
     counts = module.create_empty_online_database(
-        source, destination, "2026-09-20T02:00:00+00:00", 18, "18.2"
+        source, destination, "2026-09-20T02:00:00+00:00", target_season, target_phase
     )
 
     assert counts == {
@@ -56,7 +58,7 @@ def test_empty_online_database_preserves_schema_and_starts_new_phase(tmp_path: P
     conn = sqlite3.connect(destination)
     assert conn.execute("PRAGMA quick_check").fetchone()[0] == "ok"
     assert conn.execute("SELECT * FROM phases").fetchall() == [
-        (18, "18.2", "2026-09-20T02:00:00+00:00")
+        (target_season, target_phase, "2026-09-20T02:00:00+00:00")
     ]
     assert conn.execute("SELECT COUNT(*) FROM runs").fetchone()[0] == 0
     assert conn.execute("SELECT COUNT(*) FROM run_combat_snapshots").fetchone()[0] == 0

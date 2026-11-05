@@ -31,8 +31,8 @@ from selenium.webdriver.support import expected_conditions as EC
 INGEST_API = 'http://101.34.58.217:1027/api/ingest'
 INGEST_TOKEN = 'eb3ff2d2de6ae942723c332e05882a8cfea2df1adf7d5b78'
 DB_PATH = os.path.join(os.path.dirname(__file__), '..', 'data', 'bazaar_runs_ids.db')  # 本地只存已采集 ID
-SEASON_START = 'Wed, 01 Jul 2026 16:32:42 GMT'  # 当前赛季开始时间
-PHASE_START_UTC = '2026-10-28T16:00:00+00:00'  # 19.4，北京时间 2026-10-29 00:00
+SEASON_START = 'Wed, 04 Nov 2026 19:00:00 GMT'  # S20 开始时间
+PHASE_START_UTC = '2026-11-04T19:00:00+00:00'  # 20.1，北京时间 2026-11-05 03:00
 MAX_PAGES = 50  # 最多拉取页数（每页20条）
 PAGE_DELAY_MIN = 3  # 每页最小间隔秒数
 PAGE_DELAY_MAX = 6  # 每页最大间隔秒数（随机化，模拟人类）

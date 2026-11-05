@@ -31,11 +31,11 @@ MRMAO_BASE = "https://bazaar.mrmao.life"
 MRMAO_API_BASE = "https://bazaarapi.mrmao.life"
 
 # 实际赛季 ID（赛季更新脚本维护）
-CURRENT_SEASON_ID = 19
-# 玩家 stat/history 接口的 seasonId 比实际赛季大 1（S19 → 20），随赛季自动更新。
+CURRENT_SEASON_ID = 20
+# 玩家 stat/history 接口的 seasonId 比实际赛季大 1（S20 → 21），随赛季自动更新。
 PLAYER_STAT_SEASON_ID = CURRENT_SEASON_ID + 1
-CURRENT_PHASE = "19.4"  # 当前赛季阶段，补丁后手动更新
-RUNS_SEASON_ID = 19
+CURRENT_PHASE = "20.1"  # 当前赛季阶段，补丁后手动更新
+RUNS_SEASON_ID = 20
 
 # 4 个百科端点 → 本地缓存文件名
 WIKI_ENDPOINTS = {

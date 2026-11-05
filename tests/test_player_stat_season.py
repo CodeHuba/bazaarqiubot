@@ -73,13 +73,13 @@ def test_player_stat_chain_uses_next_season_id(monkeypatch, season_id):
     asyncio.run(module.BazaarDataClient().get_player_stat("Koucha_"))
 
     assert module.CURRENT_SEASON_ID == season_id
-    assert module.RUNS_SEASON_ID == 19
+    assert module.RUNS_SEASON_ID == 20
     assert captured["url"] == "https://bazaarapi.mrmao.life/api/user/comprehensive-info"
     assert captured["params"] == {"username": "Koucha_", "seasonId": season_id + 1}
 
 
 @pytest.mark.parametrize("command", ["stat", "history", "hist", "历史", "history --cb"])
-def test_player_commands_send_api_season_20(command, monkeypatch):
+def test_player_commands_send_api_season_21(command, monkeypatch):
     from test_bz_db_command import load_plugin_module, FakeEvent
 
     module = load_plugin_module(monkeypatch)
@@ -102,5 +102,5 @@ def test_player_commands_send_api_season_20(command, monkeypatch):
     sub, _, flags = command.partition(" ")
     result = asyncio.run(plugin._dispatch(sub, f"Koucha_ {flags}".strip(), FakeEvent()))
 
-    assert captured == [{"username": "Koucha_", "seasonId": "20"}]
+    assert captured == [{"username": "Koucha_", "seasonId": "21"}]
     assert "本赛季无记录" in result
