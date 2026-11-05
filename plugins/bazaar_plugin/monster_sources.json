@@ -1193,6 +1193,33 @@
       "day": "",
       "url": "https://bazaardb.gg/card/kxptgjnpgtmtyfbcblbbmy0l7g/Mr.-Moo",
       "art": "https://s.bazaardb.gg/v1/z19.0/2714536b754b926c841405594e970c0ba6e4e8a1_p@256.webp?v=8"
+    },
+    {
+      "name": "Bananniboss",
+      "level": 15,
+      "tier": "Legendary",
+      "day": "",
+      "url": "https://bazaardb.gg/card/51ycyz1s20y94s4whhj06fjkgm/%E9%A3%9F%E8%95%89%E9%A6%96%E9%A2%86",
+      "art": "https://s.bazaardb.gg/v1/z20.0/e7f15343fd20978f2bdcdef2f2d59b65ba4ac812_p@400.webp?v=8",
+      "art_key": "6fae3f36b9394f9cbad6d0cae9205123",
+      "entity_ids": [
+        "1a3f7d6a-3f24-42dc-ba27-9d4bf199d0b8",
+        "2048fa32-9254-4858-8ec4-ad2815977e0b"
+      ],
+      "retrieved_at": "2026-11-05"
+    },
+    {
+      "name": "Barnacle Bigwig",
+      "level": 13,
+      "tier": "Diamond",
+      "day": "",
+      "url": "https://bazaardb.gg/card/v0yskq7vwq6t6cdw996wxtw0wt/%E8%97%A4%E5%A3%B6%E5%A4%A7%E4%BA%A8",
+      "art": "https://s.bazaardb.gg/v1/z20.0/fd55e942b30fb84913a244d8f4fd4beddb8c405d_p@400.webp?v=8",
+      "art_key": "978ad7d6f8504f4f802467a00a008475",
+      "entity_ids": [
+        "9f8fa7f6-c322-4ff6-b81f-c379305b97f4"
+      ],
+      "retrieved_at": "2026-11-05"
     }
   ],
   "cards": {
@@ -1224,5 +1251,7 @@
       "art": "https://s.bazaardb.gg/v1/z19.0/4a0849851183b7dbc2057c945a4f6f40120e5cf3@256.webp?v=8",
       "art_key": "Icon_Skill_ClosingSpeed.png"
     }
-  }
+  },
+  "art_updated_at": "2026-11-05",
+  "art_update_note": "S20.1 new encounters: verified exact entity ID or shared nonempty native ArtKey; appearance days not inferred."
 }

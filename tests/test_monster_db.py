@@ -82,6 +82,34 @@ def test_same_named_encounters_keep_distinct_forms_and_missing_day_is_not_guesse
     assert s.data.day_label(later['day']) == '暂无可靠天数资料'
 
 
+def test_id_bound_monster_art_does_not_leak_to_same_named_form(setup_monsters):
+    s = setup_monsters
+    first = deepcopy(s.encounter)
+    first['ArtKey'] = 'native-art'
+    second = deepcopy(first)
+    second['Id'] = 'second'
+    with sqlite3.connect(s.db) as db:
+        db.execute('UPDATE cards SET Data=? WHERE Id=?', (json.dumps(first), first['Id']))
+        db.execute('INSERT INTO cards VALUES (?,?)', (second['Id'], json.dumps(second)))
+    sources = json.loads(s.repo.sources.read_text())
+    sources['encounters'][0].update(entity_ids=[first['Id']], art_key='native-art', retrieved_at='2026-11-05')
+    s.repo.sources.write_text(json.dumps(sources))
+    forms = {entry['id']: entry for entry in s.repo.search('霜兽')}
+    assert forms[first['Id']]['art']
+    assert forms[first['Id']]['source_date'] == '2026-11-05'
+    assert forms['second']['art'] == ''
+
+
+def test_monster_art_with_outdated_native_key_is_not_reused(setup_monsters):
+    s = setup_monsters
+    sources = json.loads(s.repo.sources.read_text())
+    sources['encounters'][0].update(entity_ids=[s.encounter['Id']], art_key='old-art')
+    s.repo.sources.write_text(json.dumps(sources))
+    entry = s.repo.search('霜兽')[0]
+    assert entry['art'] == ''
+    assert entry['day'] == ''
+
+
 def test_missing_historical_tier_is_marked_instead_of_using_a_different_tier(setup_monsters):
     s = setup_monsters
     with sqlite3.connect(s.db) as db:
