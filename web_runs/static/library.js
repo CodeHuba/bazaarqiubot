@@ -13,8 +13,9 @@
   const sizeNames = {Small:'小型',Medium:'中型',Large:'大型'};
   const DRAFT_KEY = 'bazaarqiubot-library-drafts-v1' + base, CURRENT_KEY = 'bazaarqiubot-library-current-v1' + base;
   const filter = {type:'Item',hero:'Jules',tags:[],sizes:[],qualities:[],merchant:'',q:'',hidden:false,common:false,sort:'hero'};
-  const PAGE_SIZE = 12, IMAGE_CONCURRENCY = 4;
-  let catalog = [], cardMap = new Map(), merchants = [], version = '', fingerprint = '', limit = PAGE_SIZE, allTags = false;
+  const RENDER_BATCH_SIZE = 48, IMAGE_CONCURRENCY = 4;
+  let catalog = [], cardMap = new Map(), merchants = [], version = '', fingerprint = '', allTags = false;
+  let catalogRenderFrame = 0, catalogRenderSerial = 0;
   let catalogImageObserver = null, catalogImageMargin = '', observedBuilderHeight = 0;
   const imageQueue = new Set(), imageJobs = new Map();
   let build = {schema:1,name:'未命名构筑',hero:'Jules',items:[],skills:[]}, past = [], future = [], moving = null;
@@ -191,35 +192,47 @@
       image.src=source;
     }
   }
-  function observeCatalogImages() {
-    // Re-observe only the current grid so removed cards cannot retain pending work.
-    catalogImageObserver?.disconnect();imageQueue.clear();
-    for(const [image,cleanup] of imageJobs)if(!image.isConnected){cleanup();image.removeAttribute('src');}
+  function observeCatalogImages(addedImages=null) {
     const margin=`100px 0px ${100-Math.ceil($('builder').offsetHeight)}px 0px`;
-    if(catalogImageMargin!==margin){catalogImageObserver=null;catalogImageMargin=margin;}
+    if(!addedImages||catalogImageMargin!==margin){
+      // A new filter or changed viewport cancels stale work; appends keep the queue.
+      catalogImageObserver?.disconnect();imageQueue.clear();
+      for(const [image,cleanup] of imageJobs)if(!image.isConnected){cleanup();image.removeAttribute('src');}
+      if(catalogImageMargin!==margin){catalogImageObserver=null;catalogImageMargin=margin;}
+      addedImages=$('card-grid').querySelectorAll('img[data-src]');
+    }
     if(!catalogImageObserver&&window.IntersectionObserver)catalogImageObserver=new IntersectionObserver(entries=>{
       for(const entry of entries){if(entry.isIntersecting)imageQueue.add(entry.target);else imageQueue.delete(entry.target);}
       pumpCatalogImages();
     },{rootMargin:margin,threshold:0.01});
-    for(const image of $('card-grid').querySelectorAll('img[data-src]')) {
+    for(const image of addedImages) {
       if(catalogImageObserver)catalogImageObserver.observe(image);else imageQueue.add(image);
     }
     pumpCatalogImages();
   }
-  function renderGrid({append=false}={}) {
+  function renderGrid() {
+    cancelAnimationFrame(catalogRenderFrame);
+    const serial=++catalogRenderSerial, grid=$('card-grid');
     renderedCards = filteredCards();
     $('result-count').textContent = renderedCards.length.toLocaleString();
     $('result-label').textContent = filter.type === 'Skill' ? '个技能' : '件物品';
-    const previous=append?$('card-grid').querySelectorAll('.catalog-card').length:0;
-    const cards=renderedCards.slice(previous,limit).map(cardHTML).join('');
-    if(append)$('card-grid').insertAdjacentHTML('beforeend',cards);
-    else $('card-grid').innerHTML=cards||'<div class="empty-state"><strong>还没有找到匹配的卡牌</strong>试试减少筛选条件，或换一个关键词。</div>';
+    const cards=renderedCards;
+    grid.innerHTML=cards.length?'':'<div class="empty-state"><strong>还没有找到匹配的卡牌</strong>试试减少筛选条件，或换一个关键词。</div>';
+    grid.setAttribute('aria-busy',String(cards.length>0));
     observeCatalogImages();
-    $('load-more').hidden = renderedCards.length <= limit;
-    const remaining=Math.max(0,renderedCards.length-limit);
-    $('load-more').textContent = `再加载 ${Math.min(PAGE_SIZE,remaining)} 张 · 剩余 ${remaining} 张`;
+    let offset=0;
+    function appendBatch(){
+      if(serial!==catalogRenderSerial)return;
+      const end=Math.min(offset+RENDER_BATCH_SIZE,cards.length);
+      grid.insertAdjacentHTML('beforeend',cards.slice(offset,end).map(cardHTML).join(''));
+      observeCatalogImages(Array.from(grid.children).slice(offset).map(card=>card.querySelector('img[data-src]')).filter(Boolean));
+      offset=end;
+      if(offset<cards.length)catalogRenderFrame=requestAnimationFrame(appendBatch);
+      else {catalogRenderFrame=0;grid.setAttribute('aria-busy','false');}
+    }
+    if(cards.length)appendBatch();
   }
-  function refresh() { limit = PAGE_SIZE; renderFilters(); renderGrid(); }
+  function refresh() { renderFilters(); renderGrid(); }
 
   function renderBuilder() {
     $('build-name').value = build.name;
@@ -476,9 +489,9 @@
     $('tag-options').onclick=event=>{const button=event.target.closest('[data-tag]');if(button){toggleValue(filter.tags,button.dataset.tag);refresh();}};
     document.querySelectorAll('[data-size]').forEach(button=>button.onclick=()=>{toggleValue(filter.sizes,button.dataset.size);refresh();});
     document.querySelectorAll('[data-quality]').forEach(button=>button.onclick=()=>{toggleValue(filter.qualities,button.dataset.quality);refresh();});
-    $('search').oninput=event=>{filter.q=event.target.value;limit=PAGE_SIZE;renderGrid();clearTimeout(searchTrackTimer);if(filter.q.trim())searchTrackTimer=setTimeout(()=>{if(filter.q.trim())track('search');},700);};
+    $('search').oninput=event=>{filter.q=event.target.value;renderGrid();clearTimeout(searchTrackTimer);if(filter.q.trim())searchTrackTimer=setTimeout(()=>{if(filter.q.trim())track('search');},700);};
     $('tag-search').oninput=renderTags;
-    $('sort').onchange=event=>{filter.sort=event.target.value;limit=PAGE_SIZE;renderGrid();track('filter','sort');};
+    $('sort').onchange=event=>{filter.sort=event.target.value;renderGrid();track('filter','sort');};
     $('include-common').onchange=event=>{filter.common=event.target.checked;refresh();track('filter','common');};
     $('hidden-tags').onchange=event=>{filter.hidden=event.target.checked;refresh();track('filter','hidden');};
     $('merchant-search').oninput=renderMerchantOptions;
@@ -487,7 +500,6 @@
     document.addEventListener('pointerdown',event=>{if(!$('merchant-picker').contains(event.target))$('merchant-picker').open=false;});
     $('tags-expand').onclick=()=>{allTags=!allTags;$('tags-expand').textContent=allTags?'收起标签':'展开全部';renderTags();};
     $('reset').onclick=()=>{Object.assign(filter,{hero:'',tags:[],sizes:[],qualities:[],merchant:'',q:'',hidden:false,common:false,sort:'hero'});$('search').value='';$('tag-search').value='';$('sort').value='hero';refresh();};
-    $('load-more').onclick=()=>{limit+=PAGE_SIZE;renderGrid({append:true});track('load_more');};
     let editingName=false;
     $('build-name').oninput=event=>{
       if(!editingName){past.push(clone(build));future=[];editingName=true;}

@@ -119,3 +119,21 @@ html[data-theme=light]{--bronze:#946137;--silver:#697b8c;--qgold:#927015;--diamo
 .card-art.image-pending img{opacity:0}
 .card-art.image-pending:after{content:'';position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);height:70%;width:calc(27px * var(--units));max-width:90%;border:1px solid var(--border);border-radius:5px;background:var(--surface);opacity:.55;pointer-events:none}
 .catalog-card[data-type=Skill] .card-art.image-pending:after{width:70px;height:70px;border-radius:10px}
+
+/* Fit more cards per row while retaining native item proportions. */
+.card-grid{grid-template-columns:repeat(auto-fill,minmax(96px,1fr));column-gap:6px;row-gap:8px}
+.catalog-card .card-art{--catalog-art-height:min(98px,calc((100cqw - 10px) * 2 / 3));height:calc(var(--catalog-art-height) + 4px);margin:3px 3px 0}
+.catalog-card .card-info{padding:2px 4px 5px}
+.catalog-card .card-name{font-size:12px;line-height:18px}
+.catalog-card .card-art img{--item-art-height:var(--catalog-art-height)}
+.catalog-card[data-type=Skill] .card-art img{width:var(--catalog-art-height);height:var(--catalog-art-height)}
+@media(min-width:1700px){
+  .card-grid{grid-template-columns:repeat(auto-fill, minmax(104px, 1fr));}
+}
+@media(max-width:800px){
+  .card-grid{grid-template-columns:repeat(4,minmax(0,1fr));gap:5px}
+  .catalog-card .card-art{--catalog-art-height:min(86px,calc((100cqw - 10px) * 2 / 3));margin:3px 3px 0}
+  .catalog-card .card-info{padding:2px 3px 5px}
+  .catalog-card .card-name{font-size:11px}
+}
+@media(max-width:359px){.card-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}

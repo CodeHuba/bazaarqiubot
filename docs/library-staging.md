@@ -9,11 +9,13 @@
 
 ## 当前范围
 
+2026-11-06 第三版已验收并授权生产上线：用户澄清主要为卡图、边框、文字之间的内部留白。本版保持第二版列宽与列数及卡图比例，卡图区域高度随卡图实际尺寸自适应，移除固定高度产生的上下空白，减少名称内边距。公网 staging 1280px 验证每行仍为 9 张，首张图上边到外框约 6px、图到名称 4px、名称到底框 6px，卡片总高约 93px；图片高度约 59px，与上一版保持相同量级。版本 compact-grid-3，生产已同步，发布记录见 docs/library-production.md。记录 `.tmp/library-staging/compact-grid-v3-update.stdout.log`；截图 `.tmp/library-staging/compact-grid-v3-staging.png`。
+
 1760 条可查询物品及技能（按 Package 隐藏标识排除 90 条包裹）、38 个已支持静态条件的商人。网格仅显示卡图与中文名称；桌面悬停或键盘聚焦时显示单张卡牌的加入按钮，触屏从点击详情中加入，无悬停详情。小／中／大卡图来自原比例资源，宽高比分别为 1:2、1:1、3:2。
 
 包裹不再出现在查询、筛选标签和新增构筑入口。底层卡牌映射仍保留历史条目，避免含包裹的旧草稿整体无法打开；不修改游戏数据库。
 
-图鉴首批渲染 12 张卡牌，每次加载更多追加 12 张，已显示的卡牌不重建。网格图片使用可见区域附近的观察器和最多 4 个并发请求，扣除底部构筑栏遮挡区域；搜索或筛选更新时清理旧图片任务，图片失败后继续加载后续图片。移除密度切换按钮和相关样式／逻辑。
+连续浏览优化已验收，并于 2026-10-27 经用户明确授权上线。取消「加载更多」，自动连续展示全部筛选结果，每帧最多追加 48 张卡牌，不等待图片完成。追加时保留已有图片观察和排队任务；筛选更新会取消旧的分帧任务。网格图片仍使用可见区域附近的观察器和最多 4 个并发请求，扣除底部构筑栏遮挡区域；搜索或筛选更新时清理旧图片任务，图片失败后继续加载后续图片。密度切换保持移除。生产发布与回滚见 docs/library-production.md。
 
 支持筛选、物品站位、技能、品质附魔、本机草稿及图片导出。按用户验收反馈，已移除分享链接按钮、生成和复制弹窗；此前的构筑链接仍可打开，以兼容已有快照。staging 的草稿键和所有资源/API 都带独立前缀。
 
@@ -58,6 +60,7 @@
 - 排除包裹记录：.tmp/library-staging/no-packages-update.stdout.log；核实 90 条包裹均有 Package 隐藏标识。本地浏览器以全部英雄搜索 Package／包裹均为零结果，蓝莓派仍可正常查询。
 - 分批与图片加载优化记录：.tmp/library-staging/small-batches-update.stdout.log；node tests/test_library_images.cjs 验证并发、延迟请求、滚出视区、失败、追加、搜索取消、构筑栏尺寸变化和兼容回退。本地浏览器确认首批 12 张、追加后 24 张、搜索重置、图片按需请求及详情正常。
 - 草稿重复保存修复记录：.tmp/library-staging/draft-dedup-update.stdout.log；node tests/test_library_drafts.cjs 验证连续保存、保存后新建、恢复草稿后 UID 变化、内容修改、空构筑与保存失败保护。本地浏览器实际打开已有草稿、连续保存两次并新建，草稿数量保持 1，随后撤销恢复测试前构筑；截图 .tmp/library-staging/draft-dedup-preview.png。
+- 连续浏览验收记录（现已上线）：.tmp/library-staging/continuous-grid-update.stdout.log；node tests/test_library_grid.cjs 验证 1760 条结果分帧自动生成、顺序、去重、旧筛选任务取消及空结果，图片队列、草稿和客户端埋点回归通过。本地窄屏浏览器确认全部英雄 1243 件物品自动展示、仅 6 张附近卡图请求，直接滚至末尾后末张图按需加载。公网新版确认默认英雄 124 张全部展示、无加载更多按钮、118 张图仍延迟加载；截图 .tmp/library-staging/continuous-grid-staging.png。仅更新 staging 三个静态文件，生产图鉴 JS 和主站 app.py 校验保持一致。
 - 服务端部署记录：/var/lib/qiubot-library-staging/deployment.json。
 - Caddy 备份：/etc/caddy/Caddyfile.library-backup-20261026T092222Z。
 
