@@ -166,6 +166,10 @@ def test_db_returns_single_local_candidate_as_full_card(monkeypatch, tmp_path):
 
 def test_db_multiple_local_candidates_still_returns_suggestions(monkeypatch, tmp_path):
     module = load_plugin_module(monkeypatch)
+    # Candidate routing uses synthetic English titles, independent of any
+    # installed season translation cache on the developer's machine.
+    trans = importlib.import_module("plugins.bazaar_plugin.translations")
+    monkeypatch.setattr(trans, "get_zh", lambda _name: "")
     plugin = module.BazaarPlugin()
     db_path = tmp_path / "GameData.db"
     db_path.write_text("unused")

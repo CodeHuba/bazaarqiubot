@@ -95,7 +95,7 @@ def build_document(raw, database, quality='', enchantment='', show_enchants=Fals
             'startingQuality': raw.get('StartingTier') or default['quality'], 'selectedQuality': quality,
             'selectedEnchantment': selected_name, 'variants': variants, 'comparison': comparison,
             'enchants': enchants, 'showEnchants': show_enchants,
-            'stamp': hashlib.sha256((default['version']+json.dumps([quality, enchantment, show_enchants, art], ensure_ascii=False)).encode()).hexdigest()[:24]}
+            'stamp': hashlib.sha256((default['version']+json.dumps([raw['Id'], quality, enchantment, show_enchants, art], ensure_ascii=False)).encode()).hexdigest()[:24]}
 
 
 def effect_text(effect):

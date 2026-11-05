@@ -37,6 +37,21 @@ def test_all_qualities_and_enchant_self_modifiers_use_consistent_attributes(card
     assert next(r for r in selected['comparison'] if r['label'] == '冻结时长')['values'] == ['2秒']
 
 
+def test_missing_art_cards_do_not_share_rendered_cache_paths(cards, tmp_path, monkeypatch):
+    other = deepcopy(cards.raw)
+    other['Id'] = 'second-item'
+    other['Localization']['Title'] = {'Text': 'Second Item'}
+    with sqlite3.connect(cards.db) as db:
+        db.execute('INSERT INTO cards VALUES (?, ?)', (other['Id'], json.dumps(other)))
+    docs = [cards.sheet.build_document(raw, cards.db, repository=cards.repo.preview)
+            for raw in (cards.raw, other)]
+    assert docs[0]['art'] == docs[1]['art'] == ''
+    monkeypatch.setattr(cards.sheet, 'load_art', lambda *_args, **_kwargs: None)
+    first = cards.sheet.render_document(docs[0], output=tmp_path/'sheets')
+    second = cards.sheet.render_document(docs[1], output=tmp_path/'sheets')
+    assert set(first).isdisjoint(second)
+
+
 def test_hidden_tags_reach_image_text_and_enchant_summary_without_mixing_base(cards):
     raw = deepcopy(cards.raw)
     raw['HiddenTags'] = ['Shield', 'ShieldReference']
