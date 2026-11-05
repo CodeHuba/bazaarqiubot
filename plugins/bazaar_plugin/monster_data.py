@@ -58,13 +58,15 @@ class MonsterRepository:
             name = _plain(self.preview._translate(loc or {'Text': name_en}, 'zh-CN'))
             aliases = {game.normalize_card_name(n) for n in (name, name_en, encounter.get('InternalName'), monster.get('InternalName')) if n}
             matches = [s for s in sources.get('encounters', [])
-                       if game.normalize_card_name(s['name']) in aliases
-                       and s.get('level') == level and s.get('tier') == encounter.get('StartingTier')]
+                       if (encounter['Id'] in s['entity_ids'] if s.get('entity_ids')
+                           else game.normalize_card_name(s['name']) in aliases)
+                       and s.get('level') == level and s.get('tier') == encounter.get('StartingTier')
+                       and (not s.get('art_key') or s['art_key'] == encounter.get('ArtKey'))]
             source = matches[0] if len(matches) == 1 else {}
             entries.append({'id': encounter['Id'], 'name': name, 'name_en': name_en, 'aliases': sorted(aliases),
                             'level': level, 'health': attrs.get('HealthMax'), 'tier': encounter.get('StartingTier'),
                             'day': source.get('day') or '', 'art': source.get('art') or '',
-                            'source': source.get('url') or '', 'source_date': sources.get('retrieved_at', ''),
+                            'source': source.get('url') or '', 'source_date': source.get('retrieved_at') or sources.get('retrieved_at', ''),
                             'gold': encounter.get('RewardCombatGold'), 'xp': encounter.get('RewardCombatXp'),
                             'sandstorm': encounter.get('SandstormEnabled'), 'player': player,
                             'board_override': encounter.get('BoardOverride'), 'version': encounter.get('Version', '')})
