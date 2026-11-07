@@ -3,11 +3,12 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+import re
 import uuid
 
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
 
-from .monster_image import _font_path, load_art
+from .monster_image import _font_path, load_art as _load_remote_art
 
 ROOT = Path(__file__).resolve().parents[2]
 OUTPUT = ROOT / 'data/charts/winrate'
@@ -15,7 +16,39 @@ CACHE = ROOT / 'plugins/bazaar_plugin/cache/monster_art'
 BG, PANEL, LINE = '#101621', '#192332', '#303e50'
 TEXT, MUTED, GOLD, GREEN = '#f3f0e8', '#a8b5c7', '#e9c27b', '#8ce1c1'
 CST = timezone(timedelta(hours=8))
+LOCAL_ART = ROOT / 'web_runs/static/comp-art'
 WIDTH = 1080
+
+
+def load_art(url, size=None, cache=CACHE):
+    """Read same-host published art locally; retain native CDN loading support."""
+    if not isinstance(url, str) or not url:
+        return None
+    match = re.fullmatch(r'/static/comp-art/([a-f0-9]{64}\.webp)', url)
+    if match:
+        try:
+            folder = LOCAL_ART.resolve()
+            path = (folder / match.group(1)).resolve()
+            if path.parent != folder or path.stat().st_size > 4*1024*1024:
+                return None
+            with Image.open(path) as image:
+                if image.width*image.height > 4_000_000:
+                    return None
+                ratio = {'Small': .5, 'Medium': 1, 'Large': 1.5}.get(size)
+                if ratio is not None and abs(image.width/image.height-ratio) >= .015:
+                    return None
+                image.load()
+                result = image.convert('RGBA')
+                # Published web thumbnails can be smaller than the bot's art
+                # slots. Normalize their native shape so thumbnail() downstream
+                # doesn't leave tiny art floating in a large empty slot.
+                if ratio is not None and result.height < 400:
+                    result = result.resize((round(400*ratio), 400), Image.Resampling.LANCZOS)
+                return result
+        except (OSError, ValueError, Image.DecompressionBombError):
+            return None
+    return _load_remote_art(url, size, cache=cache)
+
 
 
 def render_winrate(result, output=None, *, queried_at=None, preview=False):
