@@ -20,6 +20,31 @@ LOCAL_ART = ROOT / 'web_runs/static/comp-art'
 WIDTH = 1080
 
 
+def scope_label(scope):
+    if not scope or not scope.get('season'):
+        return ''
+    phase = scope.get('phase')
+    label = f"统计范围：S{scope['season']} · {phase}赛段" if phase else f"统计范围：S{scope['season']} 全赛季"
+    if scope.get('days'):
+        label += f" · 最近{scope['days']}天"
+    return label
+
+
+def time_range_label(scope):
+    if not scope or not scope.get('end_at'):
+        return ''
+    def local_time(value):
+        date = datetime.fromisoformat(value.replace('Z', '+00:00'))
+        if date.tzinfo is None:
+            date = date.replace(tzinfo=timezone.utc)
+        return date.astimezone(CST).strftime('%Y-%m-%d %H:%M')
+    try:
+        start = local_time(scope['start_at']) if scope.get('start_at') else '起点未记录'
+        return '数据时间：'+start+' — '+local_time(scope['end_at'])+'（北京时间）'
+    except (ValueError, TypeError):
+        return ''
+
+
 def load_art(url, size=None, cache=CACHE):
     """Read same-host published art locally; retain native CDN loading support."""
     if not isinstance(url, str) or not url:
@@ -86,7 +111,10 @@ def render_winrate(result, output=None, *, queried_at=None, preview=False):
     title_size = 55 if font(55, True).getlength(title) <= 984 else 40
     title_lines = wrap(title, 984, title_size)
     title_height = 66 if len(title_lines) == 1 else len(title_lines) * (title_size + 12)
-    art_top = 126 + title_height
+    scope = result.get('scope')
+    scope_text = scope_label(scope)
+    time_text = time_range_label(scope)
+    art_top = 126 + title_height + (60 if scope_text else 0) + (44 if time_text else 0)
     details = result.get('card_details') or []
     # Keep 1:2, 1:1 and 3:2 art ratios. Longer combinations wrap into rows.
     art_height = 356 if len(names) <= 3 else 260
@@ -129,6 +157,10 @@ def render_winrate(result, output=None, *, queried_at=None, preview=False):
         text(949, 42, '效果预览', 23, GOLD, align='center')
     for index, line in enumerate(title_lines):
         text(48, 106 + index * (title_size + 12), line, title_size, TEXT, True)
+    if scope_text:
+        text(50, 116 + title_height, scope_text, 25, GOLD, True)
+    if time_text:
+        text(50, 158 + title_height, time_text, 23, MUTED)
 
     panel((48, art_top, 1032, after_art))
     for row_index, row in enumerate(rows):
@@ -183,7 +215,8 @@ def render_winrate(result, output=None, *, queried_at=None, preview=False):
 
     denominator = '同时含这些卡牌的对局数' if len(names)>1 else '含该卡牌的对局数'
     text(50, after_art+490, '10胜率 = 达到10胜的对局数 ÷ '+denominator, 23, MUTED)
-    text(50, after_art+538, '已收录对局  ·  查询于 '+queried_at.astimezone(CST).strftime('%Y-%m-%d %H:%M'), 21, MUTED)
+    coverage = '仅统计本赛段已收录对局' if scope and scope.get('phase') else '已收录对局'
+    text(50, after_art+538, coverage+' · 查询于 '+queried_at.astimezone(CST).strftime('%Y-%m-%d %H:%M'), 21, MUTED)
     text(1032, after_art+538, '#bz winrate' if len(names)>1 else '#bz winrate '+names[0], 21, GOLD, align='right')
     folder = Path(output) if output else OUTPUT
     folder.mkdir(parents=True, exist_ok=True)
