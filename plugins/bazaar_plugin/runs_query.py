@@ -577,6 +577,28 @@ class RunsQuery:
             self.load()
 
         # 解析卡牌 -> cardId 集合
+        from datetime import timezone as _tz
+        query_time = _dt.now(_tz.utc)
+        cutoff_time = query_time - _td(days=days) if days else None
+        range_start = None
+        try:
+            phase_sql = 'SELECT MIN(start_time) FROM phases WHERE season=?'
+            phase_params = [RUNS_SEASON_ID]
+            if not all_phases:
+                phase_sql += ' AND phase=?'
+                phase_params.append(CURRENT_PHASE)
+            value = self.conn.execute(phase_sql, phase_params).fetchone()[0]
+            if value:
+                range_start = _dt.fromisoformat(value.replace('Z', '+00:00'))
+                if range_start.tzinfo is None:
+                    range_start = range_start.replace(tzinfo=_tz.utc)
+        except (sqlite3.Error, ValueError, TypeError):
+            pass  # Older databases can lack phase metadata; don't invent a start.
+        if cutoff_time and (range_start is None or cutoff_time > range_start):
+            range_start = cutoff_time
+        scope = {'season': RUNS_SEASON_ID, 'phase': None if all_phases else CURRENT_PHASE,
+                 'days': days, 'start_at': range_start.isoformat() if range_start else None,
+                 'end_at': query_time.isoformat()}
         card_ids_sets = []
         not_found = []
         card_names = []
@@ -596,6 +618,7 @@ class RunsQuery:
             return {
                 'total': 0, 'ten_win': 0, 'rate': 0.0,
                 'card_names': card_names, 'card_details': card_details, 'not_found': not_found,
+                'scope': scope,
             }
 
         # SQL 层用有索引的字段（hero/rank/days/phase）缩小结果集
@@ -609,7 +632,7 @@ class RunsQuery:
             sql += " AND LOWER(hero) = LOWER(?)"
             params.append(hero)
         if days:
-            cutoff = (_dt.utcnow() - _td(days=days)).isoformat()
+            cutoff = cutoff_time.replace(tzinfo=None).isoformat()
             sql += " AND created_at >= ?"
             params.append(cutoff)
         if rank_filter == 'legendary':
@@ -644,6 +667,7 @@ class RunsQuery:
             'card_names': card_names,
             'card_details': card_details,
             'not_found': not_found,
+            'scope': scope,
         }
 
 
