@@ -433,41 +433,31 @@ class BazaarPlugin(NcatBotPlugin):
 
 
     async def _cmd_winrate(self, arg: str, event=None) -> str | None:
-        """#bz winrate <卡牌1> [卡牌2] ... [--hero 英雄] [--days N] [--legendary]"""
-        if not arg:
-            return "用法: #bz winrate <卡牌名> [卡牌2] [--hero 英雄] [--days N] [--legendary]\n示例: #bz winrate 万剑之王 --hero Pygmalien"
-
-        import re as _re
+        """Query a validated combination of 1–5 distinct items."""
         from .runs_query import RunsQuery
-
-        # 解析参数
-        hero = None
-        days = None
-        rank_filter = "all"
-        m_hero = _re.search(r'--hero\s+(\S+)', arg)
-        m_days = _re.search(r'--days\s+(\d+)', arg)
-        if m_hero:
-            hero = m_hero.group(1)
-        if m_days:
-            days = int(m_days.group(1))
-        if '--legendary' in arg:
-            rank_filter = 'legendary'
-        arg = _re.sub(r'--hero\s+\S+|--days\s+\d+|--legendary\b', '', arg)
-
-        cards = arg.split()
-        if not cards:
-            return "用法: #bz winrate <卡牌名> [卡牌2] [--hero 英雄] [--days N] [--legendary]"
+        from .winrate_command import parse_winrate_args, resolve_cards, WinrateInputError
+        try:
+            parsed = parse_winrate_args(arg)
+        except WinrateInputError as error:
+            return str(error)
+        days, rank_filter = parsed['days'], parsed['rank_filter']
 
         def query():
             rq = RunsQuery()
             try:
-                return rq.winrate(cards=cards, hero=hero, days=days, rank_filter=rank_filter)
+                cards = resolve_cards(rq, parsed['cards'], space_mode=parsed['space_mode'])
+                hero = rq.resolve_hero(parsed['hero']) if parsed['hero'] else None
+                if parsed['hero'] and hero is None:
+                    raise WinrateInputError('无法识别英雄: '+parsed['hero'])
+                return rq.winrate(cards=cards, hero=hero, days=days, rank_filter=rank_filter), hero
             finally:
                 if rq.conn is not None:
                     rq.conn.close()
 
         try:
-            result = await asyncio.to_thread(query)
+            result, hero = await asyncio.to_thread(query)
+        except WinrateInputError as error:
+            return str(error)
         except Exception as e:
             return f"[巴扎] 胜率查询失败: {e}"
 

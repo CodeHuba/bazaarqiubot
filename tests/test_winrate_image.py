@@ -15,6 +15,9 @@ def setup_winrate(monkeypatch, tmp_path):
     plugin_module = load_plugin_module(monkeypatch)
     renderer = importlib.import_module('plugins.bazaar_plugin.winrate_image')
     queries = importlib.import_module('plugins.bazaar_plugin.runs_query')
+    command = importlib.import_module('plugins.bazaar_plugin.winrate_command')
+    # Keep upload tests independent of metadata; the resolver has its own suite.
+    monkeypatch.setattr(command, 'resolve_cards', lambda query, cards, **kwargs: cards)
     result = dict(card_names=['原子钟'], card_details=[dict(name='原子钟', name_en='Atomic Clock',
                   img='https://s.bazaardb.gg/v1/test@400.webp', size='Medium')],
                   total=431, ten_win=273, rate=273/431, not_found=[])
@@ -30,6 +33,9 @@ def setup_winrate(monkeypatch, tmp_path):
         def winrate(self, **kwargs):
             calls.append(kwargs)
             return result
+
+        def resolve_hero(self, hero):
+            return hero
 
     monkeypatch.setattr(queries, 'RunsQuery', Query)
     plugin = plugin_module.BazaarPlugin()
