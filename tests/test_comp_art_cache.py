@@ -32,6 +32,45 @@ def picture():
     return output.getvalue()
 
 
+def test_native_item_shader_alpha_is_discarded_before_resizing(tmp_path):
+    source=Image.new('RGBA',(1024,1024),(240,50,30,0))
+    content=io.BytesIO();source.save(content,format='PNG')
+    path=tmp_path/'native.webp'
+    art.write_thumbnail(path,content.getvalue(),opaque=True)
+    with Image.open(path) as image:
+        assert image.size==(240,240)
+        assert image.mode=='RGB'
+        red,green,blue=image.getpixel((120,120))
+        assert red>220 and green<70 and blue<50
+
+
+def test_transparent_skill_art_keeps_its_alpha(tmp_path):
+    source=Image.new('RGBA',(1024,1024),(240,50,30,0))
+    content=io.BytesIO();source.save(content,format='PNG')
+    path=tmp_path/'skill.webp'
+    art.write_thumbnail(path,content.getvalue())
+    with Image.open(path) as image:
+        assert image.mode=='RGBA'
+        assert image.getchannel('A').getextrema()==(0,0)
+
+
+def test_native_item_fallback_rebuilds_a_cached_transparent_thumbnail(tmp_path,monkeypatch):
+    native=[{'Id':'native-item','Type':'Item','InternalName':'Native Item','ArtKey':'native.png'}]
+    state,cache,database=fixture(tmp_path,{'native-item':None},native)
+    textures=cache/'card_images';textures.mkdir()
+    source=textures/'native.png'
+    Image.new('RGBA',(1024,1024),(240,50,30,0)).save(source)
+    directory=state/'art';directory.mkdir()
+    old=art.asset_path(directory,str(source))
+    art.write_thumbnail(old,source.read_bytes())
+    monkeypatch.setattr(art,'fetch_image',lambda url:(_ for _ in ()).throw(AssertionError('native fallback has no URL')))
+    result=art.build_cache(state,cache,database)
+    entry=result['art']['native-item']
+    assert entry['kind']=='native_texture' and entry['file']!=old.name
+    with Image.open(directory/entry['file']) as image:
+        assert image.mode=='RGB' and image.getpixel((120,120))[0]>220
+
+
 def test_all_recorded_items_and_skills_are_cached_and_reused(tmp_path,monkeypatch):
     urls={cid:'https://s.bazaardb.gg/v1/z19.0/'+cid+'@400.webp' for cid in ('item','skill')}
     catalog={cid:{'type':'Item' if cid=='item' else 'Skill','name':cid,'artLarge':url} for cid,url in urls.items()}

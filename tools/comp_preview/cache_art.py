@@ -32,9 +32,13 @@ def asset_path(directory, source):
     return directory / (hashlib.sha256(source.encode()).hexdigest()+'.webp')
 
 
-def write_thumbnail(path, content):
+def write_thumbnail(path, content, *, opaque=False):
     with Image.open(io.BytesIO(content)) as image:
         image.load()
+        if opaque:
+            # Native item diffuse textures use alpha as shader/FX data. Discard
+            # it before resampling, which otherwise erases RGB at alpha zero.
+            image=image.convert('RGB')
         image.thumbnail((240,240))
         if image.mode not in ('RGB','RGBA'):
             image=image.convert('RGBA')
@@ -153,8 +157,9 @@ def build_cache(state, card_cache, native_path, workers=4):
         for source in candidates:
             if source.is_file():
                 try:
-                    path=asset_path(directory,str(source))
-                    write_thumbnail(path,source.read_bytes())
+                    opaque=native_info.get('type')=='Item'
+                    path=asset_path(directory,('native-item-rgb-v1:' if opaque else '')+str(source))
+                    write_thumbnail(path,source.read_bytes(),opaque=opaque)
                     return {'file':path.name,'source':str(source),'kind':'native_texture'}
                 except Exception as error:
                     errors.append(type(error).__name__)
