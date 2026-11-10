@@ -333,6 +333,9 @@ class BazaarPlugin(NcatBotPlugin):
         if sub in {"winrate", "胜率"}:
             return await self._cmd_winrate(arg, event)
 
+        if sub in {'comp', '阵容'}:
+            return await self._cmd_comp(arg, event)
+
         if sub in {'副角色', 'secondary'}:
             return await self._secondary_hero_service().manual(arg, event)
 
@@ -431,6 +434,49 @@ class BazaarPlugin(NcatBotPlugin):
 
         return None
 
+
+    async def _cmd_comp(self, arg: str, event=None) -> str | None:
+        from .comp_command import parse_args, query_comp, format_text, CompInputError, CompUnavailable
+        try:
+            options = parse_args(arg)
+        except CompInputError as error:
+            return str(error)
+        if not hasattr(self, '_comp_slots'):
+            self._comp_slots = asyncio.Semaphore(2)
+        if self._comp_slots.locked():
+            return '[巴扎] 阵容查询繁忙，请稍后重试。'
+        async with self._comp_slots:
+            try:
+                data = await asyncio.to_thread(query_comp, options)
+            except CompInputError as error:
+                return str(error)
+            except CompUnavailable as error:
+                return '[巴扎] ' + str(error)
+            except Exception as error:
+                print(f'[{self.name}] 阵容查询失败: {type(error).__name__}', flush=True)
+                return '[巴扎] 阵容分析暂时无法读取，请稍后重试。'
+            fallback = format_text(data)
+            if event is None:
+                return fallback
+            try:
+                from .comp_image import render_comp
+                path = await asyncio.to_thread(render_comp, data)
+                upload = _image_upload_value(path)
+                if upload is None:
+                    raise ValueError('Missing composition image')
+                payload = {'image': upload}
+                if getattr(event, 'message_type', None) == 'private':
+                    response = await self.api.post_private_msg(user_id=event.user_id, **payload)
+                else:
+                    response = await self.api.post_group_msg(group_id=event.group_id, **payload)
+                code = response.get('retcode', 0) if isinstance(response, dict) else getattr(response, 'retcode', 0)
+                status = response.get('status') if isinstance(response, dict) else getattr(response, 'status', None)
+                if code not in (0, '0', None) or status == 'failed':
+                    raise RuntimeError('Composition image rejected')
+            except Exception as error:
+                print(f'[{self.name}] 阵容图片失败，回退文字: {type(error).__name__}', flush=True)
+                return fallback
+        return None
 
     async def _cmd_winrate(self, arg: str, event=None) -> str | None:
         """Query a validated combination of 1–5 distinct items."""
