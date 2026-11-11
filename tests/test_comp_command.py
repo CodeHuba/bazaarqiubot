@@ -77,7 +77,7 @@ def test_internal_api_uses_complete_filters_and_closes_connection(modules, monke
     closed, calls = mock_query(monkeypatch, command, response)
     data = command.query_comp(command.parse_args('原子钟 --hero 杜利 --days 7 --legendary'))
     assert data['baseline']['count'] == 390 and closed == [True]
-    assert calls[0][1] == dict(params=dict(card='Atomic Clock', sort='appearance', rank='legendary', hero='Dooley', days=7), timeout=30, trust_env=False)
+    assert calls[0][1] == dict(params=dict(card='Atomic Clock', sort='appearance', rank='legendary', view='qq', hero='Dooley', days=7), timeout=30, trust_env=False)
 
 
 @pytest.mark.parametrize('status,message,error', [

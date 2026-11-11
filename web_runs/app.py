@@ -2737,7 +2737,8 @@ def api_comp_card():
             raise ValueError(f'未知职业: {hero_raw}')
         result = analyze(query, card_ids, season=RUNS_SEASON_ID, phase=CURRENT_PHASE,
                          hero=hero, rank=rank_filter, days=int(days_raw) if days_raw else None,
-                         sort=request.args.get('sort', 'reliable'))
+                         sort=request.args.get('sort', 'reliable'),
+                         qq_view=request.args.get('view') == 'qq')
         _log_query('comp_card', {'cards': [c['name'] for c in result['anchors']], 'hero': hero_raw,
                                'days': result['scope']['days'], 'rank': rank_filter}, ip, len(result['groups']), True)
         return jsonify(result)

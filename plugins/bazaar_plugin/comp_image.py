@@ -42,6 +42,8 @@ def font(size, bold=False):
 
 
 def render_comp(data, output=None, *, preview=False):
+    if data.get('view') == 'qq':
+        return _render_families(data, output, preview=preview)
     groups = selected_groups(data)
     height = 440 + 580 * len(groups) + 262 + (60 if not groups else 0)
     im = Image.new('RGB', (W, height), BG)
@@ -161,10 +163,145 @@ def render_comp(data, output=None, *, preview=False):
     text(48, y+207, '数据快照 '+captured.strftime('%Y-%m-%d %H:%M')+' · 北京时间', 20, MUTED)
     text(872, y+165, '扫码查看', 22, TEXT, anchor='rt')
     text(872, y+197, '完整分析 →', 22, GOLD, anchor='rt')
+    return _save(im, output)
+
+
+def _save(image, output):
     folder = Path(output) if output else OUTPUT
     folder.mkdir(parents=True, exist_ok=True)
     target = folder/('comp-'+uuid.uuid4().hex+'.png')
     metadata = PngImagePlugin.PngInfo()
     metadata.add_text('qiubot_watermark', 'bazaarqiubot.com|single-footer-v1')
-    im.save(target, pnginfo=metadata)
+    image.save(target, pnginfo=metadata)
     return str(target.resolve())
+
+
+def _render_families(data, output, *, preview):
+    groups = selected_groups(data)
+    # Keep every variant intact. Put unusually large families on additional rows.
+    plans = []
+    for group in groups:
+        rows = [[]]
+        cells = 0
+        for variant in group['variants']:
+            if rows[-1] and cells + len(variant) > 5:
+                rows.append([])
+                cells = 0
+            rows[-1].append(variant)
+            cells += len(variant)
+        plans.append(rows)
+
+    branch_heights = [37 + 99*len(group['branches']) if group.get('branches') else 0 for group in groups]
+    group_heights = [402 + 145 * (len(rows)-1) + extra
+                     for rows, extra in zip(plans, branch_heights)]
+    bottom = 218 + sum(group_heights) + (75 if not groups else 0)
+    canvas = Image.new('RGB', (W, bottom+53), BG)
+    draw = ImageDraw.Draw(canvas)
+    art_cache = {}
+
+    def text(x, y, value, size, color=TEXT, bold=False, anchor='lt'):
+        draw.text((round(x), round(y)), value, fill=color, font=font(size, bold), anchor=anchor)
+
+    def label(x, y, value, width, size, *, bold=False, anchor='lt'):
+        while size > 14 and draw.textlength(value, font=font(size, bold)) > width:
+            size -= 1
+        if draw.textlength(value, font=font(size, bold)) > width:
+            short = value
+            while short and draw.textlength(short + '…', font=font(size, bold)) > width:
+                short = short[:-1]
+            value = short + '…'
+        text(x, y, value, size, bold=bold, anchor=anchor)
+
+    def companion_name(x, y, name, width):
+        for size in (18, 17, 16):
+            if draw.textlength(name, font=font(size)) <= width:
+                text(x, y, name, size, anchor='mt')
+                return
+        split = min(range(1, len(name)), default=1, key=lambda index: max(
+            draw.textlength(name[:index], font=font(18)),
+            draw.textlength(name[index:], font=font(18)),
+        ))
+        label(x, y, name[:split], width, 18, anchor='mt')
+        label(x, y+19, name[split:], width, 18, anchor='mt')
+
+    def art(card, x, y, width, height):
+        key = card['cardId']
+        if key not in art_cache:
+            art_cache[key] = load_comp_art(card)
+        source = art_cache[key]
+        if source is None:
+            return
+        image = ImageOps.contain(source, (width, height), Image.Resampling.LANCZOS)
+        canvas.paste(image, (round(x-image.width/2), round(y-image.height/2)), image)
+
+    def metric(x, y, name, value, color):
+        text(x, y, name, 26, MUTED, anchor='ls')
+        offset = draw.textlength(name, font=font(26)) + 10
+        text(x+offset, y, value, 44, color, True, 'ls')
+
+    text(44, 34, '巴扎丘Bot · 阵容分析', 24, GOLD, True)
+    if preview:
+        text(1036, 34, '效果预览', 22, MUTED, anchor='rt')
+    anchor_card = data['anchors'][0]
+    art(anchor_card, 112, 132, 128, 124)
+    label(196, 85, anchor_card['name'], 828, 57, bold=True)
+    text(199, 155, scope_label(data), 24, MUTED)
+
+    y = 215
+    for group, rows, height, branch_height in zip(groups, plans, group_heights, branch_heights):
+        draw.rounded_rectangle((44, y, 1036, y+height-19), radius=23, fill=PANEL, outline=LINE)
+        label(76, y+27, group['hero_name'], 250, 29, bold=True)
+        metric(340, y+56, '出场局数', f"{group['count']:,}", GOLD)
+        metric(712, y+56, '10 胜率', f"{group['rate']:.1%}", GREEN)
+
+        for row_index, variants in enumerate(rows):
+            top = y + 145*row_index
+            # A single combination may itself span most of the panel.
+            cards = sum(map(len, variants))
+            spacing = min(10, 900 // (2 * cards))
+            cell = min(142, (920 - spacing*(len(variants)-1) - 14*len(variants)) / cards)
+            widths = [len(variant)*cell+14 for variant in variants]
+            x = (W-sum(widths)-spacing*(len(variants)-1))/2
+            for variant, width in zip(variants, widths):
+                draw.rounded_rectangle((x, top+72, x+width, top+214), radius=14, fill='#131e2c')
+                for index, card in enumerate(variant):
+                    center = x+7+(index+.5)*cell
+                    art(card, center, top+131, max(1, min(120, int(cell)-24)), 105)
+                    label(center, top+188, card['name'], max(15, cell-7), 23, bold=True, anchor='mt')
+                    if index:
+                        text(center-cell/2, top+132, '+', 22, GOLD, anchor='mm')
+                x += width+spacing
+
+        section = y+145*(len(rows)-1)
+        if branch_height:
+            draw.line((76, section+224, 1004, section+224), fill=LINE)
+            text(76, section+234, '组内变种', 22, MUTED, True)
+            for index, branch in enumerate(group['branches']):
+                top = section+263+99*index
+                draw.rounded_rectangle((76, top, 1004, top+90), radius=13, fill='#131e2c')
+                for position, card in enumerate([anchor_card, *branch['cards']]):
+                    center = 137+125*position
+                    art(card, center, top+32, 96, 55)
+                    label(center, top+64, card['name'], 116, 19, bold=True, anchor='mt')
+                    if position:
+                        text(center-62.5, top+32, '+', 20, GOLD, anchor='mm')
+                text(645, top+35, f"{branch['count']:,} 局", 26, GOLD, True)
+                text(795, top+38, f"10 胜率 {branch['rate']:.1%}", 23, GREEN)
+            section += branch_height
+        draw.line((76, section+224, 1004, section+224), fill=LINE)
+        for x, name, key in ((76, '高频关联牌', 'related_items'), (554, '高频关联技能', 'related_skills')):
+            cards = group[key]
+            if not cards:
+                continue
+            text(x, section+234, name, 22, MUTED, True)
+            for index, card in enumerate(cards):
+                center = x+43+91*index
+                art(card, center, section+295, 83, 69)
+                companion_name(center, section+336, card['name'], 88)
+        y += height
+
+    if not groups:
+        text(48, y+10, '当前筛选下暂无足够样本的核心组合' if data['baseline']['count'] else
+             '当前版本及筛选条件下暂无数据', 29, MUTED)
+    text(1036, bottom+13, 'bazaarqiubot.com', 23, MUTED, True, 'rt')
+    return _save(canvas, output)

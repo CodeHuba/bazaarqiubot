@@ -240,10 +240,16 @@ def cache_status():
                      error=type(e.error).__name__ if e.error else None) for e in _engines.values()]
 
 
-def analyze(query, card_ids, *, season, phase, hero='', rank='all', days=None, sort='reliable'):
+def analyze(query, card_ids, *, season, phase, hero='', rank='all', days=None, sort='reliable',
+            qq_view=False):
     entry = _entry(query, season, phase)
     with _lock:
         engine = entry.engine
     if engine is None:
         engine = _wait(entry)
+    if qq_view and len(card_ids) == 1 and rank in ('all', 'legendary'):
+        from .comp_family_query import MODEL_FILE, load_model, query_qq
+        result = query_qq(engine, card_ids[0], hero, rank, days, load_model(MODEL_FILE, season, phase))
+        if result is not None:
+            return result
     return engine.query(card_ids, hero=hero, rank=rank, days=days, sort=sort)
