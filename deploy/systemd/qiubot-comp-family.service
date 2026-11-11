@@ -1,0 +1,17 @@
+[Unit]
+Description=QiuBot QQ composition model refresh
+After=local-fs.target
+ConditionPathExists=/opt/qiubot/data/bazaar_runs.db
+
+[Service]
+Type=oneshot
+User=ubuntu
+WorkingDirectory=/opt/qiubot
+EnvironmentFile=-/opt/qiubot/.env
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=/opt/qiubot/venv/bin/python -m plugins.bazaar_plugin.comp_family_train
+Nice=10
+CPUQuota=50%
+MemoryHigh=240M
+MemoryMax=384M
+TimeoutStartSec=10min

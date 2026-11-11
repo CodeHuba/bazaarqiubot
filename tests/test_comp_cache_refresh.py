@@ -196,3 +196,79 @@ def test_cold_http_query_retries_instead_of_waiting_for_its_own_worker_slot(cach
         release.set()
     assert entry.ready.wait(2)
     assert analyze(Query) == 'one'
+
+def test_qq_family_changes_require_two_batches_with_matching_evidence():
+    from plugins.bazaar_plugin.comp_family_train import publish_families
+
+    split = [[['a']], [['b']]]
+    merged = [[['a'], ['b']]]
+    original = {'anchor': {'families': split}}
+    pending = publish_families(original, {'anchor': merged}, {'anchor'})
+    assert pending['anchor'] == {'families': split, 'pending': merged}
+    assert publish_families(pending, {}, set()) == pending
+    assert publish_families(pending, {'anchor': split}, {'anchor'}) == original
+    assert publish_families(pending, {'anchor': merged}, {'anchor'}) == {
+        'anchor': {'families': merged},
+    }
+
+    variants = {'a': {'core': ['a'], 'branches': [['a', 'b']]}}
+    proposals = {'anchor': variants}
+    pending = publish_families(original, {'anchor': split}, {'anchor'}, proposals)
+    assert 'extensions' not in pending['anchor']
+    assert publish_families(pending, {}, set()) == pending
+    assert publish_families(pending, {'anchor': split}, {'anchor'}, proposals) == {
+        'anchor': {'families': split, 'extensions': variants},
+    }
+
+
+def test_qq_family_stats_follow_filtered_runs_and_deduplicate_variants():
+    from plugins.bazaar_plugin.comp_analysis import Analysis
+    from plugins.bazaar_plugin.comp_family_query import query_qq
+
+    def board(number, items, skills, *, hero='Dooley', rank='Legendary', date='2026-11-10T12:00:00Z'):
+        return dict(id=str(number), hero=hero, rank=rank, created_at=date,
+                    wins=10 if number % 2 else 8,
+                    items=[{'cardId': cid} for cid in items],
+                    skills=[{'cardId': cid} for cid in skills])
+
+    model = {'heroes': {'Dooley': {'anchor': {'families': [[['a'], ['b']]]}}}}
+    first = [board(i, ['anchor', 'a', 'b', 'other'], ['common']) for i in range(1, 31)]
+    extra = [
+        board(31, ['anchor', 'b', 'other'], ['common']),
+        board(32, ['anchor', 'other'], ['common']),
+        board(33, ['anchor', 'b', 'filtered'], ['filtered'], rank='Gold'),
+        board(34, ['anchor', 'b', 'filtered'], ['filtered'], date='2026-11-01T12:00:00Z'),
+        board(35, ['anchor', 'b', 'filtered'], ['filtered'], hero='Vanessa'),
+        first[0],
+    ]
+
+    def query(rows):
+        engine = Analysis(dict(runs=rows, season=20, phase='20.1',
+                               captured_at='2026-11-11T00:00:00Z', source='test'))
+        return query_qq(engine, 'anchor', 'Dooley', 'legendary', 1, model)
+
+    old = query(first)
+    new = query(first + extra)
+    assert old['groups'][0]['count'] == 30
+    assert new['baseline']['count'] == 32
+    group, = new['groups']
+    assert (group['count'], group['ten_wins']) == (31, 16)
+    assert [variant[0]['cardId'] for variant in group['variants']] == ['b', 'a']
+    assert [(card['cardId'], card['count']) for card in group['related_items']] == [('other', 31)]
+    assert [(card['cardId'], card['count']) for card in group['related_skills']] == [('common', 31)]
+
+    definition = model['heroes']['Dooley']['anchor']
+    definition['extensions'] = {
+        card: {'core': [card], 'branches': [['a', 'b', 'other']]} for card in ('a', 'b')
+    }
+    extended, = query(first + extra)['groups']
+    assert (extended['count'], extended['ten_wins']) == (31, 16)
+    branch, = extended['branches']
+    assert (branch['count'], branch['ten_wins']) == (30, 15)
+    assert {card['cardId'] for card in branch['cards']} == {'a', 'b', 'other'}
+    assert extended['related_items'] == []
+
+    definition.update(families=[[['b']]], extensions={'b': {'core': ['a', 'b'], 'branches': []}})
+    promoted, = query(first + extra)['groups']
+    assert (promoted['count'], promoted['ten_wins']) == (30, 15)
+    assert [card['cardId'] for card in promoted['core']] == ['anchor', 'a', 'b']

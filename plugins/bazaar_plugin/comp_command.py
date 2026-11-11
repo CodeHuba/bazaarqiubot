@@ -1,4 +1,5 @@
 """Single-item QQ composition queries backed by the website's shared cache."""
+import os
 import shlex
 import threading
 import time
@@ -14,13 +15,20 @@ _last_request = 0.0
 
 
 def _request_slot():
-    """Respect the website's one-second per-IP query interval across QQ users."""
+    delay = _last_request + 1.1 - time.monotonic()
+    if delay > 0:
+        time.sleep(delay)
+
+
+def _get_composition(params):
+    """Space requests from the previous response to allow for transport delay."""
     global _last_request
     with _request_lock:
-        delay = _last_request+1.1-time.monotonic()
-        if delay > 0:
-            time.sleep(delay)
-        _last_request = time.monotonic()
+        _request_slot()
+        try:
+            return httpx.get(API_URL, params=params, timeout=30, trust_env=False)
+        finally:
+            _last_request = time.monotonic()
 
 
 class CompInputError(ValueError):
@@ -87,13 +95,14 @@ def query_comp(options):
         if query.conn is not None:
             query.conn.close()
     params = {'card': names[0], 'sort': 'appearance', 'rank': options['rank']}
+    if os.getenv('QIUBOT_COMP_FAMILIES', '1') == '1':
+        params['view'] = 'qq'
     if hero:
         params['hero'] = hero
     if options['days'] is not None:
         params['days'] = options['days']
     try:
-        _request_slot()
-        response = httpx.get(API_URL, params=params, timeout=30, trust_env=False)
+        response = _get_composition(params)
         if response.status_code in (429, 503):
             raise CompUnavailable('阵容查询繁忙或正在预热，请稍后重试。')
         if response.status_code in (400, 404):
@@ -147,6 +156,17 @@ def format_text(data):
     else:
         lines.append('当前版本及筛选条件下暂无数据。')
     groups = selected_groups(data)
+    if data.get('view') == 'qq':
+        for group in groups:
+            variants = ' / '.join(' + '.join(c['name'] for c in variant) for variant in group['variants'])
+            lines.append(f"{group['hero_name']} · {variants} · 出场 {group['count']:,} 局 · 10 胜率 {group['rate']:.1%}")
+            for branch in group.get('branches', ()):
+                core = ' + '.join(card['name'] for card in [data['anchors'][0], *branch['cards']])
+                lines.append(f"变种 · {core} · {branch['count']:,} 局 · 10 胜率 {branch['rate']:.1%}")
+            for label, key in [('高频关联牌', 'related_items'), ('高频关联技能', 'related_skills')]:
+                if group[key]:
+                    lines.append(label + ' · ' + '、'.join(card['name'] for card in group[key]))
+        return '\n'.join(lines)
     for i, group in enumerate(groups, 1):
         core = ' + '.join(c['name'] for c in group['core'])
         level = '（小样本探索）' if group['count'] < 30 else ''

@@ -1,0 +1,10 @@
+[Unit]
+Description=Refresh QiuBot QQ composition model twice an hour
+
+[Timer]
+OnCalendar=*-*-* *:00,30:00
+Persistent=true
+Unit=qiubot-comp-family.service
+
+[Install]
+WantedBy=timers.target
