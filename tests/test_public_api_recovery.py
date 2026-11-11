@@ -5,6 +5,8 @@ import sys
 import types
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[1]
 PLUGIN_DIR = ROOT / "plugins" / "bazaar_plugin"
 
@@ -149,3 +151,52 @@ def test_hero_overview_uses_official_names():
         assert name in source
     for legacy in ("海盗/凡妮莎", "猪/皮格", "机甲/斯黛拉"):
         assert legacy not in source
+
+
+@pytest.mark.parametrize("sort_by", ["total", "wins", "rate"])
+@pytest.mark.parametrize("rank_filter", ["all", "legendary"])
+@pytest.mark.parametrize("days", [None, 7])
+def test_hero_overview_excludes_non_playable_heroes(monkeypatch, sort_by, rank_filter, days):
+    from datetime import datetime, timedelta, timezone
+
+    monkeypatch.setattr(module, "_hero_overview_cache", {})
+    query = RunsQuery()
+    query.conn = sqlite3.connect(":memory:")
+    query.conn.execute(
+        "CREATE TABLE runs (hero TEXT, stat_wins INTEGER, season TEXT, "
+        "phase TEXT, player_rank TEXT, created_at TEXT)"
+    )
+    recent = datetime.now(timezone.utc).isoformat()
+    old = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
+    season, phase = module.RUNS_SEASON_ID, module.CURRENT_PHASE
+    rows = [
+        (hero, wins, season, phase, "Legendary", recent)
+        for hero in module.HERO_EN_TO_ZH for wins in (10, 8)
+    ]
+    rows += [
+        (hero, 10, season, phase, "Legendary", recent)
+        for hero in ("Common", "common", "Unknown", "", None)
+    ]
+    rows += [
+        ("Vanessa", 10, season, phase, "Bronze", recent),
+        ("Vanessa", 10, season, phase, "Legendary", old),
+        ("Vanessa", 10, season, "old-phase", "Legendary", recent),
+        ("Vanessa", 10, "old-season", phase, "Legendary", recent),
+    ]
+    query.conn.executemany("INSERT INTO runs VALUES (?, ?, ?, ?, ?, ?)", rows)
+    try:
+        result = query.hero_overview(days=days, sort_by=sort_by, rank_filter=rank_filter)
+    finally:
+        query.conn.close()
+
+    heroes = {hero["hero"]: hero for hero in result["heroes"]}
+    assert set(heroes) == set(module.HERO_EN_TO_ZH)
+    extra = int(rank_filter == "all") + int(days is None)
+    assert result["total_runs"] == 16 + extra
+    assert result["total_runs"] == sum(hero["total"] for hero in heroes.values())
+    for name, hero in heroes.items():
+        bonus = extra if name == "Vanessa" else 0
+        assert hero["hero_zh"] == module.HERO_EN_TO_ZH[name]
+        assert hero["total"] == 2 + bonus
+        assert hero["wins"] == 1 + bonus
+        assert hero["rate"] == pytest.approx((1 + bonus) / (2 + bonus))
