@@ -93,7 +93,7 @@ def test_fuzzy_candidate_list_filters_type_before_matching(setup,kind):
     with pytest.raises(mod.WinrateInputError) as error:
         mod.resolve_cards(q,['船'])
     suggestions=[line.split('. ',1)[1] for line in str(error.value).splitlines() if '. ' in line]
-    assert set(suggestions)=={'船骸（物品）','船锚（物品）'}
+    assert set(suggestions)=={'船骸（物品） · Shipwreck','船锚（物品） · Anchor'}
 
 
 def test_unique_item_auto_query_ignores_same_prefix_skills(setup):
@@ -125,7 +125,7 @@ def test_katana_prefers_ordinary_native_item_over_community_variant(setup,order,
     assert all('community' not in ids for ids in q.name_to_ids.values())
 
 
-def test_same_chinese_name_with_different_public_english_names_is_not_merged(setup):
+def test_same_chinese_name_shows_selectable_english_names(setup):
     mod,q=setup
     helper=sys.modules['items_test.card_image_helper']
     catalog=helper._load()['cards']
@@ -135,8 +135,13 @@ def test_same_chinese_name_with_different_public_english_names_is_not_merged(set
     q.name_to_ids['other library']=['second']
     original=q.card_display_info
     q.card_display_info=lambda cid:dict(name_en='Other Library',name='图书馆') if cid=='second' else original(cid)
-    with pytest.raises(mod.WinrateInputError,match='请选择物品'):
+    with pytest.raises(mod.WinrateInputError,match='请选择物品') as error:
         mod.resolve_cards(q,['图书馆'])
+    assert '1. 图书馆（物品） · Library' in str(error.value)
+    assert '2. 图书馆（物品） · Other Library' in str(error.value)
+    assert '中文同名时请用英文名' in str(error.value)
+    assert mod.resolve_cards(q,['Library'])==['Library']
+    assert mod.resolve_cards(q,['Other Library'])==['Other Library']
 
 
 @pytest.mark.parametrize('word',['冷库','Freezer','Walk-In Freezer'])
