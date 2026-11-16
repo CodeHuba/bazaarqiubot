@@ -159,6 +159,10 @@ def resolve_cards(query, cards, *, space_mode=False):
     combined = ' '.join(cards)
     if space_mode and len(cards) > 1 and normalize(combined) in inputs:
         cards = [combined]
+
+    def candidate_order(value):
+        return groups[value]['display'], groups[value]['name']
+
     resolved, seen = [], set()
     for name in cards:
         key = normalize(name)
@@ -175,16 +179,22 @@ def resolve_cards(query, cards, *, space_mode=False):
                     if score >= .55:
                         for value in values:
                             scores[value] = max(score, scores.get(value, 0))
-                matches = sorted(scores, key=lambda value: (-scores[value], groups[value]['display']))
+                matches = sorted(scores, key=lambda value: (-scores[value], *candidate_order(value)))
             if not matches:
                 raise WinrateInputError('未找到物品『'+name+'』。胜率查询仅支持物品，不支持技能、事件或野怪，请检查物品完整名称。')
             if isinstance(matches, set):
-                matches = sorted(matches, key=lambda value: groups[value]['display'])
+                matches = sorted(matches, key=candidate_order)
             if len(matches) > 1:
-                candidates = [groups[k]['display']+'（物品）' for k in list(matches)[:8]]
+                candidates = []
+                for match in matches[:8]:
+                    display, english = candidate_order(match)
+                    label = display+'（物品）'
+                    if english and normalize(english) != normalize(display):
+                        label += ' · '+english
+                    candidates.append(label)
                 raise WinrateInputError('未精确匹配物品『'+name+'』，请选择物品：\n'
                     +'\n'.join(str(i)+'. '+value for i, value in enumerate(candidates, 1))
-                    +'\n请用候选的完整物品名替换后重试，保留组合中的其他物品及筛选参数。')
+                    +'\n请用候选的完整物品名替换后重试，中文同名时请用英文名。保留组合中的其他物品及筛选参数。')
             exact = set(matches)
         canonical = next(iter(exact))
         if canonical not in seen:
