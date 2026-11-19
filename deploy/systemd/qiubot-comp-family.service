@@ -9,9 +9,9 @@ User=ubuntu
 WorkingDirectory=/opt/qiubot
 EnvironmentFile=-/opt/qiubot/.env
 Environment=PYTHONDONTWRITEBYTECODE=1
-ExecStart=/opt/qiubot/venv/bin/python -m plugins.bazaar_plugin.comp_family_train
+ExecStart=/opt/qiubot/venv/bin/python /opt/qiubot/tools/refresh_comp_families.py
 Nice=10
-CPUQuota=50%
-MemoryHigh=240M
+CPUQuota=100%
+MemoryHigh=320M
 MemoryMax=384M
-TimeoutStartSec=10min
+TimeoutStartSec=20min

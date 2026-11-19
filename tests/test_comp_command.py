@@ -54,6 +54,7 @@ def test_invalid_args_never_query(modules, arg):
 
 def mock_query(monkeypatch, command, response):
     monkeypatch.setattr(command, '_request_slot', lambda: None)
+    monkeypatch.setattr(command.time, 'sleep', lambda _: None)
     queries = importlib.import_module('plugins.bazaar_plugin.runs_query')
     resolver = importlib.import_module('plugins.bazaar_plugin.winrate_command')
     closed, calls = [], []
@@ -77,7 +78,9 @@ def test_internal_api_uses_complete_filters_and_closes_connection(modules, monke
     closed, calls = mock_query(monkeypatch, command, response)
     data = command.query_comp(command.parse_args('原子钟 --hero 杜利 --days 7 --legendary'))
     assert data['baseline']['count'] == 390 and closed == [True]
-    assert calls[0][1] == dict(params=dict(card='Atomic Clock', sort='appearance', rank='legendary', view='qq', hero='Dooley', days=7), timeout=30, trust_env=False)
+    kwargs = calls[0][1]
+    assert 0 < kwargs.pop('timeout') <= 30
+    assert kwargs == dict(params=dict(card='Atomic Clock', sort='appearance', rank='legendary', view='qq', hero='Dooley', days=7), trust_env=False)
 
 
 @pytest.mark.parametrize('status,message,error', [
@@ -194,3 +197,51 @@ def test_busy_query_does_not_queue_or_hit_service(modules, monkeypatch):
     plugin = plugin_module.BazaarPlugin(); plugin._comp_slots = asyncio.Semaphore(0)
     monkeypatch.setattr(command, 'query_comp', lambda _: pytest.fail('Busy query executed'))
     assert '繁忙' in asyncio.run(plugin._cmd_comp('原子钟'))
+
+@pytest.mark.parametrize('status', [429, 503])
+def test_temporary_rejection_recovers_within_original_request(modules, monkeypatch, status):
+    command = modules[1]
+    clock = [0.]
+    delays = []
+    monkeypatch.setattr(command.time, 'monotonic', lambda: clock[0])
+    monkeypatch.setattr(command, '_last_request', 0.)
+    monkeypatch.setattr(command, '_request_slot', lambda: None)
+
+    def sleep(delay):
+        delays.append(delay)
+        clock[0] += delay
+    monkeypatch.setattr(command.time, 'sleep', sleep)
+    responses = [
+        httpx.Response(status, headers={'Retry-After': '3'}),
+        httpx.Response(200, json=sample()),
+    ]
+    calls = []
+    def get(url, **kwargs):
+        calls.append(kwargs)
+        return responses[len(calls)-1]
+    monkeypatch.setattr(command.httpx, 'get', get)
+    result = command._get_composition({'hero': 'Dooley', 'card': 'Atomic Clock'})
+    assert result.status_code == 200
+    assert len(calls) == 2 and delays == [3.]
+    assert calls[0]['params'] == calls[1]['params']
+    assert calls[1]['timeout'] == 27.
+
+
+def test_temporary_retries_are_bounded_and_honor_long_retry_after(modules, monkeypatch):
+    command = modules[1]
+    monkeypatch.setattr(command, '_request_slot', lambda: None)
+    monkeypatch.setattr(command.time, 'sleep', lambda _: None)
+    calls = []
+    def get(url, **kwargs):
+        calls.append(kwargs)
+        return httpx.Response(503)
+    monkeypatch.setattr(command.httpx, 'get', get)
+    assert command._get_composition({}).status_code == 503
+    assert len(calls) == 4
+    calls.clear()
+    def long_wait(url, **kwargs):
+        calls.append(kwargs)
+        return httpx.Response(503, headers={'Retry-After': '30'})
+    monkeypatch.setattr(command.httpx, 'get', long_wait)
+    assert command._get_composition({}).status_code == 503
+    assert len(calls) == 1

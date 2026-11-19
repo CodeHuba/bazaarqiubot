@@ -65,3 +65,11 @@
 - 核心扩展同日上线，用 48,395 条 runs 的只读快照计算首批变种。通过线上接口验证暴击核心和武装核心的三张核心，以及 `锁链 --hero 卡诺克` 的四张核心。发布备份位于 `/opt/qiubot/backups/comp-core-extension-20261111`。
 
 [构筑挖掘与归并](../plugins/bazaar_plugin/comp_family_model.py) · [核心扩展](../plugins/bazaar_plugin/comp_core_extension.py) · [在线统计](../plugins/bazaar_plugin/comp_family_query.py) · [数据刷新与发布](../plugins/bazaar_plugin/comp_family_train.py) · [原版指令与发布记录](comp-image-query.md)
+
+## 2026-11-18 临时拒绝请求修复
+
+线上确认阵容请求出现 HTTP 429 和 503，503 日志记录为可用内存不足。QQ 查询现在最多请求四次，总等待和请求预算为 30 秒，并尊重可用预算内的 Retry-After。输入错误和普通服务错误直接返回。
+
+构筑定时训练改为独立启动，减少加载 QQ 运行时的开销。训练的内存回收阈值调整为 320MiB，硬上限为 384MiB，执行时限为 20 分钟，CPU 配额为一个核心并以低优先级运行。本次完整训练约 16 分 49 秒完成，成功发布至 rowid 111355，内存峰值约 320MiB。
+
+已验证临时 503 后自动重试并取得真实查询结果，飞猪和巨型投石索均通过图片生成及模拟 QQ 发送。发布备份位于服务器 /opt/qiubot/backups/comp-retry-20261118。

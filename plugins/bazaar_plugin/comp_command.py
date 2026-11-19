@@ -1,5 +1,6 @@
 """Single-item QQ composition queries backed by the website's shared cache."""
 import os
+import logging
 import shlex
 import threading
 import time
@@ -12,6 +13,7 @@ HELP = ('用法: #bz 阵容 <物品名> [--hero 英雄] [--days 1–365] [--lege
 API_URL = 'http://127.0.0.1:1027/api/comp/card'
 _request_lock = threading.Lock()
 _last_request = 0.0
+_logger = logging.getLogger(__name__)
 
 
 def _request_slot():
@@ -21,14 +23,34 @@ def _request_slot():
 
 
 def _get_composition(params):
-    """Space requests from the previous response to allow for transport delay."""
+    """Retry temporary refusals within the same bounded query budget."""
     global _last_request
+    deadline = time.monotonic() + 30
     with _request_lock:
-        _request_slot()
-        try:
-            return httpx.get(API_URL, params=params, timeout=30, trust_env=False)
-        finally:
-            _last_request = time.monotonic()
+        for attempt in range(4):
+            _request_slot()
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise CompUnavailable('阵容查询等待超时，请稍后重试。')
+            try:
+                response = httpx.get(API_URL, params=params, timeout=min(30, remaining), trust_env=False)
+            finally:
+                _last_request = time.monotonic()
+            if response.status_code not in (429, 503) or attempt == 3:
+                return response
+            delay = 1.2 if response.status_code == 429 else 3 * (attempt + 1)
+            try:
+                suggested = float(response.headers.get('Retry-After', delay))
+                if 0 <= suggested <= 30:
+                    delay = max(delay, suggested)
+            except (ValueError, OverflowError):
+                pass
+            _logger.warning('Composition temporarily unavailable status=%s attempt=%s',
+                            response.status_code, attempt + 1)
+            if delay + 1.1 >= deadline - time.monotonic():
+                return response
+            response.close()
+            time.sleep(delay)
 
 
 class CompInputError(ValueError):
