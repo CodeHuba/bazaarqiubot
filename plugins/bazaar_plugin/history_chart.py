@@ -27,40 +27,23 @@ def _wsl_to_win(path: Path) -> str:
 
 
 def _infer_wins(prev_r: int, delta: int) -> int:
-    """
-    从分数变化反推本局胜场数。
-
-    加分公式：
-      raw = (wins - prev_r/100) * 5
-      delta = max(1, round(raw)) + (5 if wins >= 10 else 0)
-
-    扣分公式（S16+）：
-      raw = (wins - prev_r/100) * 5  # 负值
-      delta = -abs(raw)^(2/3)
-    """
+    """Estimate S16+ wins using the same rating cap as the forward formula."""
+    effective_rating = min(prev_r, 1080)
     if delta > 0:
-        # 加分：先尝试有 10 胜奖励（减去 5），再尝试无奖励
         for bonus in (5, 0):
             if delta < bonus:
                 continue
-            round_val = delta - bonus
-            w_float = round_val / 5 + prev_r / 100
-            w = round(w_float)
-            # 验证反推是否自洽
-            # 有奖励时 wins 应该 >= 10
+            w = round((delta-bonus)/5+effective_rating/100)
             if bonus == 5 and w >= 9:
                 return 10
-            elif bonus == 0 and w < 10:
+            if bonus == 0 and w < 10:
                 return max(0, w)
-        return min(10, max(0, round(delta / 5 + prev_r / 100)))
-    elif delta < 0:
-        # 扣分：逆推 2/3 次方（S16+）
-        # raw = -abs(delta)^(3/2)
-        raw = -(abs(delta) ** 1.5)
-        w = raw / 5 + prev_r / 100
-        return max(0, round(w))
-    else:
-        return 0
+        return min(10, max(0, round(delta/5+effective_rating/100)))
+    if delta < 0:
+        wins = round(effective_rating / 100 - abs(delta) ** 1.5 / 5)
+        # A ten-win finish always gains rating, even above the cap.
+        return min(9, max(0, wins))
+    return 0
 
 
 def parse_history(rh: list[dict], days: int = 5) -> list[dict]:
