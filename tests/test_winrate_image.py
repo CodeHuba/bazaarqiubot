@@ -133,7 +133,8 @@ def test_image_failures_preserve_full_text_result(setup_winrate, monkeypatch, fa
 def test_filter_combinations_are_removed_without_corrupting_card_query(setup_winrate, options):
     _, _, _, plugin, event, calls, _ = setup_winrate
     asyncio.run(plugin._cmd_winrate('原子钟 '+options, event))
-    assert calls == [dict(cards=['原子钟'], hero='Dooley', days=7, rank_filter='legendary')]
+    assert calls == [dict(cards=['原子钟'], hero='Dooley', days=7, rank_filter='legendary',
+                          include_terminal_days=True)]
 
 
 def test_unknown_card_never_sends_partial_combination_image(setup_winrate):

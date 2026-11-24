@@ -738,4 +738,26 @@ def format_winrate(result: dict, hero: str = None, days: int = None, rank_filter
     lines.append(f"10胜率: {rate:.1%}  [{bar}]")
     lines.append(f"10胜局: {ten_win} / {total} 局")
 
+    if 'day_distribution' in result:
+        from .winrate_stats import MIN_TERMINAL_DAY, highlights
+        rows = result['day_distribution']
+        valid_total = sum(row['total'] for row in rows)
+        lines.append(f'结束天数分布（第 {MIN_TERMINAL_DAY} 天起，有效样本 {valid_total} 局）')
+        peaks, bests = highlights(rows)
+        if peaks:
+            lines.append('最集中: 第 '+ '、'.join(str(r['day']) for r in peaks)+' 天')
+            lines.append('最高10胜率: 第 '+ '、'.join(str(r['day']) for r in bests)+
+                         f" 天（{bests[0]['ten_win']/bests[0]['total']:.1%}，样本 " +
+                         ' / '.join(str(r['total']) for r in bests)+' 局）')
+            lines.append('结束天数 | 出场数 / 占比 | 10胜数 / 10胜率')
+        else:
+            lines.append('暂无有效天数样本')
+        for row in rows:
+            n, w = row['total'], row['ten_win']
+            lines.append(f"第{row['day']}天 | {n} / {n/valid_total:.1%} | {w} / {w/n:.1%}"+
+                         (' *样本较少' if n<30 else ''))
+        unknown = result['unknown_day']
+        if unknown['total']:
+            lines.append(f"{unknown['total']} 局天数未知，计入顶部整体统计。")
+
     return "\n".join(lines)
