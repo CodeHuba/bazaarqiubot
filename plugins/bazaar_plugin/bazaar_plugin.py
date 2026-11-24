@@ -495,7 +495,8 @@ class BazaarPlugin(NcatBotPlugin):
                 hero = rq.resolve_hero(parsed['hero']) if parsed['hero'] else None
                 if parsed['hero'] and hero is None:
                     raise WinrateInputError('无法识别英雄: '+parsed['hero'])
-                return rq.winrate(cards=cards, hero=hero, days=days, rank_filter=rank_filter), hero
+                return rq.winrate(cards=cards, hero=hero, days=days, rank_filter=rank_filter,
+                                  include_terminal_days=True), hero
             finally:
                 if rq.conn is not None:
                     rq.conn.close()

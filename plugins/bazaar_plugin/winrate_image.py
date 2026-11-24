@@ -1,14 +1,20 @@
 """QQ winrate result images, using the accepted compact native-art layout."""
 from __future__ import annotations
 
+from concurrent.futures import Future
 from datetime import datetime, timedelta, timezone
+import hashlib
+import json
 from pathlib import Path
 import re
+import threading
+import time
 import uuid
 
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
 
 from .monster_image import _font_path, load_art as _load_remote_art
+from .query_budget import BoundedTTLCache, checkpoint
 
 ROOT = Path(__file__).resolve().parents[2]
 OUTPUT = ROOT / 'data/charts/winrate'
@@ -76,7 +82,7 @@ def load_art(url, size=None, cache=CACHE):
 
 
 
-def render_winrate(result, output=None, *, queried_at=None, preview=False):
+def _render_legacy(result, output=None, *, queried_at=None, preview=False):
     """Return one image for a card or joint combination; never invent missing data."""
     names = result.get('card_names') or []
     if not names or result.get('not_found'):
@@ -223,3 +229,55 @@ def render_winrate(result, output=None, *, queried_at=None, preview=False):
     target = folder / ('winrate-'+uuid.uuid4().hex+'.png')
     im.save(target)
     return str(target.resolve())
+
+
+_day_images = BoundedTTLCache(32)
+_day_pending = {}
+_day_lock = threading.Lock()
+
+
+def render_winrate(result, output=None, *, queried_at=None, preview=False):
+    if 'day_distribution' not in result:
+        return _render_legacy(result, output, queried_at=queried_at, preview=preview)
+    if not result.get('card_names') or result.get('not_found'):
+        raise ValueError('卡牌未完整识别')
+    from .winrate_day_image import render
+    folder = output or OUTPUT
+    def generate():
+        now = queried_at or datetime.now(CST)
+        if now.tzinfo is None:
+            now = now.replace(tzinfo=CST)
+        return render(result, folder, queried_at=now.astimezone(CST), preview=preview)
+    # Explicit previews and timestamped exports always render their requested state.
+    if output is not None or queried_at is not None or preview:
+        return generate()
+    key = (str(Path(folder).resolve()), hashlib.sha256(
+        json.dumps(result, ensure_ascii=False, sort_keys=True).encode()).hexdigest())
+    with _day_lock:
+        cached = _day_images.get(key)
+        if cached and Path(cached[0]).is_file():
+            return cached[0]
+        future = _day_pending.get(key)
+        leader = future is None
+        if leader:
+            _day_pending[key] = future = Future()
+    if not leader:
+        while not future.done():
+            checkpoint()
+            try:
+                return future.result(timeout=.1)
+            except TimeoutError:
+                if future.done():
+                    return future.result()
+        return future.result()
+    try:
+        path = generate()
+        _day_images[key] = (path, time.time()+60)
+        future.set_result(path)
+        return path
+    except BaseException as exc:
+        future.set_exception(exc)
+        raise
+    finally:
+        with _day_lock:
+            _day_pending.pop(key, None)

@@ -565,12 +565,12 @@ class RunsQuery:
                 days: int = None,
                 min_wins_threshold: int = 10,
                 all_phases: bool = False,
-                rank_filter: str = "all") -> dict:
+                rank_filter: str = "all",
+                *, include_terminal_days: bool = False) -> dict:
         """
         计算包含指定卡牌组合的 runs 中，达到 min_wins_threshold 胜的比率。
-        返回 {total, ten_win, rate, card_names, not_found}
+        include_terminal_days 为机器人附加终局天数分布。
         """
-        import json as _json
         from datetime import datetime as _dt, timedelta as _td
 
         if not self.conn:
@@ -623,7 +623,8 @@ class RunsQuery:
 
         # SQL 层用有索引的字段（hero/rank/days/phase）缩小结果集
         # 再用 card_ids_text 在 Python 层做精确过滤，避免全量 json.loads
-        sql = "SELECT card_ids_text, stat_wins FROM runs WHERE season=?"
+        columns = 'id, card_ids_text, stat_wins' if include_terminal_days else 'card_ids_text, stat_wins'
+        sql = f"SELECT {columns} FROM runs WHERE season=?"
         params = [RUNS_SEASON_ID]
         if not all_phases:
             sql += " AND phase=?"
@@ -637,38 +638,28 @@ class RunsQuery:
             params.append(cutoff)
         if rank_filter == 'legendary':
             sql += " AND player_rank='Legendary'"
-        rows = self.conn.execute(sql, params)
-
-        # 每组 cardId set 取代表 id 列表，用 str.find 在 card_ids_text 快速判断
-        rep_ids = [next(iter(s)) for s in card_ids_sets]
-
-        total = 0
-        ten_win = 0
-        for card_ids_text, wins in budgeted_rows(rows):
-            if not card_ids_text:
-                continue
-            # 先用代表 id 快速过滤（UUID 唯一，误判率极低）
-            if not all(rep in card_ids_text for rep in rep_ids):
-                continue
-            # 有多 id 的卡才做精确集合校验
-            if any(len(s) > 1 for s in card_ids_sets):
-                run_ids = set(card_ids_text.split())
-                if not all(run_ids & s for s in card_ids_sets):
+        if include_terminal_days:
+            from .winrate_stats import aggregate
+            stats = aggregate(self, sql, params, card_ids_sets, min_wins_threshold, scope,
+                              (RUNS_SEASON_ID, CURRENT_PHASE, hero, days, all_phases, rank_filter))
+        else:
+            rows = self.conn.execute(sql, params)
+            rep_ids = [next(iter(group)) for group in card_ids_sets]
+            has_variants = any(len(group) > 1 for group in card_ids_sets)
+            total = ten_win = 0
+            for card_ids_text, wins in budgeted_rows(rows):
+                if not card_ids_text or not all(rep in card_ids_text for rep in rep_ids):
                     continue
-            total += 1
-            if (wins or 0) >= min_wins_threshold:
-                ten_win += 1
-
-        rate = ten_win / total if total > 0 else 0.0
-        return {
-            'total': total,
-            'ten_win': ten_win,
-            'rate': rate,
-            'card_names': card_names,
-            'card_details': card_details,
-            'not_found': not_found,
-            'scope': scope,
-        }
+                if has_variants:
+                    run_ids = set(card_ids_text.split())
+                    if not all(run_ids & group for group in card_ids_sets):
+                        continue
+                total += 1
+                ten_win += int((wins or 0) >= min_wins_threshold)
+            stats = {'total': total, 'ten_win': ten_win, 'rate': ten_win/total if total else 0.0,
+                     'scope': scope}
+        return {**stats, 'card_names': card_names, 'card_details': card_details,
+                'not_found': not_found}
 
 
     def partner(self,
