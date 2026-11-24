@@ -152,11 +152,17 @@ def test_long_tooltips_and_enchants_are_paginated_without_losing_content(cards, 
     assert rendered.count('很长的官方说明。') == 600
     assert any(b['kind'] == 'enchant' for p in pages for b in p['blocks'])
     monkeypatch.setattr(cards.sheet, 'load_art', lambda *a, **k: None)
+    native = importlib.import_module('plugins.bazaar_plugin.card_native')
+    measure = native.Canvas(1, cards.sheet._font_path(True))
+    _, _, native_pages = native.plan(doc, measure, cards.sheet)
+    native_text = ''.join(t for page in native_pages for block in page for row in block['rows'] for t, _ in row)
+    assert native_text.count('很长的官方说明。') == 600
+    assert any(block['area'] == 'enchant' for page in native_pages for block in page)
     images = cards.sheet.render_document(doc, tmp_path/'render', tmp_path/'cache')
-    assert len(images) == len(pages)
+    assert len(images) == len(native_pages)
     for path in images:
         with Image.open(path) as image:
-            assert image.width == 1440 and image.height <= 2400
+            assert image.width == 1200 and image.height <= 2300
 
 
 @pytest.mark.parametrize('message_type', ['private', 'group'])
@@ -191,3 +197,32 @@ def test_explicit_quality_and_enchant_are_parsed_and_removed_from_card_name(card
     assert plugin._cmd_card_db.call_args.args[2] == 'Ice Blade'
     assert '指定一次' in asyncio.run(plugin._cmd_db('Ice Blade --品质 黄金 --品质 白银', event))
     assert '请用 -e' in asyncio.run(plugin._cmd_db('Ice Blade -e --附魔 寒冰', event))
+
+
+def test_native_short_passive_and_multiline_calculation_preserve_art_and_notes(cards):
+    native = importlib.import_module('plugins.bazaar_plugin.card_native')
+    doc = cards.sheet.build_document(cards.raw, cards.db, repository=cards.repo.preview)
+    doc['comparison'] = []
+    for variant in doc['variants']:
+        variant['effects'] = [{'text': '生命再生提高。\n计算说明：你的最大生命值 × 5%；按游戏规则取整',
+                               'type': 'Passive', 'source': 'base'}]
+    measure = native.Canvas(1, cards.sheet._font_path(True))
+    _, _, pages = native.plan(doc, measure, cards.sheet)
+    body = [b for page in pages for b in page if b['area'] == 'body']
+    metadata = [b for page in pages for b in page if b['area'] == 'meta']
+    assert not any(b.get('clock') for b in body)
+    assert metadata[0]['y'] >= 610
+    contents = ''.join(t for b in body for row in b['rows'] for t, _ in row)
+    assert '计算说明：你的最大生命值 × 5%；按游戏规则取整' in contents
+
+
+def test_native_different_quality_effect_structures_remain_complete(cards):
+    native = importlib.import_module('plugins.bazaar_plugin.card_native')
+    doc = cards.sheet.build_document(cards.raw, cards.db, repository=cards.repo.preview)
+    doc['variants'][1]['effects'].append({'text': '新解锁效果', 'type': 'Passive', 'source': 'base'})
+    measure = native.Canvas(1, cards.sheet._font_path(True))
+    blocks = native.content_blocks(doc, measure, cards.sheet)
+    contents = ''.join(t for b in blocks for row in b['rows'] for t, _ in row)
+    for variant in doc['variants']:
+        for effect in variant['effects']:
+            assert variant['qualityLabel']+'：'+cards.sheet.effect_text(effect) in contents
